@@ -12,6 +12,17 @@
   padding: 0;
 }
 
+/* Hide number input spinners (up/down arrows) */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+
 :root {
   --cream: #fdf9f4;
   --cream-dark: #f5ede0;

@@ -46,7 +46,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-pie' },
     { id: 'billing', label: 'POS Billing', icon: 'fa-solid fa-cash-register' },
-    { id: 'finance', label: 'Girvi / Loans', icon: 'fa-solid fa-scale-balanced' },
+    { id: 'finance', label: 'Finance', icon: 'fa-solid fa-scale-balanced' },
     { id: 'inventory', label: 'Inventory', icon: 'fa-solid fa-boxes-stacked' },
   ];
 
