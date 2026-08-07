@@ -1,287 +1,277 @@
-import { useState, useEffect } from 'react';
-import { allProducts, collections } from '../data/products';
-import { DashboardModule } from '../dashboard-frontend';
+import React, { useState, useEffect } from 'react';
+import { DashboardModule } from '../dashboard-frontend/DashboardModule';
 import { BillingModule } from '../billing-frontend/BillingModule';
 import { FinanceModule } from '../finance-frontend/FinanceModule';
-import { InventoryModule } from '../inventory-frontend';
+import { InventoryModule } from '../inventory-frontend/InventoryModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
 
 interface AdminDashboardProps {
-  user: { name: string; email: string };
+  user?: { name: string; email: string };
   onLogout: () => void;
   onBackToStore?: () => void;
+  activeModule?: 'dashboard' | 'billing' | 'finance' | 'inventory';
 }
 
-type TabType = 'dashboard' | 'billing' | 'finance' | 'inventory';
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  user,
+  onLogout,
+  onBackToStore,
+  activeModule = 'dashboard',
+}) => {
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory'>(activeModule);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
 
-const STORAGE_KEY_TAB = 'jbj_active_tab';
-
-/** Font Awesome icon class, label, and id for each module */
-const TABS: { id: TabType; label: string; faIcon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', faIcon: 'fa-solid fa-gauge-high' },
-  { id: 'billing',   label: 'Billing',   faIcon: 'fa-solid fa-file-invoice-dollar' },
-  { id: 'finance',   label: 'Finance',   faIcon: 'fa-solid fa-chart-line' },
-  { id: 'inventory', label: 'Inventory', faIcon: 'fa-solid fa-boxes-stacked' },
-];
-
-export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
-  const width    = useWindowWidth();
+  const width = useWindowWidth();
   const isMobile = width < 768;
-  const isTablet = width >= 768 && width < 1024;
 
-  // Sidebar toggle state (defaults to open on desktop/tablet, closed on mobile)
-  const [sidebarOpen, setSidebarOpen] = useState(() => width >= 768);
-
-  // Sync sidebar defaults when screen size changes
+  // Sync tab with URL
   useEffect(() => {
-    if (isMobile) {
-      setSidebarOpen(false);
-    } else {
-      setSidebarOpen(true);
+    const params = new URLSearchParams(window.location.search);
+    const mod = params.get('module');
+    if (mod && ['dashboard', 'billing', 'finance', 'inventory'].includes(mod)) {
+      setCurrentTab(mod as any);
     }
-  }, [isMobile]);
+  }, []);
 
-  // Initialize active tab from URL or localStorage
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    try {
-      const params   = new URLSearchParams(window.location.search);
-      const urlTab   = params.get('tab') as TabType;
-      const valid: TabType[] = ['dashboard', 'billing', 'finance', 'inventory'];
-      if (urlTab && valid.includes(urlTab)) return urlTab;
-      const saved = localStorage.getItem(STORAGE_KEY_TAB) as TabType;
-      if (saved && valid.includes(saved)) return saved;
-    } catch { /* noop */ }
-    return 'dashboard';
-  });
+  const handleTabChange = (tab: 'dashboard' | 'billing' | 'finance' | 'inventory') => {
+    setCurrentTab(tab);
+    setMobileMenuOpen(false);
 
-  const [productList] = useState(allProducts);
-
-  const handleTabChange = (newTab: TabType) => {
-    setActiveTab(newTab);
-    if (isMobile) {
-      setSidebarOpen(false); // close overlay sidebar on mobile after selection
-    }
-    localStorage.setItem(STORAGE_KEY_TAB, newTab);
-    window.history.replaceState(null, '', `?view=admin&tab=${newTab}`);
+    const url = new URL(window.location.href);
+    url.searchParams.set('module', tab);
+    window.history.pushState({}, '', url.toString());
   };
 
-  useEffect(() => {
-    window.history.replaceState(null, '', `?view=admin&tab=${activeTab}`);
-  }, [activeTab]);
-
-  const showFullNav = (sidebarOpen && !isTablet) || isMobile;
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-pie' },
+    { id: 'billing', label: 'POS Billing', icon: 'fa-solid fa-cash-register' },
+    { id: 'finance', label: 'Girvi / Loans', icon: 'fa-solid fa-scale-balanced' },
+    { id: 'inventory', label: 'Inventory', icon: 'fa-solid fa-boxes-stacked' },
+  ];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#1e293b', fontFamily: "'Outfit', sans-serif" }}>
-
-      {/* ── Top Admin Navigation Header ── */}
-      <header style={{
-        background: '#ffffff',
-        borderBottom: '1px solid #e2e8f0',
-        padding: isMobile ? '0.75rem 1rem' : '1rem 2rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 350,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-      }}>
-        {/* Left side: Hamburger button (Mobile only) + Brand Logo & Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-          {isMobile && (
-            <button
-              id="admin-hamburger"
-              onClick={() => setSidebarOpen(o => !o)}
-              aria-label="Toggle sidebar navigation"
-              style={{
-                padding: '8px 10px',
-                borderRadius: '8px',
-                background: '#f1f5f9',
-                border: '1px solid #cbd5e1',
-                color: '#334155',
-                cursor: 'pointer',
-                fontSize: '1.1rem',
-                lineHeight: 1,
-                display: 'flex',
-                alignItems: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <i className={sidebarOpen ? 'fa-solid fa-xmark' : 'fa-solid fa-bars'} />
-            </button>
-          )}
-
-          <img src="/JB_logo.png" alt="Jaya Bhavani Jewellers" style={{ height: '28px', width: 'auto', flexShrink: 0 }} />
-          <h1 
-            className="gold-shimmer-text"
-            style={{
-              fontFamily: "'Cinzel', serif",
-              fontSize: isMobile ? '1.05rem' : '1.35rem',
-              margin: 0,
-              fontWeight: 700,
-              letterSpacing: '1px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            JAYA BHAVANI JEWELLERS
-          </h1>
-        </div>
-
-        {/* Right side controls: Desktop / Tablet Logout button */}
-        {!isMobile && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-            <button
-              onClick={onLogout}
-              style={{
-                padding: '8px 18px',
-                borderRadius: '8px',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#dc2626',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                transition: 'all 0.2s',
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        )}
-      </header>
-
-      {/* ── Mobile Semi-Transparent Backdrop Overlay ── */}
-      {isMobile && sidebarOpen && (
+    <div className="admin-dashboard-root" style={{ display: 'flex', minHeight: '100vh', background: '#f4f5f9', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
+      {/* Overlay for mobile drawer */}
+      {isMobile && mobileMenuOpen && (
         <div
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => setMobileMenuOpen(false)}
           style={{
             position: 'fixed',
-            top: '53px',
-            left: 0,
-            right: 0,
-            bottom: 0,
+            inset: 0,
             background: 'rgba(15, 23, 42, 0.4)',
-            backdropFilter: 'blur(2px)',
-            zIndex: 290,
-            transition: 'opacity 0.2s ease',
+            backdropFilter: 'blur(4px)',
+            zIndex: 40,
           }}
         />
       )}
 
-      {/* ── Main Layout Body ── */}
-      <div style={{ display: 'flex', minHeight: 'calc(100vh - 53px)', position: 'relative' }}>
+      {/* Left Sidebar */}
+      <aside
+        style={{
+          width: '240px',
+          background: '#ffffff',
+          borderRight: '1px solid #eaecf0',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '1.25rem 1rem',
+          position: isMobile ? 'fixed' : 'sticky',
+          top: 0,
+          left: 0,
+          height: '100vh',
+          zIndex: 50,
+          transform: isMobile ? (mobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
+        <div>
+          {/* Brand Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem', paddingLeft: '0.25rem' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem' }}>
+              <i className="fa-solid fa-gem"></i>
+            </div>
+            <div>
+              <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#0f172a', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
+                Jaya Bhavani
+              </h1>
+              <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>JEWELLERS ADMIN</span>
+            </div>
+          </div>
 
-        {/* ── Sidebar Navigation (Fixed Overlay on Mobile, Inline Docked on Desktop/Tablet) ── */}
-        {(sidebarOpen || !isMobile) && (
-          <aside style={{
-            position: isMobile ? 'fixed' : 'static',
-            top: isMobile ? '53px' : undefined,
-            left: isMobile ? 0 : undefined,
-            bottom: isMobile ? 0 : undefined,
-            zIndex: isMobile ? 300 : 'auto',
-            width: isMobile ? '250px' : isTablet ? '64px' : '220px',
-            background: '#ffffff',
-            borderRight: '1px solid #e2e8f0',
-            padding: isTablet ? '1.5rem 0.5rem' : '1.5rem 0.75rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            flexShrink: 0,
-            overflowY: 'auto',
-            boxShadow: isMobile ? '4px 0 24px rgba(0,0,0,0.12)' : 'none',
-            transition: 'transform 0.25s ease, width 0.25s ease',
-            transform: isMobile && !sidebarOpen ? 'translateX(-100%)' : 'translateX(0)',
-          }}>
-            {TABS.map(tab => {
-              const isActive = activeTab === tab.id;
+          {/* Primary Action Button (+ New Bill) */}
+          <button
+            onClick={() => handleTabChange('billing')}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              borderRadius: '12px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              boxShadow: '0 6px 16px rgba(99, 102, 241, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              marginBottom: '1.5rem',
+            }}
+          >
+            <i className="fa-solid fa-plus"></i> Create New Bill
+          </button>
+
+          {/* Navigation Links */}
+          <nav style={{ display: 'grid', gap: '0.35rem' }}>
+            {navItems.map((item) => {
+              const active = currentTab === item.id;
               return (
                 <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  title={tab.label}
+                  key={item.id}
+                  onClick={() => handleTabChange(item.id as any)}
                   style={{
+                    width: '100%',
+                    padding: '0.7rem 0.85rem',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: active ? '#ede9fe' : 'transparent',
+                    color: active ? '#4f46e5' : '#64748b',
+                    fontWeight: active ? 700 : 600,
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: showFullNav ? '12px' : '0',
-                    justifyContent: showFullNav ? 'flex-start' : 'center',
-                    padding: isTablet ? '12px' : '12px 14px',
-                    borderRadius: '8px',
-                    background: isActive ? '#fffbeb' : 'transparent',
-                    border: 'none',
-                    borderLeft: isActive ? '4px solid #d97706' : '4px solid transparent',
-                    color: isActive ? '#b45309' : '#64748b',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    fontWeight: isActive ? 600 : 500,
-                    transition: 'all 0.2s',
-                    width: '100%',
-                    textAlign: 'left',
-                    whiteSpace: 'nowrap',
+                    gap: '10px',
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <i
-                    className={tab.faIcon}
-                    style={{
-                      width: '18px',
-                      textAlign: 'center',
-                      fontSize: isTablet ? '1.1rem' : '0.95rem',
-                      flexShrink: 0,
-                    }}
-                  />
-                  {showFullNav && <span style={{ flex: 1 }}>{tab.label}</span>}
-                  {showFullNav && isActive && (
-                    <i className="fa-solid fa-circle-dot" style={{ fontSize: '0.55rem', color: '#d97706' }} />
-                  )}
+                  <i className={item.icon} style={{ fontSize: '1rem', width: '18px', textAlign: 'center' }}></i>
+                  {item.label}
                 </button>
               );
             })}
+          </nav>
+        </div>
 
-            {/* Mobile Logout Button inside Overlay Sidebar */}
-            {isMobile && (
-              <>
-                <div style={{ height: '1px', background: '#e2e8f0', margin: '12px 0 6px 0' }} />
-                <button
-                  onClick={onLogout}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    background: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    color: '#dc2626',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    fontWeight: 600,
-                    width: '100%',
-                    textAlign: 'left',
-                  }}
-                >
-                  <i className="fa-solid fa-right-from-bracket" style={{ width: '18px', textAlign: 'center', fontSize: '0.95rem' }} />
-                  <span>Logout</span>
-                </button>
-              </>
-            )}
-          </aside>
-        )}
-
-        {/* ── Main Content Area ── */}
-        <main style={{
-          flex: 1,
-          padding: isMobile ? '1rem' : isTablet ? '1.5rem' : '2rem 2.5rem',
-          background: '#f8fafc',
-          overflowX: 'hidden',
-        }}>
-          {activeTab === 'dashboard' && (
-            <DashboardModule user={user} productList={productList} collectionsList={collections} />
+        {/* Bottom Promo Card */}
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.25rem', color: '#6366f1', marginBottom: '4px' }}>
+            <i className="fa-solid fa-mobile-screen-button"></i>
+          </div>
+          <h4 style={{ margin: '0 0 2px 0', fontSize: '0.8rem', color: '#0f172a', fontWeight: 700 }}>POS Mobile Sync</h4>
+          <p style={{ margin: '0 0 6px 0', fontSize: '0.7rem', color: '#64748b' }}>Live cloud connected</p>
+          {onBackToStore && (
+            <button
+              onClick={onBackToStore}
+              style={{ background: '#e2e8f0', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+            >
+              <i className="fa-solid fa-store"></i> Visit Online Store
+            </button>
           )}
-          {activeTab === 'billing'   && <BillingModule />}
-          {activeTab === 'finance'   && <FinanceModule />}
-          {activeTab === 'inventory' && <InventoryModule productList={productList} />}
+        </div>
+      </aside>
+
+      {/* Right Main Content Area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Top Header */}
+        <header
+          style={{
+            background: '#ffffff',
+            borderBottom: '1px solid #eaecf0',
+            padding: '0.75rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            position: 'sticky',
+            top: 0,
+            zIndex: 30,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, maxWidth: '440px' }}>
+            {isMobile && (
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#0f172a' }}
+              >
+                <i className="fa-solid fa-bars"></i>
+              </button>
+            )}
+
+            {/* Global Search Bar */}
+            <div style={{ position: 'relative', width: '100%' }}>
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.8rem' }}>
+                <i className="fa-solid fa-magnifying-glass"></i>
+              </span>
+              <input
+                type="text"
+                placeholder="Search customers, products, invoices..."
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem 0.55rem 2.25rem',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* User Profile & Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f1f5f9', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
+              <i className="fa-solid fa-bell"></i>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#ede9fe', border: '2px solid #6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#4f46e5', fontSize: '0.85rem' }}>
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
+              </div>
+              {!isMobile && (
+                <div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>{user?.name || 'Nikhil Manager'}</div>
+                  <small style={{ color: '#64748b', fontSize: '0.7rem' }}>{user?.email || 'Store Executive'}</small>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={onLogout}
+              style={{
+                padding: '0.45rem 0.8rem',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
+                color: '#ef4444',
+                fontWeight: 600,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              <i className="fa-solid fa-right-from-bracket"></i> Logout
+            </button>
+          </div>
+        </header>
+
+        {/* Dynamic Tab Body with Compact Padding */}
+        <main style={{ padding: isMobile ? '1rem' : '1.25rem', flex: 1 }}>
+          {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} />}
+          {currentTab === 'billing' && <BillingModule />}
+          {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} />}
+          {currentTab === 'inventory' && <InventoryModule globalSearch={globalSearch} />}
         </main>
       </div>
     </div>
   );
-}
+};
+
+export default AdminDashboard;

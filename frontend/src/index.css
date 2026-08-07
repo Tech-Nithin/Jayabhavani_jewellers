@@ -2231,3 +2231,52 @@ a {
     width: 100%;
   }
 }
+
+/* =====================================================
+   ADMIN DASHBOARD TYPOGRAPHY & SAAS SYSTEM
+   ===================================================== */
+.admin-dashboard-root {
+  font-family: 'Inter', 'Source Sans 3', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.admin-page-title {
+  font-family: 'Inter', 'Source Sans 3', 'DM Sans', sans-serif !important;
+  font-size: 1.75rem !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.5px !important;
+}
+
+.admin-card-title {
+  font-family: 'Inter', 'Source Sans 3', 'DM Sans', sans-serif !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+}
+
+.admin-metric-value {
+  font-family: 'Inter', 'Source Sans 3', 'DM Sans', sans-serif !important;
+  font-size: 1.85rem !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.5px !important;
+}
+
+.admin-table-header {
+  font-family: 'Inter', 'Source Sans 3', 'DM Sans', sans-serif !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: #64748b !important;
+}
+
+.admin-table-cell {
+  font-family: 'Inter', 'Source Sans 3', 'DM Sans', sans-serif !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  color: #334155 !important;
+}
