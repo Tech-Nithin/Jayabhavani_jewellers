@@ -16,6 +16,7 @@ import Newsletter       from './components/Newsletter';
 import Footer           from './components/Footer';
 import CartDrawer       from './components/CartDrawer';
 import SignInModal      from './components/SignInModal';
+import AdminDashboard   from './components/AdminDashboard';
 import Toast            from './components/Toast';
 import BackToTop        from './components/BackToTop';
 import WhatsAppButton   from './components/WhatsAppButton';
@@ -27,11 +28,12 @@ function AppContent() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [currentView, setCurrentView] = useState<'store' | 'dashboard'>('store');
 
   // Scroll-reveal observer — re-run on mount so newly rendered cards get picked up
   useEffect(() => {
     setupReveal();
-  }, []);
+  }, [currentView]);
 
   // Lock body scroll when search or auth modal is open
   useEffect(() => {
@@ -39,20 +41,43 @@ function AppContent() {
     return () => { document.body.style.overflow = ''; };
   }, [searchOpen, authOpen]);
 
+  // If logged in and in dashboard view, render AdminDashboard
+  if (currentView === 'dashboard' && user) {
+    return (
+      <AdminDashboard
+        user={user}
+        onLogout={() => {
+          setUser(null);
+          setCurrentView('store');
+        }}
+        onBackToStore={() => setCurrentView('store')}
+      />
+    );
+  }
+
   return (
     <>
       <IntroLoader />
       <AnnouncementBar />
       <Navbar 
         onSearchOpen={() => setSearchOpen(true)} 
-        onAuthOpen={() => setAuthOpen(true)}
+        onAuthOpen={() => {
+          if (user) {
+            setCurrentView('dashboard');
+          } else {
+            setAuthOpen(true);
+          }
+        }}
         user={user}
       />
       <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
       <SignInModal 
         isOpen={authOpen} 
         onClose={() => setAuthOpen(false)}
-        onSuccess={(loggedUser) => setUser(loggedUser)}
+        onSuccess={(loggedUser) => {
+          setUser(loggedUser);
+          setCurrentView('dashboard');
+        }}
       />
 
       <main>
