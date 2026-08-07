@@ -113,15 +113,17 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
           )}
 
           <img src="/JB_logo.png" alt="Jaya Bhavani Jewellers" style={{ height: '28px', width: 'auto', flexShrink: 0 }} />
-          <h1 style={{
-            fontFamily: "'Cinzel', serif",
-            fontSize: isMobile ? '1.05rem' : '1.35rem',
-            margin: 0,
-            color: '#0f172a',
-            fontWeight: 700,
-            letterSpacing: '1px',
-            whiteSpace: 'nowrap',
-          }}>
+          <h1 
+            className="gold-shimmer-text"
+            style={{
+              fontFamily: "'Cinzel', serif",
+              fontSize: isMobile ? '1.05rem' : '1.35rem',
+              margin: 0,
+              fontWeight: 700,
+              letterSpacing: '1px',
+              whiteSpace: 'nowrap',
+            }}
+          >
             JAYA BHAVANI JEWELLERS
           </h1>
         </div>
