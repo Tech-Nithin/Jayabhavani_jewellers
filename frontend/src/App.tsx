@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CartProvider } from './context/CartContext';
+import { verifySessionApi } from './services/api';
 
 import IntroLoader     from './components/IntroLoader';
 import AnnouncementBar  from './components/AnnouncementBar';
@@ -24,11 +25,51 @@ import WhatsAppButton   from './components/WhatsAppButton';
 import { rings, necklaces, earrings, nosepins } from './data/products';
 import { setupReveal } from './utils';
 
+const STORAGE_KEY_TOKEN = 'jbj_session_token';
+const STORAGE_KEY_TAB = 'jbj_active_tab';
+
 function AppContent() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [currentView, setCurrentView] = useState<'store' | 'dashboard'>('store');
+  const [verifyingSession, setVerifyingSession] = useState(true);
+
+  // Secure Backend Token Session Verification on Mount/Refresh
+  useEffect(() => {
+    async function checkSession() {
+      const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN) || sessionStorage.getItem(STORAGE_KEY_TOKEN);
+      if (savedToken) {
+        // Send token to backend for HMAC signature verification
+        const res = await verifySessionApi(savedToken);
+        if (res.success && res.user) {
+          setUser(res.user);
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('view') === 'admin' || params.get('tab') || localStorage.getItem(STORAGE_KEY_TAB)) {
+            setCurrentView('dashboard');
+          }
+        } else {
+          // Token tampered, stolen, or expired - clear invalid token immediately
+          localStorage.removeItem(STORAGE_KEY_TOKEN);
+          sessionStorage.removeItem(STORAGE_KEY_TOKEN);
+          setUser(null);
+          setCurrentView('store');
+        }
+      }
+      setVerifyingSession(false);
+    }
+
+    checkSession();
+  }, []);
+
+  // Sync URL query params with active admin view
+  useEffect(() => {
+    if (currentView === 'dashboard' && user) {
+      const params = new URLSearchParams(window.location.search);
+      const currentTab = params.get('tab') || localStorage.getItem(STORAGE_KEY_TAB) || 'dashboard';
+      window.history.replaceState(null, '', `?view=admin&tab=${currentTab}`);
+    }
+  }, [currentView, user]);
 
   // Scroll-reveal observer — re-run on mount so newly rendered cards get picked up
   useEffect(() => {
@@ -41,16 +82,46 @@ function AppContent() {
     return () => { document.body.style.overflow = ''; };
   }, [searchOpen, authOpen]);
 
+  // Handle Logout
+  const handleLogout = () => {
+    localStorage.removeItem(STORAGE_KEY_TOKEN);
+    localStorage.removeItem(STORAGE_KEY_TAB);
+    sessionStorage.removeItem(STORAGE_KEY_TOKEN);
+    sessionStorage.removeItem(STORAGE_KEY_TAB);
+    setUser(null);
+    setCurrentView('store');
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
+  // Handle successful login with server-issued token
+  const handleLoginSuccess = (loggedUser: { name: string; email: string }, token?: string) => {
+    if (token) {
+      localStorage.setItem(STORAGE_KEY_TOKEN, token);
+    }
+    setUser(loggedUser);
+    setCurrentView('dashboard');
+    const targetTab = localStorage.getItem(STORAGE_KEY_TAB) || 'dashboard';
+    window.history.replaceState(null, '', `?view=admin&tab=${targetTab}`);
+  };
+
+  if (verifyingSession) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0d0d14', color: '#d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Outfit', sans-serif" }}>
+        <span>Authenticating with server...</span>
+      </div>
+    );
+  }
+
   // If logged in and in dashboard view, render AdminDashboard
   if (currentView === 'dashboard' && user) {
     return (
       <AdminDashboard
         user={user}
-        onLogout={() => {
-          setUser(null);
+        onLogout={handleLogout}
+        onBackToStore={() => {
           setCurrentView('store');
+          window.history.replaceState(null, '', window.location.pathname);
         }}
-        onBackToStore={() => setCurrentView('store')}
       />
     );
   }
@@ -74,10 +145,7 @@ function AppContent() {
       <SignInModal 
         isOpen={authOpen} 
         onClose={() => setAuthOpen(false)}
-        onSuccess={(loggedUser) => {
-          setUser(loggedUser);
-          setCurrentView('dashboard');
-        }}
+        onSuccess={handleLoginSuccess}
       />
 
       <main>

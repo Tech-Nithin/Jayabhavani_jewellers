@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { allProducts, collections } from '../data/products';
 import { DashboardModule } from '../dashboard-frontend';
 import { BillingModule } from '../billing-frontend/BillingModule';
@@ -11,9 +11,45 @@ interface AdminDashboardProps {
   onBackToStore?: () => void;
 }
 
+type TabType = 'dashboard' | 'billing' | 'finance' | 'inventory';
+
+const STORAGE_KEY_TAB = 'jbj_active_tab';
+
 export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory'>('dashboard');
+  // Initialize tab state from URL search params or localStorage
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlTab = params.get('tab') as TabType;
+      const validTabs: TabType[] = ['dashboard', 'billing', 'finance', 'inventory'];
+
+      if (urlTab && validTabs.includes(urlTab)) {
+        return urlTab;
+      }
+
+      const savedTab = localStorage.getItem(STORAGE_KEY_TAB) as TabType;
+      if (savedTab && validTabs.includes(savedTab)) {
+        return savedTab;
+      }
+    } catch {
+      // Fallback default
+    }
+    return 'dashboard';
+  });
+
   const [productList] = useState(allProducts);
+
+  // Sync activeTab state with URL search params and localStorage whenever it changes
+  const handleTabChange = (newTab: TabType) => {
+    setActiveTab(newTab);
+    localStorage.setItem(STORAGE_KEY_TAB, newTab);
+    window.history.replaceState(null, '', `?view=admin&tab=${newTab}`);
+  };
+
+  // Ensure URL reflects active tab on mount
+  useEffect(() => {
+    window.history.replaceState(null, '', `?view=admin&tab=${activeTab}`);
+  }, [activeTab]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#1e293b', fontFamily: "'Outfit', sans-serif" }}>
@@ -85,7 +121,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
+                  onClick={() => handleTabChange(tab.id as TabType)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
