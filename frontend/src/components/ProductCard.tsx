@@ -56,7 +56,13 @@ export default function ProductCard({ product }: ProductCardProps) {
           alt={product.name}
           className="product-img"
           style={{ position: 'relative', zIndex: 1 }}
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          onError={(e) => {
+            const img = e.currentTarget as HTMLImageElement;
+            if (!img.dataset.failed) {
+              img.dataset.failed = 'true';
+              img.src = '/Pearl_Gold_Choker.jpeg';
+            }
+          }}
         />
 
         {product.badge && (

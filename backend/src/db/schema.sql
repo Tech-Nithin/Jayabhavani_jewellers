@@ -128,3 +128,95 @@ INSERT INTO public.products (id, name, category, price, old_price, badge, img, w
 ('r3', 'Floral Diamond Cluster', 'Diamond Ring', 135000, NULL, 'hot', '/Floral_Diamond_Cluster.png', 6.800, '#c8a88c'),
 ('r4', 'Classic Gold Band', 'Gold Ring', 28000, NULL, NULL, '/classic_gold_band_ring.jpeg', 3.500, '#e0c8b0')
 ON CONFLICT (id) DO NOTHING;
+
+-- 11. Create Interests Table with Generated Stored Columns
+CREATE TABLE IF NOT EXISTS public.interests (
+  id BIGSERIAL NOT NULL,
+  customer_id TEXT GENERATED ALWAYS AS (('CUST-'::text || LPAD((id)::text, 4, '0'::text))) STORED NOT NULL,
+  loan_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  customer_name TEXT NOT NULL,
+  customer_surname TEXT NOT NULL,
+  customer_phone TEXT NOT NULL,
+  customer_address TEXT NULL,
+  amount NUMERIC(12, 2) NOT NULL,
+  interest_rate_percent NUMERIC(5, 2) NOT NULL,
+  timeline_months INTEGER NOT NULL DEFAULT 1,
+  monthly_interest NUMERIC GENERATED ALWAYS AS (
+    ROUND(
+      ((amount * interest_rate_percent) / (100)::numeric),
+      2
+    )
+  ) STORED NULL,
+  total_interest NUMERIC GENERATED ALWAYS AS (
+    ROUND(
+      (
+        ((amount * interest_rate_percent) / (100)::numeric) * (timeline_months)::numeric
+      ),
+      2
+    )
+  ) STORED NULL,
+  total_payable NUMERIC GENERATED ALWAYS AS (
+    (
+      amount + ROUND(
+        (
+          ((amount * interest_rate_percent) / (100)::numeric) * (timeline_months)::numeric
+        ),
+        2
+      )
+    )
+  ) STORED NULL,
+  item_name TEXT NOT NULL,
+  item_weight_grams NUMERIC(10, 3) NOT NULL,
+  item_purity_percent NUMERIC(5, 2) NOT NULL,
+  item_metal_type TEXT NOT NULL,
+  item_pure_weight NUMERIC GENERATED ALWAYS AS (
+    ROUND(
+      (
+        (item_weight_grams * item_purity_percent) / (100)::numeric
+      ),
+      3
+    )
+  ) STORED NULL,
+  item_metal_rate_per_gram NUMERIC(12, 2) NOT NULL,
+  item_total_value NUMERIC GENERATED ALWAYS AS (
+    ROUND(
+      (
+        (
+          (item_weight_grams * item_purity_percent) / (100)::numeric
+        ) * item_metal_rate_per_gram
+      ),
+      2
+    )
+  ) STORED NULL,
+  item_image_url TEXT NULL,
+  status TEXT NOT NULL DEFAULT 'OPEN'::text,
+  final_consideration_interest_amount NUMERIC(12, 2) NULL,
+  closing_date DATE NULL,
+  considered_type TEXT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  CONSTRAINT interests_pkey PRIMARY KEY (id),
+  CONSTRAINT interests_item_metal_type_check CHECK (item_metal_type = ANY (ARRAY['gold'::text, 'silver'::text])),
+  CONSTRAINT interests_status_check CHECK (status = ANY (ARRAY['OPEN'::text, 'CLOSED'::text]))
+);
+
+-- Disable RLS and Remove all policies on interests table
+ALTER TABLE public.interests DISABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role full access" ON public.interests;
+DROP POLICY IF EXISTS "Enable read access for all users" ON public.interests;
+DROP POLICY IF EXISTS "Enable insert access for all users" ON public.interests;
+DROP POLICY IF EXISTS "Enable update access for all users" ON public.interests;
+DROP POLICY IF EXISTS "Enable delete access for all users" ON public.interests;
+
+-- Grant full table and sequence permissions for auto-increment ID
+GRANT ALL ON TABLE public.interests TO postgres, anon, authenticated, service_role;
+GRANT ALL ON SEQUENCE public.interests_id_seq TO postgres, anon, authenticated, service_role;
+
+-- ALTER TABLE statements for existing tables:
+ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS final_consideration_interest_amount NUMERIC(12, 2);
+ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS closing_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS considered_type TEXT;
+
+
+
+

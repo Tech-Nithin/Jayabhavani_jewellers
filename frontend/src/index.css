@@ -24,6 +24,17 @@ input[type="number"] {
   padding: 0;
 }
 
+/* Hide number input spinners (up/down arrows) */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+
 :root {
   --cream: #fdf9f4;
   --cream-dark: #f5ede0;
@@ -2042,8 +2053,8 @@ a {
    SCROLL REVEAL
    ===================================================== */
 .reveal {
-  opacity: 0;
-  transform: translateY(24px);
+  opacity: 1;
+  transform: none;
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
 

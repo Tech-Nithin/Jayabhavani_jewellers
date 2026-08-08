@@ -55,7 +55,7 @@ let invoicesList: any[] = [
   },
 ];
 
-// GET /api/billing/rates - Fetch active metal values from PostgreSQL / Supabase
+// GET /api/billing/rates - Fetch active metal values with per-column timestamps (from updated_metal_values)
 router.get('/rates', async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
@@ -77,7 +77,7 @@ router.get('/rates', async (req: Request, res: Response) => {
       };
     }
   } catch (err) {
-    console.error('Supabase DB rates fetch warning:', err);
+    console.warn('⚠️ Supabase updated_metal_values fetch error:', err);
   }
 
   res.json({
@@ -110,7 +110,7 @@ router.get('/rates/history', async (req: Request, res: Response) => {
   });
 });
 
-// POST /api/billing/rates - Update active metal values in PostgreSQL AND insert history log
+// POST /api/billing/rates - Update active metal values AND insert history log entry
 router.post('/rates', async (req: Request, res: Response) => {
   const { gold_buy_value, gold_sell_value, silver_buy_value, silver_sell_value } = req.body;
   const now = new Date().toISOString();
@@ -198,6 +198,23 @@ router.post('/rates', async (req: Request, res: Response) => {
     }
   } catch (err) {
     console.error('Supabase DB rates update warning:', err);
+  }
+
+  // Sync to Supabase updated_metal_values table
+  try {
+    await supabase.from('updated_metal_values').upsert({
+      id: 1,
+      gold_buy_value: activeMetalValues.gold_buy_value,
+      gold_buy_value_updated_at: activeMetalValues.gold_buy_value_updated_at,
+      gold_sell_value: activeMetalValues.gold_sell_value,
+      gold_sell_value_updated_at: activeMetalValues.gold_sell_value_updated_at,
+      silver_buy_value: activeMetalValues.silver_buy_value,
+      silver_buy_value_updated_at: activeMetalValues.silver_buy_value_updated_at,
+      silver_sell_value: activeMetalValues.silver_sell_value,
+      silver_sell_value_updated_at: activeMetalValues.silver_sell_value_updated_at,
+    });
+  } catch (err) {
+    console.warn('⚠️ Failed to sync rates to Supabase updated_metal_values:', err);
   }
 
   res.json({

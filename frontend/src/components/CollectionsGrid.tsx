@@ -14,12 +14,11 @@ function CollectionCard({ col }: { col: Collection }) {
           alt={`${col.name} Collection`}
           className="collection-img"
           onError={(e) => {
-            const el = e.currentTarget as HTMLImageElement;
-            el.style.display = 'none';
-            const ph = document.createElement('div');
-            ph.style.cssText = `width:100%;height:100%;background:${col.color};display:flex;align-items:center;justify-content:center;`;
-            ph.innerHTML = `<span style="font-family:'Cormorant Garamond',serif;font-size:4rem;opacity:.25;color:#fff;">✦</span>`;
-            el.parentElement?.appendChild(ph);
+            const img = e.currentTarget as HTMLImageElement;
+            if (!img.dataset.failed) {
+              img.dataset.failed = 'true';
+              img.src = '/images/collection-necklaces.jpg';
+            }
           }}
         />
         <div className="collection-overlay" />

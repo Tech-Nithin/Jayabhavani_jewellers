@@ -8,8 +8,8 @@ export const rings: Product[] = [
 ];
 
 export const necklaces: Product[] = [
-  { id: 'n1', name: 'Diamond Pendant Set', category: 'Diamond Necklace', price: 120000, oldPrice: null, badge: 'new', img: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=500&h=500&fit=crop&q=85', color: '#dcc8b0' },
-  { id: 'n2', name: 'Gold Chain Layered Set', category: 'Gold Necklace', price: 68000, oldPrice: 82000, badge: 'sale', img: 'https://images.unsplash.com/photo-1611652022419-a9419f74343d?w=500&h=500&fit=crop&q=85', color: '#cdb49a' },
+  { id: 'n1', name: 'Diamond Pendant Set', category: 'Diamond Necklace', price: 120000, oldPrice: null, badge: 'new', img: '/Diamond_Pendant_Set.jpg', color: '#dcc8b0' },
+  { id: 'n2', name: 'Gold Chain Layered Set', category: 'Gold Necklace', price: 68000, oldPrice: 82000, badge: 'sale', img: '/Gold_Chain_Layered_Set.jpg', color: '#cdb49a' },
   { id: 'n3', name: 'Pearl & Gold Choker', category: 'Pearl Necklace', price: 54000, oldPrice: null, badge: null, img: '/Pearl_Gold_Choker.jpeg', color: '#e8d8c4' },
   { id: 'n4', name: 'Ruby Drop Necklace', category: 'Gemstone Necklace', price: 96000, oldPrice: null, badge: 'hot', img: '/Ruby_Drop_Necklace.jpg', color: '#d4a090' },
 ];
