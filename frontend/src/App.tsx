@@ -21,6 +21,8 @@ import AdminDashboard   from './components/AdminDashboard';
 import Toast            from './components/Toast';
 import BackToTop        from './components/BackToTop';
 import WhatsAppButton   from './components/WhatsAppButton';
+import GoldPage         from './pages/GoldPage';
+import SilverPage       from './pages/SilverPage';
 
 import { rings, necklaces, earrings, nosepins } from './data/products';
 import { setupReveal } from './utils';
@@ -32,8 +34,17 @@ function AppContent() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
-  const [currentView, setCurrentView] = useState<'store' | 'dashboard'>('store');
+  const [currentView, setCurrentView] = useState<'store' | 'dashboard' | 'gold' | 'silver'>('store');
   const [verifyingSession, setVerifyingSession] = useState(true);
+
+  // Read URL query params on initial mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    if (viewParam === 'gold' || viewParam === 'silver') {
+      setCurrentView(viewParam);
+    }
+  }, []);
 
   // Secure Backend Token Session Verification on Mount/Refresh
   useEffect(() => {
@@ -53,7 +64,6 @@ function AppContent() {
           localStorage.removeItem(STORAGE_KEY_TOKEN);
           sessionStorage.removeItem(STORAGE_KEY_TOKEN);
           setUser(null);
-          setCurrentView('store');
         }
       }
       setVerifyingSession(false);
@@ -130,6 +140,16 @@ function AppContent() {
     );
   }
 
+  const handleNavigateView = (view: 'store' | 'gold' | 'silver') => {
+    setCurrentView(view);
+    if (view === 'store') {
+      window.history.pushState(null, '', window.location.pathname);
+    } else {
+      window.history.pushState(null, '', `?view=${view}`);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <>
       <IntroLoader />
@@ -143,6 +163,8 @@ function AppContent() {
             setAuthOpen(true);
           }
         }}
+        onNavigate={handleNavigateView}
+        currentView={currentView}
         user={user}
       />
       <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
@@ -152,59 +174,65 @@ function AppContent() {
         onSuccess={handleLoginSuccess}
       />
 
-      <main>
-        <Hero />
-        <TrustStrip />
-        <CollectionsGrid />
+      {currentView === 'gold' ? (
+        <GoldPage onBackToStore={() => handleNavigateView('store')} />
+      ) : currentView === 'silver' ? (
+        <SilverPage onBackToStore={() => handleNavigateView('store')} />
+      ) : (
+        <main>
+          <Hero />
+          <TrustStrip />
+          <CollectionsGrid />
 
-        {/* Rings */}
-        <ProductSection
-          id="rings"
-          tag="Rings"
-          title="Finest Ring Collection"
-          desc="From solitaire to eternity bands — every ring is a promise"
-          products={rings}
-          viewAllLabel="View All Rings"
-        />
+          {/* Rings */}
+          <ProductSection
+            id="rings"
+            tag="Rings"
+            title="Finest Ring Collection"
+            desc="From solitaire to eternity bands — every ring is a promise"
+            products={rings}
+            viewAllLabel="View All Rings"
+          />
 
-        <MarqueeStrip />
+          <MarqueeStrip />
 
-        {/* Necklaces */}
-        <ProductSection
-          id="necklaces"
-          tag="Necklaces"
-          title="Drape in Gold & Diamonds"
-          desc="Statement necklaces for every occasion"
-          products={necklaces}
-          alt
-          viewAllLabel="View All Necklaces"
-        />
+          {/* Necklaces */}
+          <ProductSection
+            id="necklaces"
+            tag="Necklaces"
+            title="Drape in Gold & Diamonds"
+            desc="Statement necklaces for every occasion"
+            products={necklaces}
+            alt
+            viewAllLabel="View All Necklaces"
+          />
 
-        {/* Earrings */}
-        <ProductSection
-          id="earrings"
-          tag="Earrings"
-          title="Earrings That Speak"
-          desc="From subtle studs to grand chandeliers"
-          products={earrings}
-          viewAllLabel="View All Earrings"
-        />
+          {/* Earrings */}
+          <ProductSection
+            id="earrings"
+            tag="Earrings"
+            title="Earrings That Speak"
+            desc="From subtle studs to grand chandeliers"
+            products={earrings}
+            viewAllLabel="View All Earrings"
+          />
 
-        {/* Nose Pins */}
-        <ProductSection
-          id="nosepins"
-          tag="Nose Pins"
-          title="Delicate Nose Pins"
-          desc="Tiny treasures that make a bold statement"
-          products={nosepins}
-          alt
-          viewAllLabel="View All Nose Pins"
-        />
+          {/* Nose Pins */}
+          <ProductSection
+            id="nosepins"
+            tag="Nose Pins"
+            title="Delicate Nose Pins"
+            desc="Tiny treasures that make a bold statement"
+            products={nosepins}
+            alt
+            viewAllLabel="View All Nose Pins"
+          />
 
-        <AboutSection />
-        <Testimonials />
-        <Newsletter />
-      </main>
+          <AboutSection />
+          <Testimonials />
+          <Newsletter />
+        </main>
+      )}
 
       <Footer />
       <CartDrawer />

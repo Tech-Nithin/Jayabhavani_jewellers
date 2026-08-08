@@ -223,7 +223,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.customer_name || !form.customer_surname || !form.customer_phone ||
-        !form.amount || !form.item_name || !form.item_weight_grams || !form.item_purity_percent) {
+      !form.amount || !form.item_name || !form.item_weight_grams || !form.item_purity_percent) {
       alert('Please fill all required fields.');
       return;
     }

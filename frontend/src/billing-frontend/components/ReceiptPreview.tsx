@@ -1,5 +1,4 @@
 import React from 'react';
-import html2canvas from 'html2canvas';
 import type { BillItem, GlobalRates } from '../types';
 
 interface ReceiptPreviewProps {
@@ -15,6 +14,27 @@ interface ReceiptPreviewProps {
   netPayable: number;
   onDownloadPNG?: () => void;
 }
+
+// Robust html2canvas Loader (bypasses Vite bundler import issues)
+const loadHtml2Canvas = async (): Promise<any> => {
+  if ((window as any).html2canvas) {
+    return (window as any).html2canvas;
+  }
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById('html2canvas-cdn-script');
+    if (existing) {
+      existing.addEventListener('load', () => resolve((window as any).html2canvas));
+      existing.addEventListener('error', reject);
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'html2canvas-cdn-script';
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.onload = () => resolve((window as any).html2canvas);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+};
 
 // html2canvas-based Exact DOM Snapshot PNG Downloader (taint-free, 100% pixel-perfect)
 export const downloadReceiptAsPNG = async (receiptId: string, custName?: string) => {
@@ -46,6 +66,7 @@ export const downloadReceiptAsPNG = async (receiptId: string, custName?: string)
   element.style.maxWidth = '380px';
 
   try {
+    const html2canvas = await loadHtml2Canvas();
     const canvas = await html2canvas(element, {
       scale: 2,           // 2x Retina resolution
       useCORS: true,
