@@ -36,7 +36,7 @@ let fallbackLedger: any[] = [
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: any, file: any, cb: any) => {
     cb(null, file.mimetype.startsWith('image/'));
   },
 });
@@ -62,7 +62,7 @@ async function ensureBucketExists(): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/finance/upload-image
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/upload-image', upload.single('image'), async (req: Request, res: Response) => {
+router.post('/upload-image', upload.single('image'), async (req: Request & { file?: any }, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file provided or unsupported format.' });
   }
