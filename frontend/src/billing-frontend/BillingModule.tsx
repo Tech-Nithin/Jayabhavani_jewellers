@@ -6,6 +6,10 @@ import { EditRatesModal } from './components/EditRatesModal';
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
 
+/** Converts any string to Start Case (Title Case) — frontend-only display formatting */
+const toStartCase = (str: string): string =>
+  str.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+
 export const BillingModule: React.FC = () => {
   // Global Rates
   const [rates, setRates] = useState<GlobalRates | null>(null);
@@ -83,7 +87,7 @@ export const BillingModule: React.FC = () => {
 
   const [customerDirectory, setCustomerDirectory] = useState<CustomerDirectoryRecord[]>([]);
   const [calcResults, setCalcResults] = useState<{
-    itemDetails: Record<string, { metalVal: number; makingVal: number; gstVal: number; lineTotal: number }>;
+    itemDetails: Record<string, { metalVal: number; makingVal: number; gstVal: number; lineTotal: number; pureWeight?: number; rate?: number }>;
     totalSellValue: number;
     totalBuyCredit: number;
     netPayable: number;
@@ -232,13 +236,30 @@ export const BillingModule: React.FC = () => {
     setCreating(true);
     try {
       const firstItem = items[0];
+      const enrichedItems = items.map((it) => {
+        const det = calcResults.itemDetails[it.id];
+        const purityNum = Number(it.purity_percentage) || 100;
+        const weightNum = Number(it.weight_grams) || 0;
+        const pureW = det?.pureWeight ?? Number((weightNum * (purityNum / 100)).toFixed(3));
+        return {
+          ...it,
+          lineTotal: det?.lineTotal ?? 0,
+          line_total: det?.lineTotal ?? 0,
+          pureWeight: pureW,
+          pure_weight_grams: pureW,
+          metalVal: det?.metalVal ?? 0,
+          makingVal: det?.makingVal ?? 0,
+          gstVal: det?.gstVal ?? 0,
+        };
+      });
+
       const receiptPayload = {
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_address: customerAddress,
         transaction_type: mode,
         rates,
-        items,
+        items: enrichedItems,
         totalSellValue,
         totalBuyCredit,
         netPayable,
@@ -258,15 +279,15 @@ export const BillingModule: React.FC = () => {
           metal_type: items.every((i) => i.metal_type === 'GOLD') ? 'GOLD' : items.every((i) => i.metal_type === 'SILVER') ? 'SILVER' : 'MIXED',
           product_name: items.map((i) => `${i.product_name} (${i.weight_grams}g)`).join(', '),
           weight_grams: items.reduce((acc, curr) => acc + Number(curr.weight_grams), 0),
-          purity_percentage: firstItem.purity_percentage,
-          making_charges_per_gram: firstItem.making_charges_per_gram,
-          gst_percent: firstItem.gst_percent,
+          purity_percentage: firstItem?.purity_percentage,
+          making_charges_per_gram: firstItem?.making_charges_per_gram,
+          gst_percent: firstItem?.gst_percent,
           receipt_json_data: receiptPayload,
         }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         fetchCustomerDirectory();
 
         // Trigger automatic PNG receipt download
@@ -275,12 +296,16 @@ export const BillingModule: React.FC = () => {
         // Show Success Confirmation Modal without erasing data on screen!
         setSuccessModal({
           open: true,
-          message: 'Sale Completed & Stored Successfully!',
-          invId: data.invoice?.id || 'INV-SUCCESS',
+          message: editingInvoiceId ? 'Invoice Record Updated & Stored Successfully!' : 'Sale Completed & Stored Successfully!',
+          invId: data.invoice?.id || editingInvoiceId || 'INV-SUCCESS',
         });
+        setEditingInvoiceId(null);
+      } else {
+        alert(`⚠️ Database / Server Error:\n\n${data.message || 'Failed to generate billing invoice.'}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create bill:', err);
+      alert(`⚠️ Request Error:\n\n${err.message || 'Network error occurred while creating invoice.'}`);
     } finally {
       setCreating(false);
     }
@@ -312,155 +337,131 @@ export const BillingModule: React.FC = () => {
   };
 
   return (
-    <div className="admin-dashboard-root" style={{ color: '#1e293b', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
-      {/* Title & Top Action Bar */}
-      <div style={{ marginBottom: '1.15rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div>
-          <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#0f172a', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
-            <i className="fa-solid fa-cash-register" style={{ color: '#6366f1', marginRight: '6px' }}></i> Billing Screen
-          </h2>
-          <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.8rem' }}>
-            Gold &amp; Silver Selling, Buying, and Trade-in Exchange Billing
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => handleSwitchView(activeView === 'POS' ? 'CUSTOMERS' : 'POS')}
-            style={{
-              padding: '8px 16px',
-              background: activeView === 'CUSTOMERS' ? '#1e293b' : '#ffffff',
-              color: activeView === 'CUSTOMERS' ? '#ffffff' : '#334155',
-              border: '1px solid #cbd5e1',
-              borderRadius: '10px',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="fa-solid fa-users" style={{ color: activeView === 'CUSTOMERS' ? '#38bdf8' : '#0284c7' }}></i>
-            {activeView === 'CUSTOMERS' ? 'Billing Screen' : 'Purchase history'}
-          </button>
-
-          <button
-            onClick={() => openRatesModal('GOLD')}
-            style={{
-              padding: '8px 16px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '10px',
-              fontWeight: 600,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="fa-solid fa-sliders"></i> Edit Market Rates
-          </button>
-        </div>
-      </div>
-
-      {/* Premium Market Rates Modal Overlay */}
-      {editingRates && (
-        <EditRatesModal
-          rates={rates}
-          activeMetalTab={activeMetalTab}
-          onClose={closeRatesModal}
-          onUpdateRates={handleUpdateRates}
-          formatDate={formatDate}
-        />
-      )}
-
-      {/* Market Rates Cards Board (Single Row on Tablet & PC) */}
-      <div className="billing-rates-grid">
-        <div onClick={() => openRatesModal('GOLD')} style={{ background: '#ffffff', borderRadius: '16px', padding: '1rem 1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', cursor: 'pointer' }}>
-          <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>GOLD SELL RATE</span>
-          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
-            ₹{rates?.gold_sell_value.toLocaleString('en-IN')}<small style={{ fontSize: '0.75rem', color: '#64748b' }}>/g</small>
-          </div>
-          <small style={{ color: '#b45309', fontSize: '0.68rem' }}>Updated {formatDate(rates?.gold_sell_value_updated_at)}</small>
-        </div>
-
-        <div onClick={() => openRatesModal('GOLD')} style={{ background: '#ffffff', borderRadius: '16px', padding: '1rem 1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', cursor: 'pointer' }}>
-          <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>GOLD BUY RATE</span>
-          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
-            ₹{rates?.gold_buy_value.toLocaleString('en-IN')}<small style={{ fontSize: '0.75rem', color: '#64748b' }}>/g</small>
-          </div>
-          <small style={{ color: '#b45309', fontSize: '0.68rem' }}>Updated {formatDate(rates?.gold_buy_value_updated_at)}</small>
-        </div>
-
-        <div onClick={() => openRatesModal('SILVER')} style={{ background: '#ffffff', borderRadius: '16px', padding: '1rem 1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', cursor: 'pointer' }}>
-          <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>SILVER SELL RATE</span>
-          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
-            ₹{rates?.silver_sell_value.toLocaleString('en-IN')}<small style={{ fontSize: '0.75rem', color: '#64748b' }}>/g</small>
-          </div>
-          <small style={{ color: '#64748b', fontSize: '0.68rem' }}>Updated {formatDate(rates?.silver_sell_value_updated_at)}</small>
-        </div>
-
-        <div onClick={() => openRatesModal('SILVER')} style={{ background: '#ffffff', borderRadius: '16px', padding: '1rem 1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', cursor: 'pointer' }}>
-          <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>SILVER BUY RATE</span>
-          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
-            ₹{rates?.silver_buy_value.toLocaleString('en-IN')}<small style={{ fontSize: '0.75rem', color: '#64748b' }}>/g</small>
-          </div>
-          <small style={{ color: '#64748b', fontSize: '0.68rem' }}>Updated {formatDate(rates?.silver_buy_value_updated_at)}</small>
-        </div>
-      </div>
-
-      {/* Main View Area: CUSTOMERS Directory vs POS Billing Terminal */}
+    <div className="admin-dashboard-root" style={{ color: '#181310', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
+      {/* ── If activeView === 'CUSTOMERS', render dedicated standalone Purchase History Page Component ── */}
       {activeView === 'CUSTOMERS' ? (
         <CustomerDirectoryView
           customers={customerDirectory}
           rates={rates}
           formatDate={formatDate}
-          onBackToPOS={() => setActiveView('POS')}
+          onBackToPOS={() => handleSwitchView('POS')}
           onSelectCustomerForBill={(name, phone) => {
             setCustomerName(name);
             setCustomerPhone(phone === '-' ? '' : phone);
-            setActiveView('POS');
+            handleSwitchView('POS');
           }}
           onEditCustomerRecord={(cust) => {
-            if (cust.latestInvoice?.id) {
-              setEditingInvoiceId(String(cust.latestInvoice.id));
+            const inv = cust.latestInvoice;
+            if (inv?.id) {
+              setEditingInvoiceId(String(inv.id));
             } else {
               setEditingInvoiceId(null);
             }
             setCustomerName(cust.name);
             setCustomerPhone(cust.phone === '-' ? '' : cust.phone);
-            setCustomerAddress(cust.address || cust.latestInvoice?.customer_address || cust.latestInvoice?.receipt_json_data?.customer_address || '');
+            setCustomerAddress(cust.address || inv?.customer_address || inv?.receipt_json_data?.customer_address || '');
 
-            if (cust.latestInvoice?.receipt_json_data?.items && Array.isArray(cust.latestInvoice.receipt_json_data.items)) {
-              setMode(cust.latestInvoice.receipt_json_data.transaction_type || cust.latestInvoice.transaction_type || 'SELL');
-              setItems(cust.latestInvoice.receipt_json_data.items);
-            } else if (cust.latestInvoice) {
-              setMode(cust.latestInvoice.transaction_type || 'SELL');
+            const invMode = ((inv?.receipt_json_data?.transaction_type || inv?.transaction_type || 'SELL').toUpperCase()) as 'SELL' | 'BUY' | 'EXCHANGE';
+            setMode(invMode);
+
+            if (inv?.receipt_json_data?.items && Array.isArray(inv.receipt_json_data.items) && inv.receipt_json_data.items.length > 0) {
+              setItems(inv.receipt_json_data.items);
+            } else if (inv) {
               setItems([
                 {
                   id: 'item-1',
-                  metal_type: (cust.latestInvoice.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
-                  product_name: cust.latestInvoice.product_name || '',
-                  weight_grams: cust.latestInvoice.weight_grams || 0,
-                  purity_percentage: cust.latestInvoice.purity_percentage || 91.6,
-                  making_charges_per_gram: cust.latestInvoice.making_charges_per_gram || 0,
-                  gst_percent: cust.latestInvoice.gst_percent || 3,
-                  item_type: cust.latestInvoice.transaction_type === 'BUY' ? 'BUY' : 'SELL',
+                  metal_type: (inv.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
+                  product_name: inv.product_name || '',
+                  weight_grams: inv.weight_grams || 0,
+                  purity_percentage: inv.purity_percentage || 91.6,
+                  making_charges_per_gram: inv.making_charges_per_gram || 0,
+                  gst_percent: inv.gst_percent || 3,
+                  item_type: inv.transaction_type === 'BUY' ? 'BUY' : 'SELL',
                 },
               ]);
             }
 
+            // Directly switch active view without resetting items via handleSetMode
             setActiveView('POS');
+            const params = new URLSearchParams(window.location.search);
+            params.set('module', 'billing');
+            params.set('mode', invMode === 'BUY' ? 'buying' : invMode.toLowerCase());
+            params.delete('history');
+            params.delete('search');
+            params.delete('from');
+            params.delete('to');
+            window.history.replaceState({}, '', `?${params.toString()}`);
           }}
         />
       ) : (
         <>
-          {/* 70% Left Grid Form + 30% Right Grid Realtime Thermal Receipt Preview (Responsive on Tablets & PC) */}
+          {/* Title & Top Action Bar */}
+          <div style={{ marginBottom: '1.15rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
+                <i className="fa-solid fa-cash-register" style={{ color: '#d97706', marginRight: '6px' }}></i> Billing Screen
+              </h2>
+              <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.8rem' }}>
+                Gold &amp; Silver Selling, Buying, and Trade-in Exchange Billing
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => handleSwitchView('CUSTOMERS')}
+                style={{
+                  padding: '8px 16px',
+                  background: '#181310',
+                  color: '#ffffff',
+                  border: '1px solid #3d2f25',
+                  borderRadius: '0px',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(24, 19, 16, 0.2)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <i className="fa-solid fa-address-book"></i> Purchase History
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openRatesModal('GOLD')}
+                style={{
+                  padding: '8px 16px',
+                  background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '0px',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(180, 83, 9, 0.3)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <i className="fa-solid fa-sliders"></i> Edit Market Rates
+              </button>
+            </div>
+          </div>
+
+          {/* Premium Market Rates Modal Overlay */}
+          {editingRates && (
+            <EditRatesModal
+              rates={rates}
+              activeMetalTab={activeMetalTab}
+              onClose={closeRatesModal}
+              onUpdateRates={handleUpdateRates}
+              formatDate={formatDate}
+            />
+          )}
+
           <div className="pos-grid-container">
 
             {/* LEFT GRID (70%): Multi-Item POS Terminal Form */}
@@ -490,18 +491,22 @@ export const BillingModule: React.FC = () => {
                   type="button"
                   onClick={() => {
                     handleSetMode('SELL');
-                    setItems([
-                      {
-                        id: 'item-1',
-                        metal_type: 'GOLD',
-                        product_name: '',
-                        weight_grams: 0,
-                        purity_percentage: 91.6,
-                        making_charges_per_gram: 0,
-                        gst_percent: 3,
-                        item_type: 'SELL',
-                      },
-                    ]);
+                    if (!editingInvoiceId) {
+                      setItems([
+                        {
+                          id: 'item-1',
+                          metal_type: 'GOLD',
+                          product_name: '',
+                          weight_grams: 0,
+                          purity_percentage: 91.6,
+                          making_charges_per_gram: 0,
+                          gst_percent: 3,
+                          item_type: 'SELL',
+                        },
+                      ]);
+                    } else {
+                      setItems(items.map((i) => ({ ...i, item_type: 'SELL' })));
+                    }
                   }}
                   style={{
                     flex: 1,
@@ -526,18 +531,22 @@ export const BillingModule: React.FC = () => {
                   type="button"
                   onClick={() => {
                     handleSetMode('BUY');
-                    setItems([
-                      {
-                        id: 'item-1',
-                        metal_type: 'GOLD',
-                        product_name: '',
-                        weight_grams: 0,
-                        purity_percentage: 91.6,
-                        making_charges_per_gram: 0,
-                        gst_percent: 0,
-                        item_type: 'BUY',
-                      },
-                    ]);
+                    if (!editingInvoiceId) {
+                      setItems([
+                        {
+                          id: 'item-1',
+                          metal_type: 'GOLD',
+                          product_name: '',
+                          weight_grams: 0,
+                          purity_percentage: 91.6,
+                          making_charges_per_gram: 0,
+                          gst_percent: 0,
+                          item_type: 'BUY',
+                        },
+                      ]);
+                    } else {
+                      setItems(items.map((i) => ({ ...i, item_type: 'BUY' })));
+                    }
                   }}
                   style={{
                     flex: 1,
@@ -562,28 +571,30 @@ export const BillingModule: React.FC = () => {
                   type="button"
                   onClick={() => {
                     handleSetMode('EXCHANGE');
-                    setItems([
-                      {
-                        id: 'item-1',
-                        metal_type: 'GOLD',
-                        product_name: '',
-                        weight_grams: 0,
-                        purity_percentage: 91.6,
-                        making_charges_per_gram: 0,
-                        gst_percent: 3,
-                        item_type: 'SELL',
-                      },
-                      {
-                        id: 'item-2',
-                        metal_type: 'GOLD',
-                        product_name: '',
-                        weight_grams: 0,
-                        purity_percentage: 91.6,
-                        making_charges_per_gram: 0,
-                        gst_percent: 0,
-                        item_type: 'BUY',
-                      },
-                    ]);
+                    if (!editingInvoiceId) {
+                      setItems([
+                        {
+                          id: 'item-1',
+                          metal_type: 'GOLD',
+                          product_name: '',
+                          weight_grams: 0,
+                          purity_percentage: 91.6,
+                          making_charges_per_gram: 0,
+                          gst_percent: 3,
+                          item_type: 'SELL',
+                        },
+                        {
+                          id: 'item-2',
+                          metal_type: 'GOLD',
+                          product_name: '',
+                          weight_grams: 0,
+                          purity_percentage: 91.6,
+                          making_charges_per_gram: 0,
+                          gst_percent: 0,
+                          item_type: 'BUY',
+                        },
+                      ]);
+                    }
                   }}
                   style={{
                     flex: 1,
@@ -613,7 +624,7 @@ export const BillingModule: React.FC = () => {
                     type="text"
                     placeholder="Customer Name"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => setCustomerName(toStartCase(e.target.value))}
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
                     required
                   />
@@ -622,9 +633,12 @@ export const BillingModule: React.FC = () => {
                   <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>Customer Phone</label>
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
                     placeholder="Phone Number"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))}
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
                   />
                 </div>
@@ -634,7 +648,7 @@ export const BillingModule: React.FC = () => {
                     type="text"
                     placeholder="e.g. Siddipet, TS"
                     value={customerAddress}
-                    onChange={(e) => setCustomerAddress(e.target.value)}
+                    onChange={(e) => setCustomerAddress(toStartCase(e.target.value))}
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
                   />
                 </div>
@@ -698,12 +712,12 @@ export const BillingModule: React.FC = () => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                       <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Description</label>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Name</label>
                         <input
                           type="text"
                           placeholder="e.g. 22K Gold Chain"
                           value={it.product_name}
-                          onChange={(e) => handleUpdateItem(it.id, 'product_name', e.target.value)}
+                          onChange={(e) => handleUpdateItem(it.id, 'product_name', toStartCase(e.target.value))}
                           style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                           required
                         />
@@ -855,46 +869,45 @@ export const BillingModule: React.FC = () => {
               totalBuyCredit={totalBuyCredit}
               netPayable={netPayable}
             />
-
           </div>
+
+          {/* Success Confirmation Popup Modal */}
+          {successModal?.open && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+              <div style={{ background: '#ffffff', borderRadius: '20px', maxWidth: '440px', width: '100%', padding: '1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', marginBottom: '1rem' }}>
+                  <i className="fa-solid fa-circle-check"></i>
+                </div>
+
+                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                  {successModal.message}
+                </h3>
+
+                <p style={{ margin: '0 0 1.25rem 0', fontSize: '0.85rem', color: '#475569', lineHeight: '1.4' }}>
+                  Invoice <strong style={{ color: '#0f172a' }}>#{successModal.invId}</strong> has been saved to database and thermal receipt image downloaded cleanly.
+                </p>
+
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSuccessModal(null)}
+                    style={{ padding: '0.65rem 1.15rem', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+                  >
+                    Keep Viewing Bill
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    style={{ padding: '0.65rem 1.15rem', background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)' }}
+                  >
+                    Start New Bill
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
-      )}
-
-      {/* Success Confirmation Popup Modal */}
-      {successModal?.open && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#ffffff', borderRadius: '20px', maxWidth: '440px', width: '100%', padding: '1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', marginBottom: '1rem' }}>
-              <i className="fa-solid fa-circle-check"></i>
-            </div>
-
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-              {successModal.message}
-            </h3>
-
-            <p style={{ margin: '0 0 1.25rem 0', fontSize: '0.85rem', color: '#475569', lineHeight: '1.4' }}>
-              Invoice <strong style={{ color: '#0f172a' }}>#{successModal.invId}</strong> has been saved to database and thermal receipt image downloaded cleanly.
-            </p>
-
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setSuccessModal(null)}
-                style={{ padding: '0.65rem 1.15rem', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
-              >
-                Keep Viewing Bill
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResetForm}
-                style={{ padding: '0.65rem 1.15rem', background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)' }}
-              >
-                Start New Bill
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

@@ -222,10 +222,16 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               </div>
 
               <div style={{ display: 'grid', gap: '2px', color: '#0f172a' }}>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 700 }}>Metal:</span>
                   <strong>{it.metal_type}</strong>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 700 }}>Item Name:</span>
+                  <strong style={{ fontWeight: 700, color: '#0f172a' }}>{it.product_name || (it.metal_type + ' Item')}</strong>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 700 }}>Item Weight:</span>
                   <strong>{it.weight_grams ?? 0} gm</strong>

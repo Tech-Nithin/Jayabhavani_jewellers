@@ -4,6 +4,7 @@ import { BillingModule } from '../billing-frontend/BillingModule';
 import { FinanceModule } from '../finance-frontend/FinanceModule';
 import { InventoryModule } from '../inventory-frontend/InventoryModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
+import AnnouncementBar from './AnnouncementBar';
 
 interface AdminDashboardProps {
   user?: { name: string; email: string };
@@ -11,6 +12,7 @@ interface AdminDashboardProps {
   onBackToStore?: () => void;
   activeModule?: 'dashboard' | 'billing' | 'finance' | 'inventory';
 }
+
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   user,
@@ -20,7 +22,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory'>(activeModule);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
+
+  // Silence unused state check
+  void setGlobalSearch;
+  void onBackToStore;
 
   const width = useWindowWidth();
   const isTabletOrMobile = width < 1024;
@@ -52,7 +59,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   ];
 
   return (
-    <div className="admin-dashboard-root" style={{ display: 'flex', minHeight: '100vh', background: '#f4f5f9', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
+    <div className="admin-dashboard-root" style={{ display: 'flex', minHeight: '100vh', background: '#faf7f2', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
       
       {/* 1. Backdrop Overlay for Tablet & Mobile Drawer */}
       {isTabletOrMobile && mobileMenuOpen && (
@@ -61,21 +68,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 23, 42, 0.45)',
-            backdropFilter: 'blur(4px)',
+            background: 'rgba(24, 19, 16, 0.65)',
+            backdropFilter: 'blur(6px)',
             zIndex: 90,
             transition: 'opacity 0.2s ease',
           }}
         />
       )}
 
-      {/* 2. Tablet & Mobile Icon-Only Rail Sidebar (width: 64px) - Displays only icons by default */}
+      {/* 2. Tablet & Mobile Icon-Only Rail Sidebar (width: 64px) - Matte Black Ceiling & Walnut Theme */}
       {isTabletOrMobile && (
         <aside
           style={{
             width: '64px',
-            background: '#ffffff',
-            borderRight: '1px solid #eaecf0',
+            background: '#181310',
+            borderRight: '1px solid #2b2019',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -98,7 +105,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 width: '42px',
                 height: '42px',
                 borderRadius: '12px',
-                background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                background: 'linear-gradient(135deg, #d99b26 0%, #a67c1e 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -106,7 +113,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 fontSize: '1.15rem',
                 border: 'none',
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                boxShadow: '0 4px 14px rgba(217, 155, 38, 0.35)',
               }}
             >
               <i className="fa-solid fa-gem"></i>
@@ -125,20 +132,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 height: '40px',
                 borderRadius: '10px',
                 border: 'none',
-                background: '#ede9fe',
-                color: '#4f46e5',
+                background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
+                color: '#ffffff',
                 fontSize: '1rem',
                 fontWeight: 800,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(180, 83, 9, 0.3)',
               }}
             >
               <i className="fa-solid fa-plus"></i>
             </button>
 
-            <div style={{ width: '32px', height: '1px', background: '#e2e8f0', margin: '2px 0' }} />
+            <div style={{ width: '32px', height: '1px', background: '#2b2019', margin: '2px 0' }} />
 
             {/* Icon-Only Navigation Buttons */}
             {navItems.map((item) => {
@@ -157,14 +165,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     height: '42px',
                     borderRadius: '10px',
                     border: 'none',
-                    background: active ? '#ede9fe' : 'transparent',
-                    color: active ? '#4f46e5' : '#64748b',
+                    background: active ? '#2b2019' : 'transparent',
+                    color: active ? '#fbbf24' : '#a39284',
                     fontSize: '1.1rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     transition: 'all 0.15s ease',
+                    borderLeft: active ? '3px solid #d97706' : 'none',
                   }}
                 >
                   <i className={item.icon}></i>
@@ -173,29 +182,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             })}
           </div>
 
-          {/* Bottom Store Icon */}
-          {onBackToStore && (
+          {/* Bottom Rail Gear Settings Button */}
+          <div style={{ position: 'relative' }}>
             <button
               type="button"
-              onClick={onBackToStore}
-              title="Visit Online Store"
+              onClick={() => setSettingsOpen(!settingsOpen)}
+              title="Account Settings & Logout"
               style={{
-                width: '38px',
-                height: '38px',
+                width: '40px',
+                height: '40px',
                 borderRadius: '10px',
-                border: '1px solid #e2e8f0',
-                background: '#f8fafc',
-                color: '#64748b',
-                fontSize: '1rem',
+                border: '1px solid #3d2f25',
+                background: settingsOpen ? '#2b2019' : '#181310',
+                color: settingsOpen ? '#fbbf24' : '#a39284',
+                fontSize: '1.05rem',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                transition: 'all 0.15s ease',
               }}
             >
-              <i className="fa-solid fa-store"></i>
+              <i className="fa-solid fa-gear" style={{ transform: settingsOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease', color: settingsOpen ? '#fbbf24' : '#d97706' }}></i>
             </button>
-          )}
+
+            {/* Rail Settings Popover Dropdown */}
+            {settingsOpen && (
+              <>
+                <div onClick={() => setSettingsOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 'calc(100% + 12px)',
+                    width: '240px',
+                    background: '#181310',
+                    borderRadius: '14px',
+                    border: '1px solid #3d2f25',
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.4)',
+                    padding: '0.9rem',
+                    zIndex: 100,
+                  }}
+                >
+                  {/* User Info */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingBottom: '0.75rem', borderBottom: '1px solid #2b2019' }}>
+                    <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#2b2019', border: '2px solid #d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fbbf24', fontSize: '0.88rem', flexShrink: 0 }}>
+                      {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
+                    </div>
+                    <div style={{ overflow: 'hidden' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fffefb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user?.name || 'Nikhil Manager'}
+                      </div>
+                      <small style={{ color: '#a39284', fontSize: '0.72rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user?.email || 'nikhil@jayabhavani.com'}
+                      </small>
+                    </div>
+                  </div>
+
+                  {/* Logout Button */}
+                  <div style={{ paddingTop: '0.6rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        onLogout();
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #7f1d1d',
+                        background: '#451a1a',
+                        color: '#fca5a5',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <i className="fa-solid fa-right-from-bracket"></i> Logout
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </aside>
       )}
 
@@ -203,8 +277,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <aside
         style={{
           width: '240px',
-          background: '#ffffff',
-          borderRight: '1px solid #eaecf0',
+          background: '#181310',
+          borderRight: '1px solid #2b2019',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -215,7 +289,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           height: '100vh',
           zIndex: isTabletOrMobile ? 100 : 50,
           transform: isTabletOrMobile ? (mobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
-          boxShadow: isTabletOrMobile && mobileMenuOpen ? '0 20px 40px rgba(0,0,0,0.15)' : 'none',
+          boxShadow: isTabletOrMobile && mobileMenuOpen ? '0 20px 40px rgba(0,0,0,0.35)' : 'none',
           transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
@@ -223,14 +297,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Brand Logo Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingLeft: '0.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #d99b26 0%, #a67c1e 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem', boxShadow: '0 4px 12px rgba(217, 155, 38, 0.3)' }}>
                 <i className="fa-solid fa-gem"></i>
               </div>
               <div>
-                <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#0f172a', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
+                <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#fffefb', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
                   Jaya Bhavani
                 </h1>
-                <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>JEWELLERS ADMIN</span>
+                <span style={{ fontSize: '0.68rem', color: '#c59b27', fontWeight: 700, letterSpacing: '0.5px' }}>JEWELLERS SHOWROOM</span>
               </div>
             </div>
 
@@ -239,7 +313,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '1.1rem', cursor: 'pointer', padding: '4px' }}
+                style={{ background: 'none', border: 'none', color: '#a39284', fontSize: '1.1rem', cursor: 'pointer', padding: '4px' }}
               >
                 <i className="fa-solid fa-xmark"></i>
               </button>
@@ -254,12 +328,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               padding: '0.75rem',
               borderRadius: '12px',
               border: 'none',
-              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
               color: '#ffffff',
               fontWeight: 700,
               fontSize: '0.85rem',
               cursor: 'pointer',
-              boxShadow: '0 6px 16px rgba(99, 102, 241, 0.3)',
+              boxShadow: '0 6px 18px rgba(180, 83, 9, 0.35)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -283,18 +357,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     padding: '0.7rem 0.85rem',
                     borderRadius: '10px',
                     border: 'none',
-                    background: active ? '#ede9fe' : 'transparent',
-                    color: active ? '#4f46e5' : '#64748b',
-                    fontWeight: active ? 700 : 600,
+                    background: active ? '#2b2019' : 'transparent',
+                    color: active ? '#fbbf24' : '#a39284',
+                    fontWeight: active ? 800 : 600,
                     fontSize: '0.875rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
                     transition: 'all 0.15s ease',
+                    borderLeft: active ? '3px solid #d97706' : '3px solid transparent',
                   }}
                 >
-                  <i className={item.icon} style={{ fontSize: '1rem', width: '18px', textAlign: 'center' }}></i>
+                  <i className={item.icon} style={{ fontSize: '1rem', width: '18px', textAlign: 'center', color: active ? '#fbbf24' : '#a39284' }}></i>
                   {item.label}
                 </button>
               );
@@ -302,115 +377,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </nav>
         </div>
 
-        {/* Bottom Promo Card */}
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.25rem', color: '#6366f1', marginBottom: '4px' }}>
-            <i className="fa-solid fa-mobile-screen-button"></i>
-          </div>
-          <h4 style={{ margin: '0 0 2px 0', fontSize: '0.8rem', color: '#0f172a', fontWeight: 700 }}>POS Mobile Sync</h4>
-          <p style={{ margin: '0 0 6px 0', fontSize: '0.7rem', color: '#64748b' }}>Live cloud connected</p>
-          {onBackToStore && (
-            <button
-              onClick={onBackToStore}
-              style={{ background: '#e2e8f0', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-            >
-              <i className="fa-solid fa-store"></i> Visit Online Store
-            </button>
+        {/* Sidebar Bottom Gear Settings Control (Fixed at bottom of sidebar) */}
+        <div style={{ position: 'relative', marginTop: '1rem' }}>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(!settingsOpen)}
+            style={{
+              width: '100%',
+              padding: '0.7rem 0.85rem',
+              borderRadius: '11px',
+              border: '1px solid #3d2f25',
+              background: settingsOpen ? '#2b2019' : '#1f1915',
+              color: settingsOpen ? '#fbbf24' : '#d4c7b8',
+              fontWeight: 700,
+              fontSize: '0.84rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="fa-solid fa-gear" style={{ transform: settingsOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease', color: '#d97706', fontSize: '0.95rem' }}></i>
+              Account Settings
+            </span>
+            <i className={`fa-solid fa-chevron-${settingsOpen ? 'down' : 'up'}`} style={{ fontSize: '0.7rem', opacity: 0.7 }}></i>
+          </button>
+
+          {/* Settings Dropdown Popover (Appears above bottom button) */}
+          {settingsOpen && (
+            <>
+              <div
+                onClick={() => setSettingsOpen(false)}
+                style={{ position: 'fixed', inset: 0, zIndex: 90 }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 8px)',
+                  left: 0,
+                  width: '100%',
+                  background: '#181310',
+                  borderRadius: '14px',
+                  border: '1px solid #3d2f25',
+                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.45)',
+                  padding: '0.9rem',
+                  zIndex: 100,
+                }}
+              >
+                {/* User Avatar, Name & Email */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingBottom: '0.75rem', borderBottom: '1px solid #2b2019' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#2b2019', border: '2px solid #d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fbbf24', fontSize: '0.88rem', flexShrink: 0 }}>
+                    {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
+                  </div>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fffefb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {user?.name || 'Nikhil Manager'}
+                    </div>
+                    <small style={{ color: '#a39284', fontSize: '0.72rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {user?.email || 'nikhil@jayabhavani.com'}
+                    </small>
+                  </div>
+                </div>
+
+                {/* Logout Button */}
+                <div style={{ paddingTop: '0.6rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      onLogout();
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #7f1d1d',
+                      background: '#451a1a',
+                      color: '#fca5a5',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <i className="fa-solid fa-right-from-bracket"></i> Logout
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </aside>
 
       {/* 4. Right Main Content Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Top Header */}
-        <header
-          style={{
-            background: '#ffffff',
-            borderBottom: '1px solid #eaecf0',
-            padding: '0.75rem 1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1rem',
-            position: 'sticky',
-            top: 0,
-            zIndex: 30,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, maxWidth: '440px' }}>
-            {isTabletOrMobile && (
-              <button
-                onClick={() => setMobileMenuOpen(true)}
-                title="Open menu drawer"
-                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', fontSize: '1.1rem', cursor: 'pointer', color: '#0f172a' }}
-              >
-                <i className="fa-solid fa-bars"></i>
-              </button>
-            )}
-
-            {/* Global Search Bar */}
-            <div style={{ position: 'relative', width: '100%' }}>
-              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.8rem' }}>
-                <i className="fa-solid fa-magnifying-glass"></i>
-              </span>
-              <input
-                type="text"
-                placeholder="Search customers, products, invoices..."
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.55rem 0.75rem 0.55rem 2.25rem',
-                  borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
-                  background: '#f8fafc',
-                  fontSize: '0.85rem',
-                  outline: 'none',
-                }}
-              />
-            </div>
-          </div>
-
-          {/* User Profile & Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f1f5f9', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
-              <i className="fa-solid fa-bell"></i>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#ede9fe', border: '2px solid #6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#4f46e5', fontSize: '0.85rem' }}>
-                {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
-              </div>
-              {!isMobileScreen && (
-                <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>{user?.name || 'Nikhil Manager'}</div>
-                  <small style={{ color: '#64748b', fontSize: '0.7rem' }}>{user?.email || 'Store Executive'}</small>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={onLogout}
-              style={{
-                padding: '0.45rem 0.8rem',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-                background: '#ffffff',
-                color: '#ef4444',
-                fontWeight: 600,
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-            >
-              <i className="fa-solid fa-right-from-bracket"></i> Logout
-            </button>
-          </div>
-        </header>
-
-        {/* Dynamic Tab Body with Compact Padding */}
+        {/* Global Unified Rates Header (Single Source AnnouncementBar Component) */}
+        <AnnouncementBar
+          mode="admin"
+          user={user}
+          isTabletOrMobile={isTabletOrMobile}
+          isMobileScreen={isMobileScreen}
+          onToggleMobileMenu={() => setMobileMenuOpen(true)}
+        />
         <main style={{ padding: isMobileScreen ? '1rem' : '1.25rem', flex: 1 }}>
           {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} />}
           {currentTab === 'billing' && <BillingModule />}

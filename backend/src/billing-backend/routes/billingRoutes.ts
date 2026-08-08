@@ -31,29 +31,7 @@ let metalHistoryRates: HistoryEntry[] = [
   { id: 4, metal_type: 'SILVER', rate_type: 'SELL', old_value: null, new_value: 270.00, updated_at: new Date().toISOString() },
 ];
 
-let invoicesList: any[] = [
-  {
-    id: 'INV-1001',
-    customer_name: 'Rajesh Kumar',
-    customer_phone: '9876543210',
-    transaction_type: 'SELL',
-    metal_type: 'GOLD',
-    product_name: '22K Gold Chain',
-    weight_grams: 15.500,
-    purity_percentage: 91.60,
-    applied_rate_per_gram: 14700.00,
-    pure_metal_weight: 14.198,
-    metal_value: 208710.60,
-    making_charges: 6200.00,
-    gst_amount: 6447.32,
-    final_amount: 221357.92,
-    gold_buy_rate_snapshot: 14200.00,
-    gold_sell_rate_snapshot: 14700.00,
-    silver_buy_rate_snapshot: 250.00,
-    silver_sell_rate_snapshot: 270.00,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
+let invoicesList: any[] = [];
 
 // GET /api/billing/rates - Fetch active metal values with per-column timestamps (from updated_metal_values)
 router.get('/rates', async (req: Request, res: Response) => {
@@ -231,7 +209,7 @@ router.post('/calculate', (req: Request, res: Response) => {
   const currentRates = rates || activeMetalValues;
 
   if (items && Array.isArray(items)) {
-    const itemDetails: Record<string, { metalVal: number; makingVal: number; gstVal: number; lineTotal: number }> = {};
+    const itemDetails: Record<string, { metalVal: number; makingVal: number; gstVal: number; lineTotal: number; pureWeight: number; rate: number }> = {};
     let totalSellValue = 0;
     let totalBuyCredit = 0;
 
@@ -247,14 +225,15 @@ router.post('/calculate', (req: Request, res: Response) => {
       const makingNum = Number(it.making_charges_per_gram) || 0;
       const gstNum = Number(it.gst_percent) || 0;
 
-      const weightUsed = isSell ? weightNum : weightNum * (purityNum / 100);
+      const pureWeight = Number((weightNum * (purityNum / 100)).toFixed(3));
+      const weightUsed = isSell ? weightNum : pureWeight;
       const metalVal = Number((weightUsed * rate).toFixed(2));
       const makingVal = isSell ? Number(makingNum.toFixed(2)) : 0;
       const subtotal = metalVal + makingVal;
       const gstVal = isSell ? Number((subtotal * (gstNum / 100)).toFixed(2)) : 0;
       const lineTotal = Number((subtotal + gstVal).toFixed(2));
 
-      itemDetails[it.id] = { metalVal, makingVal, gstVal, lineTotal };
+      itemDetails[it.id] = { metalVal, makingVal, gstVal, lineTotal, pureWeight, rate };
 
       if (isSell) {
         totalSellValue += lineTotal;
@@ -265,7 +244,7 @@ router.post('/calculate', (req: Request, res: Response) => {
 
     totalSellValue = Number(totalSellValue.toFixed(2));
     totalBuyCredit = Number(totalBuyCredit.toFixed(2));
-    const netPayable = Math.max(0, Number((totalSellValue - totalBuyCredit).toFixed(2)));
+    const netPayable = Number(Math.abs(totalSellValue - totalBuyCredit).toFixed(2));
 
     return res.json({
       success: true,
@@ -300,7 +279,7 @@ router.post('/calculate', (req: Request, res: Response) => {
   const pure_metal_weight = Number((weight * (purity / 100)).toFixed(3));
   const weightUsed = transaction_type === 'SELL' ? weight : pure_metal_weight;
   const metal_value = Number((weightUsed * applied_rate_per_gram).toFixed(2));
-  const making_charges = transaction_type === 'SELL' ? Number((mcPerGram * weight).toFixed(2)) : 0;
+  const making_charges = transaction_type === 'SELL' ? Number(mcPerGram.toFixed(2)) : 0;
   const subtotal = metal_value + making_charges;
   const gst_amount = transaction_type === 'SELL' ? Number((subtotal * (gstRate / 100)).toFixed(2)) : 0;
   const final_amount = Number((subtotal + gst_amount).toFixed(2));
@@ -324,14 +303,14 @@ router.post('/calculate', (req: Request, res: Response) => {
 
 // GET /api/billing/customer-directory - 1:1 Individual Invoice Directory Records
 router.get('/customer-directory', async (req: Request, res: Response) => {
-  let list = invoicesList;
+  let list: any[] = invoicesList;
   try {
     const { data, error } = await supabase
       .from('billing_invoices')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       list = data;
     }
   } catch (err) {
@@ -344,7 +323,7 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
     address: inv.customer_address || inv.receipt_json_data?.customer_address || 'N/A',
     products: inv.product_name ? [inv.product_name] : ['-'],
     totalWeight: Number(inv.weight_grams) || 0,
-    totalSpent: Number(inv.final_amount) || 0,
+    totalSpent: Number(inv.final_amount) || (inv.receipt_json_data ? Math.abs(Number(inv.receipt_json_data.totalSellValue || 0) - Number(inv.receipt_json_data.totalBuyCredit || 0)) : 0),
     ordersCount: 1,
     lastDate: inv.created_at,
     latestInvoice: {
@@ -367,7 +346,7 @@ router.get('/invoices', async (req: Request, res: Response) => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return res.json({
         success: true,
         invoices: data,
@@ -418,24 +397,78 @@ router.post('/create', async (req: Request, res: Response) => {
     applied_rate_per_gram = transaction_type === 'SELL' ? activeMetalValues.silver_sell_value : activeMetalValues.silver_buy_value;
   }
 
-  const pure_metal_weight = Number((weight * (purity / 100)).toFixed(3));
+  let pure_metal_weight = Number((weight * (purity / 100)).toFixed(3));
   const weightUsed = transaction_type === 'SELL' ? weight : pure_metal_weight;
-  const metal_value = Number((weightUsed * applied_rate_per_gram).toFixed(2));
-  const making_charges = transaction_type === 'SELL' ? Number((mcPerGram * weight).toFixed(2)) : 0;
+  let metal_value = Number((weightUsed * applied_rate_per_gram).toFixed(2));
+  let making_charges = transaction_type === 'SELL' ? Number(mcPerGram.toFixed(2)) : 0;
   const subtotal = metal_value + making_charges;
-  const gst_amount = transaction_type === 'SELL' ? Number((subtotal * (gstRate / 100)).toFixed(2)) : 0;
+  let gst_amount = transaction_type === 'SELL' ? Number((subtotal * (gstRate / 100)).toFixed(2)) : 0;
   
   let final_weight = weight;
   let final_product_name = product_name;
   let final_amount_val = Number((subtotal + gst_amount).toFixed(2));
 
   if (receipt_json_data && receipt_json_data.items && Array.isArray(receipt_json_data.items)) {
+    let sumPureW = 0;
+    let sumMetalVal = 0;
+    let sumMaking = 0;
+    let sumGst = 0;
+
+    receipt_json_data.items = receipt_json_data.items.map((it: any) => {
+      const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
+      const isSell = (it.item_type || 'SELL').toUpperCase() === 'SELL';
+      const rate = isGold
+        ? (isSell ? activeMetalValues.gold_sell_value : activeMetalValues.gold_buy_value)
+        : (isSell ? activeMetalValues.silver_sell_value : activeMetalValues.silver_buy_value);
+
+      const wNum = Number(it.weight_grams) || 0;
+      const pNum = Number(it.purity_percentage) || 100;
+      const mNum = Number(it.making_charges_per_gram) || 0;
+      const gNum = Number(it.gst_percent) || 0;
+
+      const pWeight = Number((wNum * (pNum / 100)).toFixed(3));
+      const wUsed = isSell ? wNum : pWeight;
+      const mVal = Number((wUsed * rate).toFixed(2));
+      const mChg = isSell ? Number(mNum.toFixed(2)) : 0;
+      const sub = mVal + mChg;
+      const gst = isSell ? Number((sub * (gNum / 100)).toFixed(2)) : 0;
+      const lineTotal = Number((sub + gst).toFixed(2));
+
+      sumPureW += pWeight;
+      sumMetalVal += mVal;
+      sumMaking += mChg;
+      sumGst += gst;
+
+      return {
+        ...it,
+        pureWeight: pWeight,
+        pure_weight_grams: pWeight,
+        metalVal: mVal,
+        makingVal: mChg,
+        gstVal: gst,
+        appliedRate: rate,
+        applied_rate_per_gram: rate,
+        lineTotal,
+        line_total: lineTotal,
+      };
+    });
+
     if (transaction_type === 'BUY') {
       final_amount_val = Number(receipt_json_data.totalBuyCredit) || Number((subtotal + gst_amount).toFixed(2));
+    } else if (transaction_type === 'EXCHANGE') {
+      const sellVal = Number(receipt_json_data.totalSellValue) || 0;
+      const buyVal = Number(receipt_json_data.totalBuyCredit) || 0;
+      final_amount_val = Number(Math.abs(sellVal - buyVal).toFixed(2));
     } else if (receipt_json_data.netPayable !== undefined) {
       final_amount_val = Number(receipt_json_data.netPayable);
     }
+
     final_weight = receipt_json_data.items.reduce((acc: number, item: any) => acc + (Number(item.weight_grams) || 0), 0);
+    pure_metal_weight = Number(sumPureW.toFixed(3));
+    metal_value = Number(sumMetalVal.toFixed(2));
+    making_charges = Number(sumMaking.toFixed(2));
+    gst_amount = Number(sumGst.toFixed(2));
+
     final_product_name = receipt_json_data.items
       .map((i: any) => `${i.product_name || (i.metal_type + ' Item')} (${i.weight_grams}g)`)
       .join(', ');
@@ -445,24 +478,24 @@ router.post('/create', async (req: Request, res: Response) => {
 
   const newInvoice = {
     id: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
-    customer_name,
-    customer_phone,
-    customer_address,
-    transaction_type,
-    metal_type,
-    product_name: final_product_name,
-    weight_grams: final_weight,
-    purity_percentage: purity,
-    applied_rate_per_gram,
-    pure_metal_weight,
-    metal_value,
-    making_charges,
-    gst_amount,
-    final_amount: final_amount_val,
-    gold_buy_rate_snapshot: activeMetalValues.gold_buy_value,
-    gold_sell_rate_snapshot: activeMetalValues.gold_sell_value,
-    silver_buy_rate_snapshot: activeMetalValues.silver_buy_value,
-    silver_sell_rate_snapshot: activeMetalValues.silver_sell_value,
+    customer_name: customer_name || 'Walk-in Customer',
+    customer_phone: customer_phone || '',
+    customer_address: customer_address || '',
+    transaction_type: transaction_type || 'SELL',
+    metal_type: metal_type || 'GOLD',
+    product_name: (final_product_name || 'Jewellery Item').substring(0, 250),
+    weight_grams: Number(final_weight) || 0,
+    purity_percentage: Number(purity) || 100,
+    applied_rate_per_gram: Number(applied_rate_per_gram) || 0,
+    pure_metal_weight: Number(pure_metal_weight) || 0,
+    metal_value: Number(metal_value) || 0,
+    making_charges: Number(making_charges) || 0,
+    gst_amount: Number(gst_amount) || 0,
+    final_amount: Number(final_amount_val) || 0,
+    gold_buy_rate_snapshot: Number(activeMetalValues.gold_buy_value) || 0,
+    gold_sell_rate_snapshot: Number(activeMetalValues.gold_sell_value) || 0,
+    silver_buy_rate_snapshot: Number(activeMetalValues.silver_buy_value) || 0,
+    silver_sell_rate_snapshot: Number(activeMetalValues.silver_sell_value) || 0,
     receipt_json_data,
     created_at: new Date().toISOString(),
   };
@@ -471,9 +504,26 @@ router.post('/create', async (req: Request, res: Response) => {
 
   // Persist invoice to Supabase DB
   try {
-    await supabase.from('billing_invoices').insert([newInvoice]);
-  } catch (err) {
-    console.error('Supabase DB invoice insert warning:', err);
+    const { data: dbData, error: dbError } = await supabase
+      .from('billing_invoices')
+      .insert([newInvoice])
+      .select('*');
+
+    if (dbError) {
+      console.error('❌ Supabase DB invoice insert error:', dbError);
+      return res.status(500).json({
+        success: false,
+        message: `Database Insert Error (${dbError.code || 'DB_ERR'}): ${dbError.message}`,
+        error: dbError,
+      });
+    }
+    console.log('✅ Supabase DB invoice created successfully:', newInvoice.id, dbData);
+  } catch (err: any) {
+    console.error('Supabase DB invoice insert exception:', err);
+    return res.status(500).json({
+      success: false,
+      message: `Database Exception: ${err.message || String(err)}`,
+    });
   }
 
   res.json({
@@ -539,7 +589,7 @@ router.put('/update/:id', async (req: Request, res: Response) => {
       const pWeight = Number((wNum * (pNum / 100)).toFixed(3));
       const wUsed = isSell ? wNum : pWeight;
       const mVal = Number((wUsed * rate).toFixed(2));
-      const mChg = isSell ? Number((mNum * wNum).toFixed(2)) : 0;
+      const mChg = isSell ? Number(mNum.toFixed(2)) : 0;
       const sub = mVal + mChg;
       const gst = isSell ? Number((sub * (gNum / 100)).toFixed(2)) : 0;
       const lineTotal = Number((sub + gst).toFixed(2));
@@ -553,13 +603,25 @@ router.put('/update/:id', async (req: Request, res: Response) => {
       if (isSell) totalSell += lineTotal;
       else totalBuy += lineTotal;
 
+      it.pureWeight = pWeight;
+      it.pure_weight_grams = pWeight;
+      it.metalVal = mVal;
+      it.makingVal = mChg;
+      it.gstVal = gst;
+      it.appliedRate = rate;
+      it.applied_rate_per_gram = rate;
+      it.lineTotal = lineTotal;
+      it.line_total = lineTotal;
+
       const itemName = it.product_name || `${it.metal_type} Item`;
       names.push(`${itemName} (${wNum}g)`);
     });
 
     final_weight = Number(sumWeight.toFixed(3));
     final_product_name = names.join(', ');
-    final_amount_val = Math.max(0, Number((totalSell - totalBuy).toFixed(2)));
+    final_amount_val = (transaction_type === 'EXCHANGE')
+      ? Number(Math.abs(totalSell - totalBuy).toFixed(2))
+      : Math.max(0, Number((totalSell - totalBuy).toFixed(2)));
     pure_metal_weight = Number(pure_metal_weight.toFixed(3));
     metal_value = Number(metal_value.toFixed(2));
     making_charges = Number(making_charges.toFixed(2));
@@ -577,7 +639,7 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     pure_metal_weight = Number((weight * (purity / 100)).toFixed(3));
     const weightUsed = transaction_type === 'SELL' ? weight : pure_metal_weight;
     metal_value = Number((weightUsed * applied_rate).toFixed(2));
-    making_charges = transaction_type === 'SELL' ? Number((mcPerGram * weight).toFixed(2)) : 0;
+    making_charges = transaction_type === 'SELL' ? Number(mcPerGram.toFixed(2)) : 0;
     const subtotal = metal_value + making_charges;
     gst_amount = transaction_type === 'SELL' ? Number((subtotal * (gstRate / 100)).toFixed(2)) : 0;
     final_amount_val = Number((subtotal + gst_amount).toFixed(2));
@@ -624,13 +686,19 @@ router.put('/update/:id', async (req: Request, res: Response) => {
 
     if (dbError) {
       console.error('Supabase DB invoice update error:', dbError);
-      // Fallback to explicit update by eq id
-      await supabase.from('billing_invoices').update(updatedInvoice).eq('id', id);
-    } else {
-      console.log('✅ Supabase DB invoice updated cleanly:', id, dbData);
+      return res.status(500).json({
+        success: false,
+        message: `Database Update Error (${dbError.code || 'DB_ERR'}): ${dbError.message}`,
+        error: dbError,
+      });
     }
-  } catch (err) {
+    console.log('✅ Supabase DB invoice updated cleanly:', id, dbData);
+  } catch (err: any) {
     console.error('Supabase DB invoice update exception:', err);
+    return res.status(500).json({
+      success: false,
+      message: `Database Update Exception: ${err.message || String(err)}`,
+    });
   }
 
   res.json({

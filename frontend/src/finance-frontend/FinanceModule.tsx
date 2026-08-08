@@ -373,51 +373,63 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Metal Rate badge */}
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <span style={{ padding: '4px 10px', borderRadius: '8px', background: '#fef3c7', color: '#b45309', fontSize: '0.72rem', fontWeight: 700 }}>
-              <i className="fa-solid fa-circle" style={{ fontSize: '6px', marginRight: '4px' }} />
-              Gold Buy: ₹{metalRates.gold_rate_per_gram.toLocaleString('en-IN')}/g
-            </span>
-            <span style={{ padding: '4px 10px', borderRadius: '8px', background: '#f1f5f9', color: '#475569', fontSize: '0.72rem', fontWeight: 700 }}>
-              <i className="fa-solid fa-circle" style={{ fontSize: '6px', marginRight: '4px' }} />
-              Silver Buy: ₹{metalRates.silver_rate_per_gram.toLocaleString('en-IN')}/g
-            </span>
-          </div>
-
-          {/* Date Filters */}
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', background: '#fff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #eaecf0' }}>
-            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>From:</span>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
-            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>To:</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', background: '#fff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #e6decb' }}>
+            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>From:</span>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ border: '1px solid #d4c7b8', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
+            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>To:</span>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ border: '1px solid #d4c7b8', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
           </div>
 
           <button
             onClick={() => setShowModal(true)}
-            style={{ padding: '8px 16px', background: 'linear-gradient(135deg,#6366f1 0%,#4338ca 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            style={{ padding: '8px 16px', background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 4px 14px rgba(180, 83, 9, 0.3)' }}
           >
             <i className="fa-solid fa-plus" /> Issue New Loan
           </button>
         </div>
       </div>
 
-      {/* ── Summary Cards ── */}
+      {/* ── Summary Cards (First 2 Gold, Next 2 Silver - All Text in Black) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', marginBottom: '1.25rem' }}>
         {[
-          { label: 'TOTAL DEBT PRINCIPAL', value: `₹${(summary?.totalDebtIssued || 0).toLocaleString('en-IN')}`, sub: 'Active loan capital', icon: 'fa-briefcase', bg: '#fef3c7', clr: '#b45309', iconBg: '#fef3c7' },
-          { label: 'INTEREST ACCRUED', value: `₹${(summary?.totalInterestEarned || 0).toLocaleString('en-IN')}`, sub: 'Live per-month interest', icon: 'fa-chart-line', bg: '#d1fae5', clr: '#059669', iconBg: '#d1fae5' },
-          { label: 'OPEN LOAN ACCOUNTS', value: String(summary?.activeOpenLoans || 0), sub: 'Active interest monthly', icon: 'fa-key', bg: '#ede9fe', clr: '#4f46e5', iconBg: '#ede9fe' },
-          { label: 'CLOSED ACCOUNTS', value: String(summary?.totalClosedLoans || 0), sub: 'Fully settled', icon: 'fa-circle-check', bg: '#f1f5f9', clr: '#475569', iconBg: '#f1f5f9' },
+          { label: 'TOTAL DEBT PRINCIPAL', value: `₹${(summary?.totalDebtIssued || 0).toLocaleString('en-IN')}`, sub: 'Active loan capital', icon: 'fa-briefcase', isGold: true },
+          { label: 'INTEREST ACCRUED', value: `₹${(summary?.totalInterestEarned || 0).toLocaleString('en-IN')}`, sub: 'Live per-month interest', icon: 'fa-chart-line', isGold: true },
+          { label: 'OPEN LOAN ACCOUNTS', value: String(summary?.activeOpenLoans || 0), sub: 'Active interest monthly', icon: 'fa-key', isGold: false },
+          { label: 'CLOSED ACCOUNTS', value: String(summary?.totalClosedLoans || 0), sub: 'Fully settled', icon: 'fa-circle-check', isGold: false },
         ].map((card, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: '16px', padding: '1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div
+            key={i}
+            style={{
+              background: card.isGold ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+              borderRadius: '0px',
+              padding: '1.15rem',
+              border: card.isGold ? '1px solid #d99b26' : '1px solid #94a3b8',
+              boxShadow: card.isGold ? '0 6px 20px rgba(180,83,9,0.12)' : '0 6px 20px rgba(0,0,0,0.06)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
             <div>
-              <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{card.label}</span>
-              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>{card.value}</div>
-              <span style={{ fontSize: '0.7rem', color: card.clr, fontWeight: 600 }}>{card.sub}</span>
+              <span style={{ fontSize: '0.68rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>{card.label}</span>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>{card.value}</div>
+              <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>{card.sub}</span>
             </div>
-            <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: card.iconBg, color: card.clr, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '0px',
+                background: card.isGold ? '#b45309' : '#475569',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.1rem',
+                border: card.isGold ? '1px solid #92400e' : '1px solid #334155',
+              }}
+            >
               <i className={`fa-solid ${card.icon}`} />
             </div>
           </div>
@@ -425,10 +437,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
       </div>
 
       {/* ── Loan Table ── */}
-      <div style={{ background: '#fff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', overflowX: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', overflowX: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <i className="fa-solid fa-table-list" style={{ color: '#6366f1' }} />
+          <h3 style={{ margin: 0, fontSize: '1rem', color: '#181310', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <i className="fa-solid fa-table-list" style={{ color: '#d97706' }} />
             Pledge Loan Interest Ledger
           </h3>
 
@@ -1114,7 +1126,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                   {/* Phone */}
                   <div>
                     <label style={labelStyle}>Phone Number *</label>
-                    <input type="tel" required placeholder="9876543210" maxLength={10} value={form.customer_phone} onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value }))} style={inputStyle} />
+                    <input type="tel" inputMode="numeric" pattern="[0-9]*" required placeholder="9876543210" maxLength={10} value={form.customer_phone} onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value.replace(/\D/g, '') }))} style={inputStyle} />
                   </div>
                   {/* Address */}
                   <div>

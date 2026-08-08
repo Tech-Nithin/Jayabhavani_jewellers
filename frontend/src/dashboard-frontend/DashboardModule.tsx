@@ -91,34 +91,34 @@ export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSea
       {/* Top Title & Filter Control Row */}
       <div style={{ marginBottom: '1.15rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
         <div>
-          <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#0f172a', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
-            <i className="fa-solid fa-chart-pie" style={{ color: '#6366f1', marginRight: '6px' }}></i> Executive Dashboard Overview
+          <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
+            <i className="fa-solid fa-chart-pie" style={{ color: '#d97706', marginRight: '8px' }}></i> Executive Dashboard Overview
           </h2>
-          <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.8rem' }}>
+          <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.8rem' }}>
             Store inventory metadata, customer purchasing logs, and sales trends
           </p>
         </div>
 
         {/* Date Range Filters */}
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#ffffff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #eaecf0', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#475569' }}>
-            <i className="fa-solid fa-calendar-days" style={{ color: '#6366f1' }}></i>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#ffffff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #e6decb', boxShadow: '0 2px 8px rgba(24,19,16,0.02)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#4a3e35' }}>
+            <i className="fa-solid fa-calendar-days" style={{ color: '#d97706' }}></i>
             <span>From:</span>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem' }}
+              style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #d4c7b8', fontSize: '0.78rem' }}
             />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', color: '#475569' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', color: '#4a3e35' }}>
             <span>To:</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem' }}
+              style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #d4c7b8', fontSize: '0.78rem' }}
             />
           </div>
 
@@ -128,7 +128,7 @@ export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSea
                 setStartDate('');
                 setEndDate('');
               }}
-              style={{ background: '#f1f5f9', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}
+              style={{ background: '#f4ede4', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', color: '#4a3e35' }}
             >
               Clear
             </button>
@@ -136,60 +136,60 @@ export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSea
         </div>
       </div>
 
-      {/* 4 Summary Cards (Single Row on Tablet & PC) */}
+      {/* 4 Summary Cards (First 2 Gold, Next 2 Silver - All Text in Black) */}
       <div className="kpi-cards-grid">
-        {/* Card 1: Total Revenue */}
-        <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Card 1: Total Revenue (GOLDEN) */}
+        <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '0px', padding: '1.15rem', border: '1px solid #d99b26', boxShadow: '0 6px 20px rgba(180,83,9,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>TOTAL SALES REVENUE</span>
-            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>TOTAL SALES REVENUE</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>
               ₹{totalRevenue.toLocaleString('en-IN')}
             </div>
-            <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>↑ +14.2% this month</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>↑ +14.2% this month</span>
           </div>
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#ede9fe', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '0px', background: '#b45309', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', border: '1px solid #92400e' }}>
             <i className="fa-solid fa-sack-dollar"></i>
           </div>
         </div>
 
-        {/* Card 2: Customers Served */}
-        <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Card 2: Active Customers (GOLDEN) */}
+        <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '0px', padding: '1.15rem', border: '1px solid #d99b26', boxShadow: '0 6px 20px rgba(180,83,9,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>ACTIVE CUSTOMERS</span>
-            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>ACTIVE CUSTOMERS</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>
               {totalCustomers}
             </div>
-            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>Unique buyers logged</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>Unique buyers logged</span>
           </div>
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '0px', background: '#b45309', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', border: '1px solid #92400e' }}>
             <i className="fa-solid fa-users"></i>
           </div>
         </div>
 
-        {/* Card 3: Products Metadata Count */}
-        <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Card 3: Catalog Products (SILVER) */}
+        <div style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', borderRadius: '0px', padding: '1.15rem', border: '1px solid #94a3b8', boxShadow: '0 6px 20px rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>CATALOG PRODUCTS</span>
-            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>CATALOG PRODUCTS</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>
               {products.length} Items
             </div>
-            <span style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 600 }}>Active in stock</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>Active in stock</span>
           </div>
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '0px', background: '#475569', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', border: '1px solid #334155' }}>
             <i className="fa-solid fa-gem"></i>
           </div>
         </div>
 
-        {/* Card 4: Total Invoices Executed */}
-        <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Card 4: Invoices Generated (SILVER) */}
+        <div style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', borderRadius: '0px', padding: '1.15rem', border: '1px solid #94a3b8', boxShadow: '0 6px 20px rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>INVOICES GENERATED</span>
-            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>INVOICES GENERATED</span>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>
               {filteredInvoices.length}
             </div>
-            <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>100% verified</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>100% verified</span>
           </div>
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#d1fae5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '0px', background: '#475569', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', border: '1px solid #334155' }}>
             <i className="fa-solid fa-file-invoice-dollar"></i>
           </div>
         </div>

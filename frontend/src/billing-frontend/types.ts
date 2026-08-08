@@ -30,6 +30,7 @@ export interface InvoiceRecord {
   product_name: string;
   weight_grams: number;
   purity_percentage?: number;
+  pure_metal_weight?: number;
   making_charges_per_gram?: number;
   gst_percent?: number;
   final_amount: number;
