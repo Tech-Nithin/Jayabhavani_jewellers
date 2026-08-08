@@ -18,6 +18,9 @@ export interface BillItem {
   making_charges_per_gram: number | string;
   gst_percent: number | string;
   item_type: 'SELL' | 'BUY';
+  custom_rate_per_gram?: number | string;
+  customRate?: number;
+  appliedRate?: number;
 }
 
 export interface InvoiceRecord {
@@ -34,8 +37,13 @@ export interface InvoiceRecord {
   making_charges_per_gram?: number;
   gst_percent?: number;
   final_amount: number;
+  gold_buy_rate_snapshot?: number;
+  gold_sell_rate_snapshot?: number;
+  silver_buy_rate_snapshot?: number;
+  silver_sell_rate_snapshot?: number;
   receipt_json_data?: any;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface CustomerDirectoryRecord {

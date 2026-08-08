@@ -22,10 +22,10 @@ const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === '
 export default function AnnouncementBar({
   message,
   mode = 'store',
-  user,
-  isTabletOrMobile = false,
+  user: _user,
+  isTabletOrMobile: _isTabletOrMobile = false,
   isMobileScreen = false,
-  onToggleMobileMenu,
+  onToggleMobileMenu: _onToggleMobileMenu,
 }: AnnouncementBarProps) {
   const [visible, setVisible] = useState(
     mode === 'admin' ? true : !sessionStorage.getItem('jaya_bhavani_ann_closed')
@@ -90,33 +90,6 @@ export default function AnnouncementBar({
           borderRadius: '0px',
         }}
       >
-        {/* Left: Mobile/Tablet Menu Drawer Toggle Button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-          {isTabletOrMobile && onToggleMobileMenu && (
-            <button
-              type="button"
-              onClick={onToggleMobileMenu}
-              title="Open menu drawer"
-              style={{
-                background: 'rgba(255, 255, 255, 0.18)',
-                border: '1px solid rgba(255, 255, 255, 0.35)',
-                borderRadius: '0px',
-                padding: '4px 10px',
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                color: '#ffffff',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                fontWeight: 700,
-                letterSpacing: '0.06em',
-              }}
-            >
-              <i className="fa-solid fa-bars"></i> Menu
-            </button>
-          )}
-        </div>
-
         {/* Center: Live Gold & Silver Market Rates Ticker */}
         <div
           style={{
@@ -136,16 +109,14 @@ export default function AnnouncementBar({
           {displayMessage}
         </div>
 
-        {/* Right: User Profile Avatar */}
+        {/* Right: User Profile Avatar - JBAdmin */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.22)', border: '1.5px solid #ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#ffffff', fontSize: '0.75rem' }}>
-            {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
+            JB
           </div>
-          {!isMobileScreen && (
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ffffff', letterSpacing: '0.04em' }}>
-              {user?.name || 'Nikhil Manager'}
-            </span>
-          )}
+          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
+            JB Admin
+          </span>
         </div>
       </header>
     );

@@ -3,6 +3,7 @@ import type { GlobalRates, BillItem, CustomerDirectoryRecord } from './types';
 import { ReceiptPreview, downloadReceiptAsPNG } from './components/ReceiptPreview';
 import { CustomerDirectoryView } from './components/CustomerDirectoryView';
 import { EditRatesModal } from './components/EditRatesModal';
+import { InvoiceDetailsView } from './components/InvoiceDetailsView';
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
 
@@ -24,16 +25,70 @@ export const BillingModule: React.FC = () => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const getInitialItemsForMode = (m: 'SELL' | 'BUY' | 'EXCHANGE'): BillItem[] => {
+    if (m === 'BUY') {
+      return [
+        {
+          id: 'item-1',
+          metal_type: 'GOLD',
+          product_name: '',
+          weight_grams: 0,
+          purity_percentage: 91.6,
+          making_charges_per_gram: 0,
+          gst_percent: 0,
+          item_type: 'BUY',
+        },
+      ];
+    }
+    if (m === 'EXCHANGE') {
+      return [
+        {
+          id: 'item-1',
+          metal_type: 'GOLD',
+          product_name: '',
+          weight_grams: 0,
+          purity_percentage: 91.6,
+          making_charges_per_gram: 0,
+          gst_percent: 3,
+          item_type: 'SELL',
+        },
+        {
+          id: 'item-2',
+          metal_type: 'GOLD',
+          product_name: '',
+          weight_grams: 0,
+          purity_percentage: 91.6,
+          making_charges_per_gram: 0,
+          gst_percent: 0,
+          item_type: 'BUY',
+        },
+      ];
+    }
+    return [
+      {
+        id: 'item-1',
+        metal_type: 'GOLD',
+        product_name: '',
+        weight_grams: 0,
+        purity_percentage: 91.6,
+        making_charges_per_gram: 0,
+        gst_percent: 3,
+        item_type: 'SELL',
+      },
+    ];
+  };
+
   const [mode, setMode] = useState<'SELL' | 'BUY' | 'EXCHANGE'>(() => {
     const params = new URLSearchParams(window.location.search);
     const m = (params.get('mode') || '').toUpperCase();
     if (m === 'BUYING' || m === 'BUY') return 'BUY';
-    if (m === 'EXCHANGE') return 'EXCHANGE';
+    if (m === 'EXCHANGE' || m === 'TRADE-IN' || m === 'TRADEIN') return 'EXCHANGE';
     return 'SELL';
   });
 
-  // View state: 'POS' vs 'CUSTOMERS' - synced with URL params
-  const [activeView, setActiveView] = useState<'POS' | 'CUSTOMERS'>(() => {
+  // View state: 'POS' | 'CUSTOMERS' | 'DETAILS' - synced with URL params
+  const [selectedCustomerDetailsRecord, setSelectedCustomerDetailsRecord] = useState<CustomerDirectoryRecord | null>(null);
+  const [activeView, setActiveView] = useState<'POS' | 'CUSTOMERS' | 'DETAILS'>(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('history')) return 'CUSTOMERS';
     const viewParam = params.get('view')?.toUpperCase();
@@ -59,6 +114,7 @@ export const BillingModule: React.FC = () => {
 
   const handleSetMode = (newMode: 'SELL' | 'BUY' | 'EXCHANGE') => {
     setMode(newMode);
+    setItems(getInitialItemsForMode(newMode));
     const params = new URLSearchParams(window.location.search);
     params.set('module', 'billing');
     params.set('mode', newMode === 'BUY' ? 'buying' : newMode.toLowerCase());
@@ -71,19 +127,8 @@ export const BillingModule: React.FC = () => {
 
   const [successModal, setSuccessModal] = useState<{ open: boolean; message: string; invId: string } | null>(null);
 
-  // Multi-item list (starts blank)
-  const [items, setItems] = useState<BillItem[]>([
-    {
-      id: 'item-1',
-      metal_type: 'GOLD',
-      product_name: '',
-      weight_grams: 0,
-      purity_percentage: 91.6,
-      making_charges_per_gram: 0,
-      gst_percent: 3,
-      item_type: 'SELL',
-    },
-  ]);
+  // Multi-item list initialized per mode
+  const [items, setItems] = useState<BillItem[]>(() => getInitialItemsForMode(mode));
 
   const [customerDirectory, setCustomerDirectory] = useState<CustomerDirectoryRecord[]>([]);
   const [calcResults, setCalcResults] = useState<{
@@ -204,7 +249,7 @@ export const BillingModule: React.FC = () => {
       weight_grams: 0,
       purity_percentage: 91.6,
       making_charges_per_gram: 0,
-      gst_percent: itemType === 'SELL' ? 3 : 0,
+      gst_percent: 0,
       item_type: itemType,
     };
     setItems([...items, newItem]);
@@ -219,7 +264,12 @@ export const BillingModule: React.FC = () => {
     setItems(
       items.map((it) => {
         if (it.id === id) {
-          return { ...it, [field]: value };
+          const updated = { ...it, [field]: value };
+          delete (updated as any).lineTotal;
+          delete (updated as any).line_total;
+          delete (updated as any).metalVal;
+          delete (updated as any).metal_value;
+          return updated;
         }
         return it;
       })
@@ -241,8 +291,16 @@ export const BillingModule: React.FC = () => {
         const purityNum = Number(it.purity_percentage) || 100;
         const weightNum = Number(it.weight_grams) || 0;
         const pureW = det?.pureWeight ?? Number((weightNum * (purityNum / 100)).toFixed(3));
+        const isGold = it.metal_type === 'GOLD';
+        const isSell = it.item_type === 'SELL';
+        const rate = isGold
+          ? (isSell ? rates?.gold_sell_value || 0 : rates?.gold_buy_value || 0)
+          : (isSell ? rates?.silver_sell_value || 0 : rates?.silver_buy_value || 0);
+
         return {
           ...it,
+          appliedRate: rate,
+          applied_rate_per_gram: rate,
           lineTotal: det?.lineTotal ?? 0,
           line_total: det?.lineTotal ?? 0,
           pureWeight: pureW,
@@ -336,10 +394,83 @@ export const BillingModule: React.FC = () => {
     return new Date(isoString).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
   };
 
+  const triggerEditInvoice = (inv: any, custName?: string, custPhone?: string, custAddress?: string) => {
+    if (inv?.id) {
+      setEditingInvoiceId(String(inv.id));
+    } else {
+      setEditingInvoiceId(null);
+    }
+    setCustomerName(custName || inv?.customer_name || '');
+    setCustomerPhone(custPhone || inv?.customer_phone || '');
+    setCustomerAddress(custAddress || inv?.customer_address || inv?.receipt_json_data?.customer_address || '');
+
+    const invMode = ((inv?.receipt_json_data?.transaction_type || inv?.transaction_type || 'SELL').toUpperCase()) as 'SELL' | 'BUY' | 'EXCHANGE';
+    setMode(invMode);
+
+    if (inv?.receipt_json_data?.items && Array.isArray(inv.receipt_json_data.items) && inv.receipt_json_data.items.length > 0) {
+      setItems(inv.receipt_json_data.items);
+    } else if (inv) {
+      setItems([
+        {
+          id: 'item-1',
+          metal_type: (inv.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
+          product_name: inv.product_name || '',
+          weight_grams: inv.weight_grams || 0,
+          purity_percentage: inv.purity_percentage || 91.6,
+          making_charges_per_gram: inv.making_charges_per_gram || 0,
+          gst_percent: inv.gst_percent || 3,
+          item_type: inv.transaction_type === 'BUY' ? 'BUY' : 'SELL',
+        },
+      ]);
+    }
+
+    setActiveView('POS');
+    const params = new URLSearchParams(window.location.search);
+    params.set('module', 'billing');
+    params.set('mode', invMode === 'BUY' ? 'buying' : invMode.toLowerCase());
+    params.delete('history');
+    params.delete('search');
+    params.delete('from');
+    params.delete('to');
+    window.history.replaceState({}, '', `?${params.toString()}`);
+  };
+
   return (
-    <div className="admin-dashboard-root" style={{ color: '#181310', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
-      {/* ── If activeView === 'CUSTOMERS', render dedicated standalone Purchase History Page Component ── */}
-      {activeView === 'CUSTOMERS' ? (
+    <div
+      className="admin-dashboard-root"
+      style={{
+        color: '#181310',
+        fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif",
+        backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.50), rgba(255, 255, 255, 0.50)), url('/gold_designs.webp')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+        minHeight: '100vh',
+        padding: '1.25rem 1.5rem',
+        margin: 0,
+      }}
+    >
+      {/* ── Dedicated Invoice & Audit History View Page ── */}
+      {activeView === 'DETAILS' && selectedCustomerDetailsRecord ? (
+        <InvoiceDetailsView
+          customerRecord={selectedCustomerDetailsRecord}
+          rates={rates}
+          onBack={() => {
+            setSelectedCustomerDetailsRecord(null);
+            handleSwitchView('CUSTOMERS');
+          }}
+          onEdit={(inv) => {
+            const cust = selectedCustomerDetailsRecord;
+            setSelectedCustomerDetailsRecord(null);
+            if (cust) {
+              triggerEditInvoice(inv, cust.name, cust.phone, cust.address);
+            } else {
+              triggerEditInvoice(inv);
+            }
+          }}
+        />
+      ) : activeView === 'CUSTOMERS' ? (
         <CustomerDirectoryView
           customers={customerDirectory}
           rates={rates}
@@ -350,105 +481,73 @@ export const BillingModule: React.FC = () => {
             setCustomerPhone(phone === '-' ? '' : phone);
             handleSwitchView('POS');
           }}
+          onViewInvoiceDetails={(cust) => {
+            setSelectedCustomerDetailsRecord(cust);
+            setActiveView('DETAILS');
+          }}
           onEditCustomerRecord={(cust) => {
-            const inv = cust.latestInvoice;
-            if (inv?.id) {
-              setEditingInvoiceId(String(inv.id));
-            } else {
-              setEditingInvoiceId(null);
-            }
-            setCustomerName(cust.name);
-            setCustomerPhone(cust.phone === '-' ? '' : cust.phone);
-            setCustomerAddress(cust.address || inv?.customer_address || inv?.receipt_json_data?.customer_address || '');
-
-            const invMode = ((inv?.receipt_json_data?.transaction_type || inv?.transaction_type || 'SELL').toUpperCase()) as 'SELL' | 'BUY' | 'EXCHANGE';
-            setMode(invMode);
-
-            if (inv?.receipt_json_data?.items && Array.isArray(inv.receipt_json_data.items) && inv.receipt_json_data.items.length > 0) {
-              setItems(inv.receipt_json_data.items);
-            } else if (inv) {
-              setItems([
-                {
-                  id: 'item-1',
-                  metal_type: (inv.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
-                  product_name: inv.product_name || '',
-                  weight_grams: inv.weight_grams || 0,
-                  purity_percentage: inv.purity_percentage || 91.6,
-                  making_charges_per_gram: inv.making_charges_per_gram || 0,
-                  gst_percent: inv.gst_percent || 3,
-                  item_type: inv.transaction_type === 'BUY' ? 'BUY' : 'SELL',
-                },
-              ]);
-            }
-
-            // Directly switch active view without resetting items via handleSetMode
-            setActiveView('POS');
-            const params = new URLSearchParams(window.location.search);
-            params.set('module', 'billing');
-            params.set('mode', invMode === 'BUY' ? 'buying' : invMode.toLowerCase());
-            params.delete('history');
-            params.delete('search');
-            params.delete('from');
-            params.delete('to');
-            window.history.replaceState({}, '', `?${params.toString()}`);
+            triggerEditInvoice(cust.latestInvoice, cust.name, cust.phone, cust.address);
           }}
         />
       ) : (
         <>
           {/* Title & Top Action Bar */}
-          <div style={{ marginBottom: '1.15rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div>
-              <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
-                <i className="fa-solid fa-cash-register" style={{ color: '#d97706', marginRight: '6px' }}></i> Billing Screen
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '0.5rem' }}>
+              <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.35rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
+                Billing Screen
               </h2>
-              <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.8rem' }}>
-                Gold &amp; Silver Selling, Buying, and Trade-in Exchange Billing
-              </p>
+
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchView('CUSTOMERS')}
+                  style={{
+                    padding: '7px 14px',
+                    background: '#181310',
+                    color: '#ffffff',
+                    border: '1px solid #3d2f25',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                    fontSize: '0.80rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(24, 19, 16, 0.15)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <i className="fa-solid fa-address-book" style={{ fontSize: '0.74rem' }}></i> Purchase History
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openRatesModal('GOLD')}
+                  style={{
+                    padding: '7px 14px',
+                    background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                    fontSize: '0.80rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(180, 83, 9, 0.25)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <i className="fa-solid fa-sliders" style={{ fontSize: '0.74rem' }}></i> Edit Market Rates
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => handleSwitchView('CUSTOMERS')}
-                style={{
-                  padding: '8px 16px',
-                  background: '#181310',
-                  color: '#ffffff',
-                  border: '1px solid #3d2f25',
-                  borderRadius: '0px',
-                  fontWeight: 700,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(24, 19, 16, 0.2)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <i className="fa-solid fa-address-book"></i> Purchase History
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openRatesModal('GOLD')}
-                style={{
-                  padding: '8px 16px',
-                  background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '0px',
-                  fontWeight: 700,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(180, 83, 9, 0.3)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <i className="fa-solid fa-sliders"></i> Edit Market Rates
-              </button>
-            </div>
+            <p style={{ margin: '2px 0 0 0', color: '#000000ff', fontSize: '0.76rem', fontWeight: 500 }}>
+              Gold &amp; Silver Selling, Buying, and Trade-in Exchange Billing
+            </p>
           </div>
 
           {/* Premium Market Rates Modal Overlay */}
@@ -465,7 +564,7 @@ export const BillingModule: React.FC = () => {
           <div className="pos-grid-container">
 
             {/* LEFT GRID (70%): Multi-Item POS Terminal Form */}
-            <form onSubmit={handleCreateInvoice} style={{ background: '#ffffff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)' }}>
+            <form onSubmit={handleCreateInvoice} style={{ background: '#faf7f2', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)' }}>
               {editingInvoiceId && (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '8px 12px', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1d4ed8' }}>
@@ -479,14 +578,14 @@ export const BillingModule: React.FC = () => {
                       setCustomerPhone('');
                       setCustomerAddress('');
                     }}
-                    style={{ background: '#ffffff', border: '1px solid #93c5fd', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                    style={{ background: '#ffffff', border: '1px solid #93c5fd', color: '#1e40af', padding: '2px 8px', borderRadius: '10px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                   >
                     Cancel Edit
                   </button>
                 </div>
               )}
               {/* Mode Pill Selector */}
-              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.15rem', background: '#f8fafc', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.15rem', background: '#f8fafc', padding: '6px', borderRadius: '14px', border: '1px solid #cbd5e1' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -510,18 +609,19 @@ export const BillingModule: React.FC = () => {
                   }}
                   style={{
                     flex: 1,
-                    padding: '8px',
+                    padding: '8px 12px',
                     borderRadius: '8px',
                     border: 'none',
                     background: mode === 'SELL' ? '#d97706' : 'transparent',
                     color: mode === 'SELL' ? '#fff' : '#64748b',
                     fontWeight: 700,
-                    fontSize: '0.8rem',
+                    fontSize: '0.82rem',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '5px',
+                    boxShadow: mode === 'SELL' ? '0 3px 10px rgba(217, 119, 6, 0.25)' : 'none',
                   }}
                 >
                   <i className="fa-solid fa-tag"></i> SELLING
@@ -550,18 +650,19 @@ export const BillingModule: React.FC = () => {
                   }}
                   style={{
                     flex: 1,
-                    padding: '8px',
+                    padding: '8px 12px',
                     borderRadius: '8px',
                     border: 'none',
                     background: mode === 'BUY' ? '#1e293b' : 'transparent',
                     color: mode === 'BUY' ? '#fff' : '#64748b',
                     fontWeight: 700,
-                    fontSize: '0.8rem',
+                    fontSize: '0.82rem',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '5px',
+                    boxShadow: mode === 'BUY' ? '0 3px 10px rgba(30, 41, 59, 0.25)' : 'none',
                   }}
                 >
                   <i className="fa-solid fa-money-bill-transfer"></i> BUYING
@@ -594,22 +695,25 @@ export const BillingModule: React.FC = () => {
                           item_type: 'BUY',
                         },
                       ]);
+                    } else {
+                      setItems(items.map((i) => ({ ...i, item_type: 'SELL' })));
                     }
                   }}
                   style={{
                     flex: 1,
-                    padding: '8px',
+                    padding: '8px 12px',
                     borderRadius: '8px',
                     border: 'none',
                     background: mode === 'EXCHANGE' ? '#4f46e5' : 'transparent',
                     color: mode === 'EXCHANGE' ? '#fff' : '#64748b',
                     fontWeight: 700,
-                    fontSize: '0.8rem',
+                    fontSize: '0.82rem',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '5px',
+                    boxShadow: mode === 'EXCHANGE' ? '0 3px 10px rgba(79, 70, 229, 0.25)' : 'none',
                   }}
                 >
                   <i className="fa-solid fa-rotate"></i> TRADE-IN
@@ -625,7 +729,7 @@ export const BillingModule: React.FC = () => {
                     placeholder="Customer Name"
                     value={customerName}
                     onChange={(e) => setCustomerName(toStartCase(e.target.value))}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
                     required
                   />
                 </div>
@@ -639,7 +743,7 @@ export const BillingModule: React.FC = () => {
                     placeholder="Phone Number"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
                   />
                 </div>
                 <div>
@@ -649,7 +753,7 @@ export const BillingModule: React.FC = () => {
                     placeholder="e.g. Siddipet, TS"
                     value={customerAddress}
                     onChange={(e) => setCustomerAddress(toStartCase(e.target.value))}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
                   />
                 </div>
               </div>
@@ -718,23 +822,53 @@ export const BillingModule: React.FC = () => {
                           placeholder="e.g. 22K Gold Chain"
                           value={it.product_name}
                           onChange={(e) => handleUpdateItem(it.id, 'product_name', toStartCase(e.target.value))}
-                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                           required
                         />
                       </div>
 
-                      <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Metal Category</label>
-                        <select
-                          value={it.metal_type}
-                          onChange={(e) => handleUpdateItem(it.id, 'metal_type', e.target.value as any)}
-                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
-                        >
-                          <option value="GOLD">🥇 Gold</option>
-                          <option value="SILVER">🥈 Silver</option>
-                        </select>
-                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                        <div>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Metal Category</label>
+                          <select
+                            value={it.metal_type}
+                            onChange={(e) => {
+                              const newMetal = e.target.value as 'GOLD' | 'SILVER';
+                              const defaultR = newMetal === 'GOLD'
+                                ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
+                                : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value);
+                              handleUpdateItem(it.id, 'metal_type', newMetal);
+                              handleUpdateItem(it.id, 'custom_rate_per_gram', defaultR || 0);
+                            }}
+                            style={{ width: '100%', padding: '0.55rem 0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
+                          >
+                            <option value="GOLD">🥇 Gold</option>
+                            <option value="SILVER">🥈 Silver</option>
+                          </select>
+                        </div>
 
+                        <div>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px', whiteSpace: 'nowrap' }}>
+                            Rate (₹/g)
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Rate"
+                            value={it.custom_rate_per_gram !== undefined && it.custom_rate_per_gram !== '' ? it.custom_rate_per_gram : (
+                              it.metal_type === 'GOLD'
+                                ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
+                                : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value)
+                            ) || ''}
+                            onChange={(e) => handleUpdateItem(it.id, 'custom_rate_per_gram', e.target.value)}
+                            style={{ width: '100%', padding: '0.55rem 0.5rem', borderRadius: '6px', border: '1px solid #6366f1', background: '#eef2ff', fontWeight: 700, color: '#4338ca', fontSize: '0.85rem' }}
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                       <div>
                         <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Gross Weight (Grams)</label>
                         <input
@@ -743,7 +877,7 @@ export const BillingModule: React.FC = () => {
                           placeholder="e.g. 10.500"
                           value={it.weight_grams ?? ''}
                           onChange={(e) => handleUpdateItem(it.id, 'weight_grams', e.target.value)}
-                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                           required
                         />
                       </div>
@@ -756,7 +890,7 @@ export const BillingModule: React.FC = () => {
                           placeholder="91.6"
                           value={it.purity_percentage ?? ''}
                           onChange={(e) => handleUpdateItem(it.id, 'purity_percentage', e.target.value)}
-                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                           required
                         />
                       </div>
@@ -771,7 +905,7 @@ export const BillingModule: React.FC = () => {
                               placeholder="e.g. 4000"
                               value={it.making_charges_per_gram ?? ''}
                               onChange={(e) => handleUpdateItem(it.id, 'making_charges_per_gram', e.target.value)}
-                              style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                              style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                             />
                           </div>
 
@@ -783,7 +917,7 @@ export const BillingModule: React.FC = () => {
                               placeholder="3"
                               value={it.gst_percent ?? ''}
                               onChange={(e) => handleUpdateItem(it.id, 'gst_percent', e.target.value)}
-                              style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                              style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                             />
                           </div>
                         </>
@@ -841,7 +975,7 @@ export const BillingModule: React.FC = () => {
                   disabled={creating}
                   style={{
                     padding: '0.8rem 1.75rem',
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     border: 'none',
                     background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
                     color: '#ffffff',

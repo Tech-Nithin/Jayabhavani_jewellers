@@ -10,6 +10,7 @@ interface CustomerDirectoryViewProps {
   onBackToPOS?: () => void;
   onSelectCustomerForBill: (name: string, phone: string) => void;
   onEditCustomerRecord?: (cust: CustomerDirectoryRecord) => void;
+  onViewInvoiceDetails?: (cust: CustomerDirectoryRecord) => void;
 }
 
 export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
@@ -19,6 +20,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   onBackToPOS,
   onSelectCustomerForBill,
   onEditCustomerRecord,
+  onViewInvoiceDetails,
 }) => {
   const [search, setSearch] = useState(() => {
     return new URLSearchParams(window.location.search).get('search') || '';
@@ -66,6 +68,21 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   const handleClearDates = () => {
     setStartDate('');
     setEndDate('');
+  };
+
+  const formatDateTimeStacked = (isoString?: string) => {
+    if (!isoString) return { dateStr: '-', timeStr: '' };
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return { dateStr: formatDate(isoString) || isoString, timeStr: '' };
+
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const dateStr = `${day}-${month}-${year}`;
+
+    const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    return { dateStr, timeStr };
   };
 
   const getCustomerMode = (cust: CustomerDirectoryRecord): 'SELL' | 'BUY' | 'EXCHANGE' => {
@@ -234,14 +251,14 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           </h3>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '6px 12px', borderRadius: '0px', border: '1px solid #cbd5e1', width: '280px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', width: '280px' }}>
           <i className="fa-solid fa-magnifying-glass" style={{ color: '#94a3b8' }}></i>
           <input
             type="text"
             placeholder="Search customer name or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.82rem', color: '#0f172a', borderRadius: '0px' }}
+            style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.82rem', color: '#0f172a', borderRadius: '6px' }}
           />
         </div>
       </div>
@@ -253,6 +270,16 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           4%   { opacity: 1; }
           22%  { left: 160%; opacity: 0; }
           100% { left: 160%; opacity: 0; }
+        }
+        .kpi-grid-container {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 0.75rem;
+        }
+        @media (max-width: 640px) {
+          .kpi-grid-container {
+            grid-template-columns: repeat(2, 1fr);
+          }
         }
         .kpi-shine {
           position: absolute;
@@ -294,8 +321,14 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           z-index: 2;
           mix-blend-mode: overlay;
         }
+        .history-table-row {
+          transition: background 0.15s ease;
+        }
+        .history-table-row:hover {
+          background: #fcf0c5 !important;
+        }
       `}</style>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: activeKpiFilter ? '0.5rem' : '1.25rem' }}>
+      <div className="kpi-grid-container" style={{ marginBottom: activeKpiFilter ? '0.5rem' : '1.25rem' }}>
 
         {/* GOLD SOLD */}
         <div
@@ -304,7 +337,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             position: 'relative', overflow: 'hidden',
             background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
             border: activeKpiFilter === 'GOLD_SELL' ? '2px solid #b45309' : '1px solid #d99b26',
-            borderRadius: '0px', padding: '0.9rem 1rem',
+            borderRadius: '12px', padding: '0.9rem 1rem',
             boxShadow: activeKpiFilter === 'GOLD_SELL' ? '0 0 0 3px rgba(180,83,9,0.25), 0 4px 14px rgba(180,83,9,0.15)' : '0 4px 14px rgba(180,83,9,0.1)',
             cursor: 'pointer', transition: 'box-shadow 0.2s, border 0.2s',
           }}
@@ -319,11 +352,11 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           )}
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-              <span style={{ fontSize: '1rem' }}>🥇</span>
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Sold</span>
+              <span style={{ fontSize: '0.85rem' }}>🥇</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Sold</span>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#000', lineHeight: 1.1 }}>{fmtW(kpi.goldSoldWeight)}</div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#000', marginTop: '2px' }}>{fmtAmt(kpi.goldSoldAmount)}</div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.goldSoldWeight)}</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.goldSoldAmount)}</div>
           </div>
         </div>
 
@@ -334,7 +367,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             position: 'relative', overflow: 'hidden',
             background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
             border: activeKpiFilter === 'GOLD_BUY' ? '2px solid #b45309' : '1px solid #d99b26',
-            borderRadius: '0px', padding: '0.9rem 1rem',
+            borderRadius: '12px', padding: '0.75rem 0.85rem',
             boxShadow: activeKpiFilter === 'GOLD_BUY' ? '0 0 0 3px rgba(180,83,9,0.25), 0 4px 14px rgba(180,83,9,0.15)' : '0 4px 14px rgba(180,83,9,0.1)',
             cursor: 'pointer', transition: 'box-shadow 0.2s, border 0.2s',
           }}
@@ -349,13 +382,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           )}
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-              <span style={{ fontSize: '1rem' }}>🥇</span>
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Bought</span>
+              <span style={{ fontSize: '0.85rem' }}>🥇</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Bought</span>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#000', lineHeight: 1.1 }}>{fmtW(kpi.goldBoughtWeight)}</div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#000', marginTop: '2px' }}>{fmtAmt(kpi.goldBoughtAmount)}</div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#78350f', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <i className="fa-solid fa-flask" style={{ fontSize: '0.65rem' }}></i>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.goldBoughtWeight)}</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#78350f', marginTop: '2px' }}>{fmtAmt(kpi.goldBoughtAmount)}</div>
+            <div style={{ fontSize: '0.65rem', fontWeight: 400, color: '#78350f', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <i className="fa-solid fa-flask" style={{ fontSize: '0.6rem' }}></i>
               Avg Purity: {fmtPurity(goldBoughtAvgPurity)}
             </div>
           </div>
@@ -368,7 +401,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             position: 'relative', overflow: 'hidden',
             background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
             border: activeKpiFilter === 'SILVER_SELL' ? '2px solid #475569' : '1px solid #94a3b8',
-            borderRadius: '0px', padding: '0.9rem 1rem',
+            borderRadius: '12px', padding: '0.75rem 0.85rem',
             boxShadow: activeKpiFilter === 'SILVER_SELL' ? '0 0 0 3px rgba(71,85,105,0.2), 0 4px 14px rgba(0,0,0,0.1)' : '0 4px 14px rgba(0,0,0,0.06)',
             cursor: 'pointer', transition: 'box-shadow 0.2s, border 0.2s',
           }}
@@ -383,11 +416,11 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           )}
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-              <span style={{ fontSize: '1rem' }}>🥈</span>
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Sold</span>
+              <span style={{ fontSize: '0.85rem' }}>🥈</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Sold</span>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#000', lineHeight: 1.1 }}>{fmtW(kpi.silverSoldWeight)}</div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#000', marginTop: '2px' }}>{fmtAmt(kpi.silverSoldAmount)}</div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.silverSoldWeight)}</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.silverSoldAmount)}</div>
           </div>
         </div>
 
@@ -398,7 +431,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             position: 'relative', overflow: 'hidden',
             background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
             border: activeKpiFilter === 'SILVER_BUY' ? '2px solid #475569' : '1px solid #94a3b8',
-            borderRadius: '0px', padding: '0.9rem 1rem',
+            borderRadius: '12px', padding: '0.75rem 0.85rem',
             boxShadow: activeKpiFilter === 'SILVER_BUY' ? '0 0 0 3px rgba(71,85,105,0.2), 0 4px 14px rgba(0,0,0,0.1)' : '0 4px 14px rgba(0,0,0,0.06)',
             cursor: 'pointer', transition: 'box-shadow 0.2s, border 0.2s',
           }}
@@ -413,13 +446,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           )}
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-              <span style={{ fontSize: '1rem' }}>🥈</span>
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Bought</span>
+              <span style={{ fontSize: '0.85rem' }}>🥈</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Bought</span>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#000', lineHeight: 1.1 }}>{fmtW(kpi.silverBoughtWeight)}</div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#000', marginTop: '2px' }}>{fmtAmt(kpi.silverBoughtAmount)}</div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#334155', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <i className="fa-solid fa-flask" style={{ fontSize: '0.65rem' }}></i>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.silverBoughtWeight)}</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.silverBoughtAmount)}</div>
+            <div style={{ fontSize: '0.65rem', fontWeight: 400, color: '#334155', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <i className="fa-solid fa-flask" style={{ fontSize: '0.6rem' }}></i>
               Avg Purity: {fmtPurity(silverBoughtAvgPurity)}
             </div>
           </div>
@@ -429,7 +462,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
 
 
       {/* Date Range Selection Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: '#f8fafc', padding: '10px 14px', borderRadius: '0px', border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
           <i className="fa-solid fa-calendar-days" style={{ color: '#6366f1' }}></i>
           <span>Filter Date Range:</span>
@@ -442,7 +475,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             onClick={() => setOpenCalendarTarget(openCalendarTarget === 'FROM' ? null : 'FROM')}
             style={{
               padding: '5px 12px',
-              borderRadius: '0px',
+              borderRadius: '8px',
               border: '1px solid #cbd5e1',
               fontSize: '0.78rem',
               fontWeight: 700,
@@ -475,7 +508,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             onClick={() => setOpenCalendarTarget(openCalendarTarget === 'TO' ? null : 'TO')}
             style={{
               padding: '5px 12px',
-              borderRadius: '0px',
+              borderRadius: '8px',
               border: '1px solid #cbd5e1',
               fontSize: '0.78rem',
               fontWeight: 700,
@@ -507,7 +540,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             onClick={handleClearDates}
             style={{
               padding: '5px 12px',
-              borderRadius: '0px',
+              borderRadius: '8px',
               border: '1px solid #fca5a5',
               background: '#fef2f2',
               color: '#dc2626',
@@ -531,7 +564,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           onClick={() => setHistoryTab('ALL')}
           style={{
             padding: '7px 14px',
-            borderRadius: '0px',
+            borderRadius: '10px',
             border: historyTab === 'ALL' ? '1px solid #0f172a' : '1px solid #cbd5e1',
             background: historyTab === 'ALL' ? '#0f172a' : '#f8fafc',
             color: historyTab === 'ALL' ? '#ffffff' : '#475569',
@@ -551,7 +584,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           onClick={() => setHistoryTab('SELL')}
           style={{
             padding: '7px 14px',
-            borderRadius: '0px',
+            borderRadius: '10px',
             border: historyTab === 'SELL' ? '1px solid #b45309' : '1px solid #fde68a',
             background: historyTab === 'SELL' ? '#b45309' : '#fef3c7',
             color: historyTab === 'SELL' ? '#ffffff' : '#92400e',
@@ -571,7 +604,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           onClick={() => setHistoryTab('BUY')}
           style={{
             padding: '7px 14px',
-            borderRadius: '0px',
+            borderRadius: '10px',
             border: historyTab === 'BUY' ? '1px solid #0369a1' : '1px solid #bae6fd',
             background: historyTab === 'BUY' ? '#0369a1' : '#e0f2fe',
             color: historyTab === 'BUY' ? '#ffffff' : '#075985',
@@ -591,7 +624,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           onClick={() => setHistoryTab('EXCHANGE')}
           style={{
             padding: '7px 14px',
-            borderRadius: '0px',
+            borderRadius: '10px',
             border: historyTab === 'EXCHANGE' ? '1px solid #6d28d9' : '1px solid #e9d5ff',
             background: historyTab === 'EXCHANGE' ? '#6d28d9' : '#f3e8ff',
             color: historyTab === 'EXCHANGE' ? '#ffffff' : '#5b21b6',
@@ -608,7 +641,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
         </button>
       </div>
 
-      <div style={{ overflowX: 'auto', borderRadius: '0px', border: '1px solid #e6decb' }}>
+      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e6decb' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f4ede4', borderBottom: '1px solid #e6decb', color: '#4a3e35', fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
@@ -617,7 +650,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left' }}>PRODUCT &amp; WEIGHT</th>
               <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '90px' }}>PURITY</th>
               <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>FINAL AMOUNT</th>
-              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '140px' }}>DATE &amp; TIME</th>
+              <th style={{ padding: '0.65rem 0.4rem', textAlign: 'center', width: '95px' }}>DATE &amp; TIME</th>
               <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '90px' }}>ACTIONS</th>
             </tr>
           </thead>
@@ -635,7 +668,18 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                 const addressStr = cust.address || cust.latestInvoice?.customer_address || cust.latestInvoice?.receipt_json_data?.customer_address || 'Patelpura, Siddipet';
 
                 return (
-                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }}>
+                  <tr
+                    key={idx}
+                    className="history-table-row"
+                    onClick={() => {
+                      if (onViewInvoiceDetails) onViewInvoiceDetails(cust);
+                    }}
+                    style={{
+                      cursor: 'pointer',
+                      background: idx % 2 === 0 ? '#ffffff' : '#e6e8eb',
+                      borderBottom: '1px solid #e2e8f0',
+                    }}
+                  >
                     {/* 1. Index & MODE Badge */}
                     <td style={{ padding: '0.65rem 0.5rem', textAlign: 'center', verticalAlign: 'middle' }}>
                       <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 400, marginBottom: '2px' }}>#{idx + 1}</div>
@@ -681,6 +725,10 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                 const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
                                 const itemType = (item.item_type || mode).toUpperCase();
 
+                                const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
+                                const itemTxn = (item.item_type || mode).toUpperCase();
+                                const isGoldSell = itemMetal === 'GOLD' && itemTxn === 'SELL';
+
                                 return (
                                   <div key={i} style={{ fontSize: '0.74rem', color: '#334155' }}>
                                     <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
@@ -701,9 +749,31 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                       </span>
                                     )}
                                     <div style={{ fontSize: '0.69rem', color: '#64748b', marginTop: '1px' }}>
+                                      <span
+                                        style={{
+                                          fontSize: '0.60rem',
+                                          fontWeight: 700,
+                                          padding: '1px 4px',
+                                          borderRadius: '3px',
+                                          background: itemMetal === 'GOLD' ? '#fffbeb' : '#f1f5f9',
+                                          color: itemMetal === 'GOLD' ? '#b45309' : '#475569',
+                                          border: itemMetal === 'GOLD' ? '1px solid #fde68a' : '1px solid #cbd5e1',
+                                          marginRight: '4px',
+                                        }}
+                                      >
+                                        {itemMetal}
+                                      </span>
                                       <i className="fa-solid fa-scale-balanced" style={{ fontSize: '0.62rem', color: '#d97706', marginRight: '3px' }}></i>
                                       <strong>{grossW.toFixed(1)}g</strong>
-                                      {purity > 0 && (
+                                      {/* {(() => {
+                                        const itemRate = Number(item.custom_rate_per_gram || item.applied_rate_per_gram || item.appliedRate || item.customRate || 0);
+                                        return itemRate > 0 ? (
+                                          <span style={{ color: '#4338ca', fontWeight: 700, marginLeft: '6px' }}>
+                                            @ ₹{itemRate.toLocaleString('en-IN')}/g
+                                          </span>
+                                        ) : null;
+                                      })()} */}
+                                      {!isGoldSell && purity > 0 && (
                                         <span style={{ color: '#047857', fontWeight: 600 }}>
                                           {' → '}{pureW.toFixed(1)}g Pure
                                         </span>
@@ -720,6 +790,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       // Fallback for single legacy records
                       const singlePurity = Number(cust.latestInvoice?.purity_percentage) || 0;
                       const singlePureW = Number((cust.latestInvoice as any)?.pure_metal_weight || (cust.totalWeight * (singlePurity / 100))) || 0;
+                      const singleMetal = (cust.latestInvoice?.metal_type || 'GOLD').toUpperCase();
+                      const singleTxn = (cust.latestInvoice?.transaction_type || mode).toUpperCase();
+                      const isSingleGoldSell = singleMetal === 'GOLD' && singleTxn === 'SELL';
 
                       return (
                         <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
@@ -729,7 +802,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                           <div style={{ marginTop: '2px', fontSize: '0.69rem', color: '#64748b' }}>
                             <i className="fa-solid fa-scale-balanced" style={{ fontSize: '0.62rem', color: '#d97706', marginRight: '3px' }}></i>
                             <strong>{cust.totalWeight.toFixed(1)}g</strong>
-                            {singlePurity > 0 && (
+                            {!isSingleGoldSell && singlePurity > 0 && (
                               <span style={{ color: '#047857', fontWeight: 600 }}>
                                 {' → '}{singlePureW.toFixed(1)}g Pure
                               </span>
@@ -780,10 +853,12 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                     {(() => {
                       const inv = cust.latestInvoice;
                       const txnType = (inv?.transaction_type || mode).toUpperCase();
-                      const sellVal = Number(inv?.receipt_json_data?.totalSellValue ?? 0);
-                      const buyVal = Number(inv?.receipt_json_data?.totalBuyCredit ?? 0);
+                      const storedPayload = inv?.receipt_json_data;
+                      const sellVal = Number(storedPayload?.totalSellValue ?? 0);
+                      const buyVal = Number(storedPayload?.totalBuyCredit ?? 0);
                       const isJbjPaid = txnType === 'BUY' || (txnType === 'EXCHANGE' && buyVal > sellVal);
-                      const displayAmt = cust.totalSpent || (buyVal > 0 || sellVal > 0 ? Math.abs(sellVal - buyVal) : 0);
+                      const netPay = storedPayload?.netPayable ?? inv?.final_amount;
+                      const displayAmt = netPay !== undefined && Number(netPay) >= 0 ? Number(netPay) : (cust.totalSpent || 0);
 
                       return (
                         <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'right' }}>
@@ -797,19 +872,56 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       );
                     })()}
 
-                    {/* 5. Date & Time (Normal font weight) */}
-                    <td style={{ padding: '0.65rem 0.65rem', textAlign: 'center', verticalAlign: 'middle' }}>
-                      <div style={{ fontSize: '0.70rem', color: '#475569', fontWeight: 400 }}>
-                        <i className="fa-regular fa-clock" style={{ color: '#6366f1', marginRight: '3px' }}></i>
-                        {formatDate(cust.lastDate)}
-                      </div>
+                    {/* 5. Date & Time (Stacked Layout: DD-MM-YYYY & Time) */}
+                    <td style={{ padding: '0.55rem 0.4rem', textAlign: 'center', verticalAlign: 'middle', width: '95px' }}>
+                      {(() => {
+                        const { dateStr, timeStr } = formatDateTimeStacked(cust.lastDate);
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <div style={{ fontSize: '0.73rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                              {dateStr}
+                            </div>
+                            {timeStr && (
+                              <div style={{ fontSize: '0.65rem', fontWeight: 500, color: '#6366f1', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                <i className="fa-regular fa-clock" style={{ fontSize: '0.58rem' }}></i>
+                                {timeStr}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
 
-                    {/* 6. Vertical Stacked Action Buttons (Normal font weight) */}
+                    {/* 6. Vertical Stacked Action Buttons */}
                     <td style={{ padding: '0.55rem 0.55rem', textAlign: 'center', verticalAlign: 'middle', width: '90px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'stretch' }}>
+                        {/* <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onViewInvoiceDetails) onViewInvoiceDetails(cust);
+                          }}
+                          title="View Full Invoice Details & Audit Trail"
+                          style={{
+                            padding: '3px 6px',
+                            background: '#eef2ff',
+                            color: '#4338ca',
+                            border: '1px solid #c7d2fe',
+                            borderRadius: '5px',
+                            fontWeight: 500,
+                            fontSize: '0.65rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          <i className="fa-solid fa-eye"></i> Details
+                        </button> */}
+
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (onEditCustomerRecord) {
                               onEditCustomerRecord(cust);
                             } else {
@@ -836,7 +948,10 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                         </button>
 
                         <button
-                          onClick={() => setSelectedCustomer(cust)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedCustomer(cust);
+                          }}
                           title="View Thermal Receipt Modal"
                           style={{
                             padding: '3px 6px',

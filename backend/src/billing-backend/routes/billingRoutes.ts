@@ -214,11 +214,13 @@ router.post('/calculate', (req: Request, res: Response) => {
     let totalBuyCredit = 0;
 
     items.forEach((it: any) => {
-      const isGold = it.metal_type === 'GOLD';
-      const isSell = it.item_type === 'SELL';
-      const rate = isGold
+      const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
+      const isSell = (it.item_type || 'SELL').toUpperCase() === 'SELL';
+      const customRate = Number(it.custom_rate_per_gram || it.customRate || it.appliedRate);
+      const defaultRate = isGold
         ? (isSell ? currentRates.gold_sell_value || 0 : currentRates.gold_buy_value || 0)
         : (isSell ? currentRates.silver_sell_value || 0 : currentRates.silver_buy_value || 0);
+      const rate = customRate > 0 ? customRate : defaultRate;
 
       const weightNum = Number(it.weight_grams) || 0;
       const purityNum = Number(it.purity_percentage) || 0;
@@ -407,6 +409,7 @@ router.post('/create', async (req: Request, res: Response) => {
   let final_weight = weight;
   let final_product_name = product_name;
   let final_amount_val = Number((subtotal + gst_amount).toFixed(2));
+  let resolvedMetalType = (metal_type || 'GOLD').toUpperCase();
 
   if (receipt_json_data && receipt_json_data.items && Array.isArray(receipt_json_data.items)) {
     let sumPureW = 0;
@@ -417,9 +420,11 @@ router.post('/create', async (req: Request, res: Response) => {
     receipt_json_data.items = receipt_json_data.items.map((it: any) => {
       const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
       const isSell = (it.item_type || 'SELL').toUpperCase() === 'SELL';
-      const rate = isGold
+      const customRate = Number(it.custom_rate_per_gram || it.customRate || it.appliedRate);
+      const defaultRate = isGold
         ? (isSell ? activeMetalValues.gold_sell_value : activeMetalValues.gold_buy_value)
         : (isSell ? activeMetalValues.silver_sell_value : activeMetalValues.silver_buy_value);
+      const rate = customRate > 0 ? customRate : defaultRate;
 
       const wNum = Number(it.weight_grams) || 0;
       const pNum = Number(it.purity_percentage) || 100;
@@ -469,6 +474,20 @@ router.post('/create', async (req: Request, res: Response) => {
     making_charges = Number(sumMaking.toFixed(2));
     gst_amount = Number(sumGst.toFixed(2));
 
+    const hasGold = receipt_json_data.items.some((i: any) => (i.metal_type || '').toUpperCase() === 'GOLD');
+    const hasSilver = receipt_json_data.items.some((i: any) => (i.metal_type || '').toUpperCase() === 'SILVER');
+    if (hasGold && hasSilver) {
+      resolvedMetalType = 'MIXED';
+    } else if (hasSilver && !hasGold) {
+      resolvedMetalType = 'SILVER';
+    } else if (hasGold && !hasSilver) {
+      resolvedMetalType = 'GOLD';
+    }
+    receipt_json_data.metal_type = resolvedMetalType;
+    if (!receipt_json_data.rates) {
+      receipt_json_data.rates = activeMetalValues;
+    }
+
     final_product_name = receipt_json_data.items
       .map((i: any) => `${i.product_name || (i.metal_type + ' Item')} (${i.weight_grams}g)`)
       .join(', ');
@@ -482,7 +501,7 @@ router.post('/create', async (req: Request, res: Response) => {
     customer_phone: customer_phone || '',
     customer_address: customer_address || '',
     transaction_type: transaction_type || 'SELL',
-    metal_type: metal_type || 'GOLD',
+    metal_type: resolvedMetalType,
     product_name: (final_product_name || 'Jewellery Item').substring(0, 250),
     weight_grams: Number(final_weight) || 0,
     purity_percentage: Number(purity) || 100,
@@ -510,14 +529,30 @@ router.post('/create', async (req: Request, res: Response) => {
       .select('*');
 
     if (dbError) {
-      console.error('❌ Supabase DB invoice insert error:', dbError);
-      return res.status(500).json({
-        success: false,
-        message: `Database Insert Error (${dbError.code || 'DB_ERR'}): ${dbError.message}`,
-        error: dbError,
-      });
+      console.warn('⚠️ Supabase DB insert warning:', dbError.message);
+      if (dbError.code === '23514' && newInvoice.metal_type === 'MIXED') {
+        const fallbackMetal = (receipt_json_data?.items?.[0]?.metal_type || 'GOLD').toUpperCase();
+        newInvoice.metal_type = fallbackMetal === 'SILVER' ? 'SILVER' : 'GOLD';
+        const retryRes = await supabase.from('billing_invoices').insert([newInvoice]).select('*');
+        if (retryRes.error) {
+          console.error('❌ Retry insert error:', retryRes.error);
+          return res.status(500).json({
+            success: false,
+            message: `Database Insert Error (${retryRes.error.code || 'DB_ERR'}): ${retryRes.error.message}`,
+            error: retryRes.error,
+          });
+        }
+        console.log('✅ Supabase DB invoice created successfully (with fallback metal_type):', newInvoice.id, retryRes.data);
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: `Database Insert Error (${dbError.code || 'DB_ERR'}): ${dbError.message}`,
+          error: dbError,
+        });
+      }
+    } else {
+      console.log('✅ Supabase DB invoice created successfully:', newInvoice.id, dbData);
     }
-    console.log('✅ Supabase DB invoice created successfully:', newInvoice.id, dbData);
   } catch (err: any) {
     console.error('Supabase DB invoice insert exception:', err);
     return res.status(500).json({
@@ -567,6 +602,7 @@ router.put('/update/:id', async (req: Request, res: Response) => {
   let metal_value = 0;
   let making_charges = 0;
   let gst_amount = 0;
+  let resolvedUpdateMetalType = (metal_type || 'GOLD').toUpperCase();
 
   if (receipt_json_data && receipt_json_data.items && Array.isArray(receipt_json_data.items)) {
     let totalSell = 0;
@@ -626,6 +662,17 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     metal_value = Number(metal_value.toFixed(2));
     making_charges = Number(making_charges.toFixed(2));
     gst_amount = Number(gst_amount.toFixed(2));
+
+    const hasGold = receipt_json_data.items.some((i: any) => (i.metal_type || '').toUpperCase() === 'GOLD');
+    const hasSilver = receipt_json_data.items.some((i: any) => (i.metal_type || '').toUpperCase() === 'SILVER');
+    if (hasGold && hasSilver) {
+      resolvedUpdateMetalType = 'MIXED';
+    } else if (hasSilver && !hasGold) {
+      resolvedUpdateMetalType = 'SILVER';
+    } else if (hasGold && !hasSilver) {
+      resolvedUpdateMetalType = 'GOLD';
+    }
+    receipt_json_data.metal_type = resolvedUpdateMetalType;
   } else {
     const weight = Number(weight_grams) || 0;
     const purity = Number(purity_percentage) || 100;
@@ -645,29 +692,37 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     final_amount_val = Number((subtotal + gst_amount).toFixed(2));
   }
 
-  const updatedInvoice = {
-    id,
-    customer_name,
-    customer_phone,
-    customer_address,
-    transaction_type: transaction_type || 'SELL',
-    metal_type: metal_type || 'GOLD',
-    product_name: final_product_name,
-    weight_grams: final_weight,
-    purity_percentage: Number(purity_percentage) || 100,
-    applied_rate_per_gram: activeMetalValues.gold_sell_value,
-    pure_metal_weight,
-    metal_value,
-    making_charges,
-    gst_amount,
-    final_amount: final_amount_val,
-    gold_buy_rate_snapshot: activeMetalValues.gold_buy_value,
-    gold_sell_rate_snapshot: activeMetalValues.gold_sell_value,
-    silver_buy_rate_snapshot: activeMetalValues.silver_buy_value,
-    silver_sell_rate_snapshot: activeMetalValues.silver_sell_value,
-    receipt_json_data,
-    created_at: createdAt,
-  };
+    const nowIso = new Date().toISOString();
+    const existingHistory = Array.isArray(receipt_json_data?.update_history) ? receipt_json_data.update_history : [];
+    const updateHistoryList = [...existingHistory, nowIso];
+
+    receipt_json_data.updated_at = nowIso;
+    receipt_json_data.update_history = updateHistoryList;
+
+    const updatedInvoice = {
+      id,
+      customer_name,
+      customer_phone,
+      customer_address,
+      transaction_type: transaction_type || 'SELL',
+      metal_type: resolvedUpdateMetalType,
+      product_name: final_product_name,
+      weight_grams: final_weight,
+      purity_percentage: Number(purity_percentage) || 100,
+      applied_rate_per_gram: activeMetalValues.gold_sell_value,
+      pure_metal_weight,
+      metal_value,
+      making_charges,
+      gst_amount,
+      final_amount: final_amount_val,
+      gold_buy_rate_snapshot: activeMetalValues.gold_buy_value,
+      gold_sell_rate_snapshot: activeMetalValues.gold_sell_value,
+      silver_buy_rate_snapshot: activeMetalValues.silver_buy_value,
+      silver_sell_rate_snapshot: activeMetalValues.silver_sell_value,
+      receipt_json_data,
+      created_at: createdAt,
+      updated_at: nowIso,
+    };
 
   // Overwrite in memory list
   const index = invoicesList.findIndex((i) => String(i.id) === String(id));

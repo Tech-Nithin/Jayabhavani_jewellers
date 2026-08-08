@@ -43,6 +43,15 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
   const totalBuyCredit = storedPayload?.totalBuyCredit ?? (inv?.transaction_type === 'BUY' ? (inv?.final_amount || customer.totalSpent || 0) : inv?.transaction_type === 'EXCHANGE' ? 5000 : 0);
   const netPayable = storedPayload?.netPayable ?? Math.max(0, totalSellValue - totalBuyCredit);
 
+  // Priority: 1) storedPayload.rates, 2) DB rate snapshot columns, 3) live rates prop
+  const effectiveRates: GlobalRates | null = storedPayload?.rates || (inv?.gold_sell_rate_snapshot ? {
+    gold_sell_value: Number(inv.gold_sell_rate_snapshot) || 0,
+    gold_buy_value: Number(inv.gold_buy_rate_snapshot || inv.gold_sell_rate_snapshot) || 0,
+    silver_sell_value: Number(inv.silver_sell_rate_snapshot) || 0,
+    silver_buy_value: Number(inv.silver_buy_rate_snapshot || inv.silver_sell_rate_snapshot) || 0,
+    created_at: inv.created_at || new Date().toISOString(),
+  } : rates);
+
   return (
     <div
       onClick={(e) => {
@@ -108,11 +117,13 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
           customerName={customer.name}
           customerPhone={customer.phone}
           customerAddress={inv?.customer_address || inv?.receipt_json_data?.customer_address || customer.address}
-          rates={rates}
+          rates={effectiveRates}
           items={itemsList}
           totalSellValue={totalSellValue}
           totalBuyCredit={totalBuyCredit}
           netPayable={netPayable}
+          createdDate={inv?.created_at}
+          updatedDate={inv?.updated_at || storedPayload?.updated_at}
           onDownloadPNG={() => downloadReceiptAsPNG('see-bill-modal-receipt', customer.name)}
         />
       </div>

@@ -60,7 +60,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="admin-dashboard-root" style={{ display: 'flex', minHeight: '100vh', background: '#faf7f2', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
-      
+
       {/* 1. Backdrop Overlay for Tablet & Mobile Drawer */}
       {isTabletOrMobile && mobileMenuOpen && (
         <div
@@ -227,11 +227,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {/* User Info */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingBottom: '0.75rem', borderBottom: '1px solid #2b2019' }}>
                     <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#2b2019', border: '2px solid #d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fbbf24', fontSize: '0.88rem', flexShrink: 0 }}>
-                      {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
+                      JB
                     </div>
                     <div style={{ overflow: 'hidden' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fffefb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user?.name || 'Nikhil Manager'}
+                        {user?.name || 'JB Admin'}
                       </div>
                       <small style={{ color: '#a39284', fontSize: '0.72rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {user?.email || 'nikhil@jayabhavani.com'}
@@ -429,11 +429,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* User Avatar, Name & Email */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingBottom: '0.75rem', borderBottom: '1px solid #2b2019' }}>
                   <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#2b2019', border: '2px solid #d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fbbf24', fontSize: '0.88rem', flexShrink: 0 }}>
-                    {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
+                    JB
                   </div>
                   <div style={{ overflow: 'hidden' }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fffefb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {user?.name || 'Nikhil Manager'}
+                      {user?.name || 'JB Admin'}
                     </div>
                     <small style={{ color: '#a39284', fontSize: '0.72rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {user?.email || 'nikhil@jayabhavani.com'}
@@ -484,7 +484,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           isMobileScreen={isMobileScreen}
           onToggleMobileMenu={() => setMobileMenuOpen(true)}
         />
-        <main style={{ padding: isMobileScreen ? '1rem' : '1.25rem', flex: 1 }}>
+        <main style={{ padding: currentTab === 'billing' ? 0 : (isMobileScreen ? '1rem' : '1.25rem'), flex: 1 }}>
           {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} />}
           {currentTab === 'billing' && <BillingModule />}
           {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} />}
