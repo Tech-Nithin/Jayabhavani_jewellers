@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { supabase } from '../../config/supabase';
 
 const router = Router();
 
@@ -78,7 +79,30 @@ let invoicesList = [
 ];
 
 // GET /api/billing/rates - Fetch active metal values with per-column timestamps (from updated_metal_values)
-router.get('/rates', (req: Request, res: Response) => {
+router.get('/rates', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('updated_metal_values')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (!error && data) {
+      activeMetalValues = {
+        gold_buy_value: Number(data.gold_buy_value),
+        gold_buy_value_updated_at: data.gold_buy_value_updated_at || new Date().toISOString(),
+        gold_sell_value: Number(data.gold_sell_value),
+        gold_sell_value_updated_at: data.gold_sell_value_updated_at || new Date().toISOString(),
+        silver_buy_value: Number(data.silver_buy_value),
+        silver_buy_value_updated_at: data.silver_buy_value_updated_at || new Date().toISOString(),
+        silver_sell_value: Number(data.silver_sell_value),
+        silver_sell_value_updated_at: data.silver_sell_value_updated_at || new Date().toISOString(),
+      };
+    }
+  } catch (err) {
+    console.warn('⚠️ Supabase updated_metal_values fetch error:', err);
+  }
+
   res.json({
     success: true,
     rates: activeMetalValues,
@@ -94,7 +118,7 @@ router.get('/rates/history', (req: Request, res: Response) => {
 });
 
 // POST /api/billing/rates - Update active metal values AND insert history log entry
-router.post('/rates', (req: Request, res: Response) => {
+router.post('/rates', async (req: Request, res: Response) => {
   const { gold_buy_value, gold_sell_value, silver_buy_value, silver_sell_value } = req.body;
   const now = new Date().toISOString();
 
@@ -168,6 +192,23 @@ router.post('/rates', (req: Request, res: Response) => {
       new_value: newVal,
       updated_at: now,
     });
+  }
+
+  // Sync to Supabase updated_metal_values table
+  try {
+    await supabase.from('updated_metal_values').upsert({
+      id: 1,
+      gold_buy_value: activeMetalValues.gold_buy_value,
+      gold_buy_value_updated_at: activeMetalValues.gold_buy_value_updated_at,
+      gold_sell_value: activeMetalValues.gold_sell_value,
+      gold_sell_value_updated_at: activeMetalValues.gold_sell_value_updated_at,
+      silver_buy_value: activeMetalValues.silver_buy_value,
+      silver_buy_value_updated_at: activeMetalValues.silver_buy_value_updated_at,
+      silver_sell_value: activeMetalValues.silver_sell_value,
+      silver_sell_value_updated_at: activeMetalValues.silver_sell_value_updated_at,
+    });
+  } catch (err) {
+    console.warn('⚠️ Failed to sync rates to Supabase updated_metal_values:', err);
   }
 
   res.json({
