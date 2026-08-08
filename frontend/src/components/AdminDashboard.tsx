@@ -96,28 +96,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.1rem', width: '100%' }}>
-            {/* Brand Logo Icon */}
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              title="Click to open full menu overlay"
+            {/* Top Brand Logo */}
+            <img
+              src="/JB_logo.png"
+              alt="JB Logo"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #d99b26 0%, #a67c1e 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                fontSize: '1.15rem',
-                border: 'none',
+                width: '44px',
+                height: '44px',
+                objectFit: 'contain',
                 cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(217, 155, 38, 0.35)',
               }}
-            >
-              <i className="fa-solid fa-gem"></i>
-            </button>
+            />
 
             {/* Create New Bill (+ Icon) */}
             <button
@@ -297,9 +287,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Brand Logo Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingLeft: '0.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #d99b26 0%, #a67c1e 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem', boxShadow: '0 4px 12px rgba(217, 155, 38, 0.3)' }}>
-                <i className="fa-solid fa-gem"></i>
-              </div>
+              <img
+                src="/JB_logo.png"
+                alt="Jaya Bhavani Jewellers Logo"
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  objectFit: 'contain',
+                }}
+              />
               <div>
                 <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#fffefb', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
                   Jaya Bhavani
