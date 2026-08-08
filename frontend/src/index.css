@@ -51,6 +51,7 @@ input[type=number]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
 input[type=number] {
   -moz-appearance: textfield;
 }
@@ -82,20 +83,19 @@ input[type=number] {
   0% {
     background-position: -200% center;
   }
+
   100% {
     background-position: 200% center;
   }
 }
 
 .gold-shimmer-text {
-  background: linear-gradient(
-    90deg,
-    #0f172a 0%,
-    #b45309 25%,
-    #f59e0b 50%,
-    #b45309 75%,
-    #0f172a 100%
-  );
+  background: linear-gradient(90deg,
+      #0f172a 0%,
+      #b45309 25%,
+      #f59e0b 50%,
+      #b45309 75%,
+      #0f172a 100%);
   background-size: 200% auto;
   color: transparent;
   -webkit-background-clip: text;
@@ -436,9 +436,11 @@ a {
   0% {
     opacity: 1;
   }
+
   30% {
     opacity: 0.9;
   }
+
   100% {
     opacity: 0;
   }
@@ -487,14 +489,17 @@ a {
     transform: scale(4.5);
     filter: blur(12px);
   }
+
   65% {
     opacity: 1;
     transform: scale(0.92);
     filter: blur(0);
   }
+
   85% {
     transform: scale(1.06);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
@@ -1480,7 +1485,7 @@ a {
   font-weight: 500;
   pointer-events: none;
   transition: transform 0.2s, background 0.2s;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .map-iframe-container:hover .map-hover-overlay {
@@ -2062,9 +2067,11 @@ a {
   0% {
     box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.6);
   }
+
   70% {
     box-shadow: 0 0 0 16px rgba(37, 211, 102, 0);
   }
+
   100% {
     box-shadow: 0 0 0 0 rgba(37, 211, 102, 0);
   }
@@ -2412,7 +2419,10 @@ a {
 /* -------------------------------------------------------------------------- */
 /* FORM INPUTS & PLACEHOLDER TYPOGRAPHY (NORMAL FONT WEIGHT 400)             */
 /* -------------------------------------------------------------------------- */
-input, select, textarea,
-input::placeholder, textarea::placeholder {
+input,
+select,
+textarea,
+input::placeholder,
+textarea::placeholder {
   font-weight: 400 !important;
-}
+}

@@ -436,21 +436,7 @@ export const BillingModule: React.FC = () => {
   };
 
   return (
-    <div
-      className="admin-dashboard-root"
-      style={{
-        color: '#181310',
-        fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif",
-        backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.50), rgba(255, 255, 255, 0.50)), url('/gold_designs.webp')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed',
-        minHeight: '100vh',
-        padding: '1.25rem 1.5rem',
-        margin: 0,
-      }}
-    >
+    <div className="admin-dashboard-root" style={{ color: '#181310', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
       {/* ── Dedicated Invoice & Audit History View Page ── */}
       {activeView === 'DETAILS' && selectedCustomerDetailsRecord ? (
         <InvoiceDetailsView
@@ -545,7 +531,7 @@ export const BillingModule: React.FC = () => {
               </div>
             </div>
 
-            <p style={{ margin: '2px 0 0 0', color: '#000000ff', fontSize: '0.76rem', fontWeight: 500 }}>
+            <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.76rem' }}>
               Gold &amp; Silver Selling, Buying, and Trade-in Exchange Billing
             </p>
           </div>
@@ -564,7 +550,7 @@ export const BillingModule: React.FC = () => {
           <div className="pos-grid-container">
 
             {/* LEFT GRID (70%): Multi-Item POS Terminal Form */}
-            <form onSubmit={handleCreateInvoice} style={{ background: '#faf7f2', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)' }}>
+            <form onSubmit={handleCreateInvoice} style={{ background: '#ffffff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)' }}>
               {editingInvoiceId && (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '8px 12px', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1d4ed8' }}>

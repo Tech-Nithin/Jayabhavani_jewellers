@@ -484,7 +484,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           isMobileScreen={isMobileScreen}
           onToggleMobileMenu={() => setMobileMenuOpen(true)}
         />
-        <main style={{ padding: currentTab === 'billing' ? 0 : (isMobileScreen ? '1rem' : '1.25rem'), flex: 1 }}>
+        <main style={{ padding: isMobileScreen ? '1rem' : '1.25rem', flex: 1 }}>
           {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} />}
           {currentTab === 'billing' && <BillingModule />}
           {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} />}

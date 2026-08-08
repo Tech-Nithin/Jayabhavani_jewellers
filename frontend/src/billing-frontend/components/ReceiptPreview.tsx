@@ -1,4 +1,5 @@
 import React from 'react';
+import html2canvas from 'html2canvas';
 import type { BillItem, GlobalRates } from '../types';
 
 interface ReceiptPreviewProps {
@@ -16,27 +17,6 @@ interface ReceiptPreviewProps {
   updatedDate?: string;
   onDownloadPNG?: () => void;
 }
-
-// Robust html2canvas Loader (bypasses Vite bundler import issues)
-const loadHtml2Canvas = async (): Promise<any> => {
-  if ((window as any).html2canvas) {
-    return (window as any).html2canvas;
-  }
-  return new Promise((resolve, reject) => {
-    const existing = document.getElementById('html2canvas-cdn-script');
-    if (existing) {
-      existing.addEventListener('load', () => resolve((window as any).html2canvas));
-      existing.addEventListener('error', reject);
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'html2canvas-cdn-script';
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-    script.onload = () => resolve((window as any).html2canvas);
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-};
 
 const formatReceiptDateTime = (isoOrStr?: string) => {
   if (!isoOrStr) return '';
@@ -86,7 +66,6 @@ export const downloadReceiptAsPNG = async (receiptId: string, custName?: string)
   element.style.maxWidth = '380px';
 
   try {
-    const html2canvas = await loadHtml2Canvas();
     const canvas = await html2canvas(element, {
       scale: 2,           // 2x Retina resolution
       useCORS: true,
@@ -186,6 +165,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         border: '1px dashed #94a3b8',
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.04)',
         position: 'relative',
+        top: '1rem',
         overflow: 'hidden',
         fontFamily: "'Courier New', Courier, monospace",
       }}

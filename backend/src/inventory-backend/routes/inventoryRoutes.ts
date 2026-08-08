@@ -69,7 +69,7 @@ async function uploadToCloudinaryHelper(imageStr: string): Promise<string> {
       body: formData,
     });
 
-    const data = await res.json();
+    const data: any = await res.json();
     if (data.secure_url) {
       const optimizedWebpUrl = data.secure_url.replace('/upload/', '/upload/f_auto,q_auto/').replace(/\.(png|jpg|jpeg)$/i, '.webp');
       console.log('✨ Successfully uploaded image to Cloudinary signed folder:', optimizedWebpUrl);
@@ -92,7 +92,7 @@ async function uploadToCloudinaryHelper(imageStr: string): Promise<string> {
       method: 'POST',
       body: formDataDemo,
     });
-    const dataDemo = await resDemo.json();
+    const dataDemo: any = await resDemo.json();
     if (dataDemo.secure_url) {
       return dataDemo.secure_url.replace('/upload/', '/upload/f_auto,q_auto/').replace(/\.(png|jpg|jpeg)$/i, '.webp');
     }
