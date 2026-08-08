@@ -3,6 +3,18 @@
    Light & Elegant: White / Rose Gold / Cream Palette
    ===================================================== */
 
+/* Hide number input spinner arrows (up/down icons) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* ---------- RESET & BASE ---------- */
 *,
 *::before,
@@ -2279,4 +2291,48 @@ a {
   font-size: 0.875rem !important;
   font-weight: 500 !important;
   color: #334155 !important;
+}
+
+/* Responsive POS Billing Grid Layout for PC & Tablets (Xiaomi Mi Pad 4, iPad Air/Pro) */
+.pos-grid-container {
+  display: grid;
+  grid-template-columns: 7fr 3.2fr;
+  gap: 1.25rem;
+  align-items: start;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1024px) {
+  .pos-grid-container {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+}
+
+/* Responsive KPI Cards Grid (Single row on tablet & desktop) */
+.kpi-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .kpi-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Responsive Billing Rates Cards Grid (Single row on Tablet & PC in Billing) */
+.billing-rates-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .billing-rates-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }

@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS public.billing_invoices (
   id VARCHAR(50) PRIMARY KEY,
   customer_name VARCHAR(255) NOT NULL,
   customer_phone VARCHAR(20),
+  customer_address VARCHAR(500),
   transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('SELL', 'BUY', 'EXCHANGE')),
   metal_type VARCHAR(20) NOT NULL CHECK (metal_type IN ('GOLD', 'SILVER', 'MIXED')),
   product_name VARCHAR(255) NOT NULL,
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS public.billing_invoices (
   gold_sell_rate_snapshot NUMERIC(12, 2),
   silver_buy_rate_snapshot NUMERIC(12, 2),
   silver_sell_rate_snapshot NUMERIC(12, 2),
+  receipt_json_data JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

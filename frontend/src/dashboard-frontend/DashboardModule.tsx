@@ -39,18 +39,29 @@ export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSea
 
   const fetchDashboardData = async () => {
     try {
-      const [prodRes, invRes] = await Promise.all([
-        fetch(`${API_BASE}/inventory/products`),
-        fetch(`${API_BASE}/billing/invoices`),
+      const safeFetchJson = async (url: string) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return null;
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            return await res.json();
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      };
+
+      const [prodData, invData] = await Promise.all([
+        safeFetchJson(`${API_BASE}/inventory/products`),
+        safeFetchJson(`${API_BASE}/billing/invoices`),
       ]);
 
-      const prodData = await prodRes.json();
-      const invData = await invRes.json();
-
-      if (prodData.success) setProducts(prodData.products || []);
-      if (invData.success) setInvoices(invData.invoices || []);
+      if (prodData && prodData.success) setProducts(prodData.products || []);
+      if (invData && invData.success) setInvoices(invData.invoices || []);
     } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
+      console.warn('On-demand dashboard fetch notice:', err);
     }
   };
 
@@ -125,8 +136,8 @@ export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSea
         </div>
       </div>
 
-      {/* 4 Summary Cards (Compact Gaps) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', marginBottom: '1.25rem' }}>
+      {/* 4 Summary Cards (Single Row on Tablet & PC) */}
+      <div className="kpi-cards-grid">
         {/* Card 1: Total Revenue */}
         <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.15rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>

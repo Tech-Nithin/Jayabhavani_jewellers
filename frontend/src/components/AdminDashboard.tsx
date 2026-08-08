@@ -16,14 +16,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   user,
   onLogout,
   onBackToStore,
-  activeModule = 'dashboard',
+  activeModule = 'billing',
 }) => {
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory'>(activeModule);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
 
   const width = useWindowWidth();
-  const isMobile = width < 768;
+  const isTabletOrMobile = width < 1024;
+  const isMobileScreen = width < 768;
 
   // Sync tab with URL
   useEffect(() => {
@@ -45,28 +46,160 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-pie' },
-    { id: 'billing', label: 'POS Billing', icon: 'fa-solid fa-cash-register' },
-    { id: 'finance', label: 'Girvi / Loans', icon: 'fa-solid fa-scale-balanced' },
+    { id: 'billing', label: 'Billing', icon: 'fa-solid fa-cash-register' },
+    { id: 'finance', label: 'Finance / Girvi', icon: 'fa-solid fa-scale-balanced' },
     { id: 'inventory', label: 'Inventory', icon: 'fa-solid fa-boxes-stacked' },
   ];
 
   return (
     <div className="admin-dashboard-root" style={{ display: 'flex', minHeight: '100vh', background: '#f4f5f9', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
-      {/* Overlay for mobile drawer */}
-      {isMobile && mobileMenuOpen && (
+      
+      {/* 1. Backdrop Overlay for Tablet & Mobile Drawer */}
+      {isTabletOrMobile && mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 23, 42, 0.4)',
+            background: 'rgba(15, 23, 42, 0.45)',
             backdropFilter: 'blur(4px)',
-            zIndex: 40,
+            zIndex: 90,
+            transition: 'opacity 0.2s ease',
           }}
         />
       )}
 
-      {/* Left Sidebar */}
+      {/* 2. Tablet & Mobile Icon-Only Rail Sidebar (width: 64px) - Displays only icons by default */}
+      {isTabletOrMobile && (
+        <aside
+          style={{
+            width: '64px',
+            background: '#ffffff',
+            borderRight: '1px solid #eaecf0',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '1.1rem 0.5rem',
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            zIndex: 40,
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.1rem', width: '100%' }}>
+            {/* Brand Logo Icon */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              title="Click to open full menu overlay"
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: '1.15rem',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+              }}
+            >
+              <i className="fa-solid fa-gem"></i>
+            </button>
+
+            {/* Create New Bill (+ Icon) */}
+            <button
+              type="button"
+              onClick={() => {
+                handleTabChange('billing');
+                setMobileMenuOpen(true);
+              }}
+              title="Create New Bill"
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                border: 'none',
+                background: '#ede9fe',
+                color: '#4f46e5',
+                fontSize: '1rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <i className="fa-solid fa-plus"></i>
+            </button>
+
+            <div style={{ width: '32px', height: '1px', background: '#e2e8f0', margin: '2px 0' }} />
+
+            {/* Icon-Only Navigation Buttons */}
+            {navItems.map((item) => {
+              const active = currentTab === item.id;
+              return (
+                <button
+                  key={`rail-${item.id}`}
+                  type="button"
+                  onClick={() => {
+                    handleTabChange(item.id as any);
+                    setMobileMenuOpen(true);
+                  }}
+                  title={item.label}
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: active ? '#ede9fe' : 'transparent',
+                    color: active ? '#4f46e5' : '#64748b',
+                    fontSize: '1.1rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <i className={item.icon}></i>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Bottom Store Icon */}
+          {onBackToStore && (
+            <button
+              type="button"
+              onClick={onBackToStore}
+              title="Visit Online Store"
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                color: '#64748b',
+                fontSize: '1rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <i className="fa-solid fa-store"></i>
+            </button>
+          )}
+        </aside>
+      )}
+
+      {/* 3. Full Sidebar Panel (Sticky on PC, Fixed Overlay Drawer on Tablet & Mobile) */}
       <aside
         style={{
           width: '240px',
@@ -76,27 +209,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: '1.25rem 1rem',
-          position: isMobile ? 'fixed' : 'sticky',
+          position: isTabletOrMobile ? 'fixed' : 'sticky',
           top: 0,
           left: 0,
           height: '100vh',
-          zIndex: 50,
-          transform: isMobile ? (mobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
-          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: isTabletOrMobile ? 100 : 50,
+          transform: isTabletOrMobile ? (mobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
+          boxShadow: isTabletOrMobile && mobileMenuOpen ? '0 20px 40px rgba(0,0,0,0.15)' : 'none',
+          transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         <div>
-          {/* Brand Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem', paddingLeft: '0.25rem' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem' }}>
-              <i className="fa-solid fa-gem"></i>
+          {/* Brand Logo Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingLeft: '0.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem' }}>
+                <i className="fa-solid fa-gem"></i>
+              </div>
+              <div>
+                <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#0f172a', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
+                  Jaya Bhavani
+                </h1>
+                <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>JEWELLERS ADMIN</span>
+              </div>
             </div>
-            <div>
-              <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#0f172a', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
-                Jaya Bhavani
-              </h1>
-              <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>JEWELLERS ADMIN</span>
-            </div>
+
+            {/* Close button for overlay drawer */}
+            {isTabletOrMobile && (
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '1.1rem', cursor: 'pointer', padding: '4px' }}
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            )}
           </div>
 
           {/* Primary Action Button (+ New Bill) */}
@@ -173,7 +320,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </aside>
 
-      {/* Right Main Content Area */}
+      {/* 4. Right Main Content Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Top Header */}
         <header
@@ -191,10 +338,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, maxWidth: '440px' }}>
-            {isMobile && (
+            {isTabletOrMobile && (
               <button
                 onClick={() => setMobileMenuOpen(true)}
-                style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#0f172a' }}
+                title="Open menu drawer"
+                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', fontSize: '1.1rem', cursor: 'pointer', color: '#0f172a' }}
               >
                 <i className="fa-solid fa-bars"></i>
               </button>
@@ -233,7 +381,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#ede9fe', border: '2px solid #6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#4f46e5', fontSize: '0.85rem' }}>
                 {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NK'}
               </div>
-              {!isMobile && (
+              {!isMobileScreen && (
                 <div>
                   <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>{user?.name || 'Nikhil Manager'}</div>
                   <small style={{ color: '#64748b', fontSize: '0.7rem' }}>{user?.email || 'Store Executive'}</small>
@@ -263,7 +411,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </header>
 
         {/* Dynamic Tab Body with Compact Padding */}
-        <main style={{ padding: isMobile ? '1rem' : '1.25rem', flex: 1 }}>
+        <main style={{ padding: isMobileScreen ? '1rem' : '1.25rem', flex: 1 }}>
           {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} />}
           {currentTab === 'billing' && <BillingModule />}
           {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} />}

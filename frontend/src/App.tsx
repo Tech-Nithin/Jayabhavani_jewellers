@@ -66,8 +66,12 @@ function AppContent() {
   useEffect(() => {
     if (currentView === 'dashboard' && user) {
       const params = new URLSearchParams(window.location.search);
-      const currentTab = params.get('tab') || localStorage.getItem(STORAGE_KEY_TAB) || 'dashboard';
-      window.history.replaceState(null, '', `?view=admin&tab=${currentTab}`);
+      if (!params.has('module') && !params.has('view')) {
+        const currentTab = params.get('tab') || localStorage.getItem(STORAGE_KEY_TAB) || 'dashboard';
+        params.set('view', 'admin');
+        params.set('tab', currentTab);
+        window.history.replaceState(null, '', `?${params.toString()}`);
+      }
     }
   }, [currentView, user]);
 
