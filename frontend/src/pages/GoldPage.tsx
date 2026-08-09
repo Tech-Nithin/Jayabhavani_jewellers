@@ -49,6 +49,36 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
   const [placeholderText, setPlaceholderText] = useState<string>('');
   const [isCategoryOpen, setIsCategoryOpen] = useState<boolean>(false);
+  const [dbProducts, setDbProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    async function fetchDbProducts() {
+      try {
+        const res = await fetch(`${API_BASE}/inventory/products`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.products)) {
+          const goldOnly = data.products
+            .filter((p: any) => p.item_type === 'GOLD')
+            .map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              category: p.category || '22K Gold',
+              price: Number(p.price || 0),
+              oldPrice: null,
+              badge: 'new',
+              img: p.img || '/images/collection-rings.jpg',
+              color: '#e0c8b0',
+              weightFrom: p.weight_from_grams ? Number(p.weight_from_grams) : undefined,
+              weightTo: p.weight_to_grams ? Number(p.weight_to_grams) : undefined,
+            }));
+          setDbProducts(goldOnly);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch db products:', err);
+      }
+    }
+    fetchDbProducts();
+  }, []);
 
   const categories = [
     { id: 'all', label: 'All Gold', icon: '✨' },
@@ -108,8 +138,15 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
     return () => clearTimeout(timer);
   }, []);
 
-  // Filter & Sort Logic
-  const filteredProducts = goldProducts.filter((p) => {
+  // Filter & Sort Logic:
+  // Initially show hardcoded goldProducts.
+  // When searching or selecting a category, fetch/include database products from inventory_products table.
+  const hasActiveSearchOrFilter = searchQuery.trim() !== '' || selectedCategory !== 'all';
+  const baseProducts = hasActiveSearchOrFilter
+    ? [...goldProducts, ...dbProducts]
+    : goldProducts;
+
+  const filteredProducts = baseProducts.filter((p) => {
     const matchesCategory = selectedCategory === 'all' || p.category.toLowerCase().includes(selectedCategory.toLowerCase());
     const matchesQuery = searchQuery.trim() === '' ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -138,10 +175,10 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
           background: '#1a1614',
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-          alignItems: 'center'
+          alignItems: 'stretch'
         }}
       >
-        <div style={{ padding: '48px max(32px, calc((100vw - 1280px)/2 + 32px))', zIndex: 2, color: '#fff' }}>
+        <div style={{ padding: '48px max(32px, calc((100vw - 1280px)/2 + 32px))', zIndex: 2, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <h1
             style={{
               fontFamily: "'Cormorant Garamond', serif",
@@ -172,6 +209,7 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
               width: '100%',
               height: '100%',
               objectFit: 'cover',
+              objectPosition: 'top center',
               display: 'block',
               filter: 'brightness(1.05) contrast(1.05)',
               transition: 'transform 0.6s ease'
@@ -354,7 +392,7 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
           </div>
 
           {/* Popular Search Suggestions Overlay Popover (Exact Match to Reference Screenshot) */}
-          {(isSearchFocused || searchQuery.trim() !== '') && (
+          {(isSearchFocused && searchQuery.trim() === '') && (
             <div
               style={{
                 position: 'absolute',
