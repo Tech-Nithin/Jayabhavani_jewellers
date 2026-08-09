@@ -1,6 +1,5 @@
 import type { Product } from '../types';
 import { useCart } from '../context/CartContext';
-import { formatPrice } from '../utils';
 
 interface ProductCardProps {
   product: Product;
