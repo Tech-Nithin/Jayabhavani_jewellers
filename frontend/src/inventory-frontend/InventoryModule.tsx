@@ -28,7 +28,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
 
   // Form Fields (Strict order: Photo 1st, Category 2nd, Weight 3rd, Metal 4th)
-  const [categoryType, setCategoryType] = useState('Ring');
+  const [categoryType, setCategoryType] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
@@ -36,19 +36,13 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
   const [weightTo, setWeightTo] = useState('');
   const [itemType, setItemType] = useState<'GOLD' | 'SILVER'>('GOLD');
 
-  const [categoryOptions, setCategoryOptions] = useState([
-    { value: 'Ring', label: 'Ring (Band / Solitaire)', icon: 'fa-ring' },
-    { value: 'Necklace', label: 'Necklace (Temple / Choker / Chain)', icon: 'fa-gem' },
-    { value: 'Bangle', label: 'Bangle / Kada', icon: 'fa-circle-notch' },
-    { value: 'Earrings', label: 'Earrings / Jhumka', icon: 'fa-sparkles' },
-    { value: 'Nose Pin', label: 'Nose Pin', icon: 'fa-bahai' },
-    { value: 'Pooja Utensil', label: 'Pooja Utensils / Kalash', icon: 'fa-om' },
-    { value: 'Bullion Coin', label: 'Bullion Coins & Bars', icon: 'fa-coins' },
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ value: string; label: string; icon: string }>>([
     { value: 'Other', label: 'Custom Category...', icon: 'fa-pen-nib' },
   ]);
 
   // Image State
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [isFullPreviewOpen, setIsFullPreviewOpen] = useState(false);
   const [_cameraActive, setCameraActive] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -75,13 +69,15 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
           icon: 'fa-tag',
         }));
 
-        setCategoryOptions((prev) => {
-          const existingValues = new Set(prev.map((opt) => opt.value.toLowerCase()));
-          const newUnique = fetchedOpts.filter((f: any) => !existingValues.has(f.value.toLowerCase()));
-          if (newUnique.length === 0) return prev;
-          const otherOpt = prev.find((opt) => opt.value === 'Other') || { value: 'Other', label: 'Custom Category...', icon: 'fa-pen-nib' };
-          const normalOpts = prev.filter((opt) => opt.value !== 'Other');
-          return [...normalOpts, ...newUnique, otherOpt];
+        const otherOpt = { value: 'Other', label: 'Custom Category...', icon: 'fa-pen-nib' };
+        const newOpts = [...fetchedOpts, otherOpt];
+        setCategoryOptions(newOpts);
+
+        setCategoryType((prev) => {
+          if (prev && prev !== 'Ring' && newOpts.some((o) => o.value.toLowerCase() === prev.toLowerCase())) {
+            return prev;
+          }
+          return fetchedOpts.length > 0 ? fetchedOpts[0].value : 'Other';
         });
       }
     } catch (e) {
@@ -242,7 +238,8 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
   const handleOpenModal = () => {
     setEditingProduct(null);
     setIsModalOpen(true);
-    setCategoryType('Ring');
+    const defaultCat = categoryOptions.find((c) => c.value !== 'Other')?.value || 'Other';
+    setCategoryType(defaultCat);
     setCustomCategory('');
     setWeightFrom('');
     setWeightTo('');
@@ -253,9 +250,9 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
   // Open Main Form Modal for Editing
   const handleEditProduct = (prod: InventoryProduct) => {
     setEditingProduct(prod);
-    const standardCategories = ['Ring', 'Necklace', 'Bangle', 'Earrings', 'Nose Pin', 'Pooja Utensil', 'Bullion Coin'];
-    if (standardCategories.includes(prod.category)) {
-      setCategoryType(prod.category);
+    const existingCat = categoryOptions.find((c) => c.value.toLowerCase() === prod.category.toLowerCase());
+    if (existingCat) {
+      setCategoryType(existingCat.value);
       setCustomCategory('');
     } else {
       setCategoryType('Other');
@@ -535,23 +532,47 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
                     style={{ display: 'none' }}
                   />
 
-                  {/* Cloud Upload Icon */}
-                  <div
-                    style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '50%',
-                      background: '#fef3c7',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      margin: '0 auto 10px auto',
-                      color: '#d97706',
-                      fontSize: '1.3rem'
-                    }}
-                  >
-                    <i className="fa-solid fa-cloud-arrow-up"></i>
-                  </div>
+                  {/* Cloud Upload Icon or Uploaded Image Thumbnail */}
+                  {imagePreview ? (
+                    <div
+                      onClick={() => setIsFullPreviewOpen(true)}
+                      style={{
+                        width: '56px',
+                        height: '56px',
+                        borderRadius: '50%',
+                        margin: '0 auto 10px auto',
+                        cursor: 'pointer',
+                        overflow: 'hidden',
+                        border: '2px solid #d97706',
+                        boxShadow: '0 4px 10px rgba(217, 119, 6, 0.25)',
+                        transition: 'transform 0.2s ease'
+                      }}
+                      title="Click to view full preview"
+                    >
+                      <img
+                        src={imagePreview}
+                        alt="Uploaded item photo"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: '#fef3c7',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 10px auto',
+                        color: '#d97706',
+                        fontSize: '1.3rem'
+                      }}
+                    >
+                      <i className="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                  )}
 
                   <h4 style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: 800, color: '#1e293b' }}>
                     Upload Item Photo
@@ -605,15 +626,6 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
                     </button>
                   </div>
 
-                  {/* Image Preview Thumbnail */}
-                  {imagePreview && (
-                    <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                      <img src={imagePreview} alt="Preview" style={{ width: '60px', height: '60px', borderRadius: '10px', objectFit: 'cover', border: '2px solid #b45309' }} />
-                      <span style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <i className="fa-solid fa-circle-check"></i> Photo ready
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -626,7 +638,10 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
                 {/* Custom Trigger Button */}
                 <button
                   type="button"
-                  onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                  onClick={() => {
+                    if (!isCategoryDropdownOpen) fetchCategories();
+                    setIsCategoryDropdownOpen(!isCategoryDropdownOpen);
+                  }}
                   style={{
                     width: '100%',
                     padding: '0.75rem 1rem',
@@ -1116,6 +1131,75 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Full-Screen Image Preview Modal */}
+      {isFullPreviewOpen && imagePreview && (
+        <div
+          onClick={() => setIsFullPreviewOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              background: '#000000'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setIsFullPreviewOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'rgba(0, 0, 0, 0.65)',
+                color: '#ffffff',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                fontSize: '1.2rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10
+              }}
+              title="Close Preview"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+            <img
+              src={imagePreview}
+              alt="Full Preview"
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '85vh',
+                objectFit: 'contain',
+                display: 'block'
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

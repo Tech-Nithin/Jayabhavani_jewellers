@@ -616,7 +616,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                 <th style={{ padding: '10px 12px' }}>Cust. ID</th>
                 <th style={{ padding: '10px 12px' }}>Customer</th>
                 <th style={{ padding: '10px 12px' }}>Item</th>
-                <th style={{ padding: '10px 12px' }}>Principal</th>
+                <th style={{ padding: '10px 12px' }}>Amount</th>
                 <th style={{ padding: '10px 12px' }}>Rate</th>
                 <th style={{ padding: '10px 12px' }}>Monthly ₹</th>
                 <th style={{ padding: '10px 12px' }}>Timeline</th>
@@ -728,14 +728,15 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                     </>
                   )}
                   <td style={{ padding: '10px 12px' }}>
-                    {rec.status === 'OPEN' ? (
+                    {rec.status?.toUpperCase() === 'OPEN' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                         <button
                           type="button"
                           onClick={() => setConfirmCompleteRecord(rec)}
-                          style={{ padding: '5px 14px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)' }}
+                          title="Click to complete/settle this loan"
+                          style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.25)', transition: 'all 0.2s' }}
                         >
-                          <i className="fa-solid fa-check" /> Complete
+                          <i className="fa-solid fa-clock-rotate-left" /> Pending
                         </button>
                         {isRecordOverdue(rec) && (
                           <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.66rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
