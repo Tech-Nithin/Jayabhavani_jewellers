@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { SeeBillModal } from './SeeBillModal';
-import { CustomCalendarPicker } from './CustomCalendarPicker';
 
 interface CustomerDirectoryViewProps {
   customers: CustomerDirectoryRecord[];
@@ -42,7 +41,6 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   });
 
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDirectoryRecord | null>(null);
-  const [openCalendarTarget, setOpenCalendarTarget] = useState<'FROM' | 'TO' | null>(null);
   const [activeKpiFilter, setActiveKpiFilter] = useState<null | 'GOLD_SELL' | 'GOLD_BUY' | 'SILVER_SELL' | 'SILVER_BUY'>(null);
 
   // Sync state changes to URL query parameters in real-time
@@ -222,12 +220,17 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   const goldBoughtAvgPurity = kpi.goldBoughtWeight > 0 ? kpi.goldBoughtPurityWeightedSum / kpi.goldBoughtWeight : 0;
   const silverBoughtAvgPurity = kpi.silverBoughtWeight > 0 ? kpi.silverBoughtPurityWeightedSum / kpi.silverBoughtWeight : 0;
 
+  const totalBillsCount = filtered.length;
+  const sellBillsCount = filtered.filter(c => (c.latestInvoice?.transaction_type || '').toUpperCase() === 'SELL').length;
+  const buyBillsCount = filtered.filter(c => (c.latestInvoice?.transaction_type || '').toUpperCase() === 'BUY').length;
+  const exchangeBillsCount = filtered.filter(c => (c.latestInvoice?.transaction_type || '').toUpperCase() === 'EXCHANGE').length;
+
   const fmtW = (w: number) => w > 0 ? `${w.toFixed(1)}g` : '0g';
   const fmtAmt = (a: number) => a > 0 ? `₹${a.toLocaleString('en-IN')}` : '₹0';
   const fmtPurity = (p: number) => p > 0 ? `${p.toFixed(1)}%` : '—';
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: '0px', padding: '1.25rem', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', marginBottom: '1.25rem' }}>
+    <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', marginBottom: '1.25rem' }}>
       {/* Top Header Row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.15rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -237,10 +240,12 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               onClick={onBackToPOS}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '6px 14px', borderRadius: '0px',
+                padding: '6px 14px', borderRadius: '8px',
                 border: '1px solid #cbd5e1', background: '#f8fafc',
                 color: '#475569', fontWeight: 700, fontSize: '0.78rem',
                 cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease',
               }}
             >
               <i className="fa-solid fa-arrow-left"></i> Billing
@@ -275,6 +280,11 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           display: grid;
           grid-template-columns: repeat(4, 1fr);
           gap: 0.75rem;
+        }
+        @media (max-width: 1024px) {
+          .kpi-grid-container {
+            grid-template-columns: repeat(2, 1fr);
+          }
         }
         @media (max-width: 640px) {
           .kpi-grid-container {
@@ -353,10 +363,10 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥇</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Sold</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Sold</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.goldSoldWeight)}</div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.goldSoldAmount)}</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#78350f', marginTop: '2px' }}>{fmtAmt(kpi.goldSoldAmount)}</div>
           </div>
         </div>
 
@@ -461,183 +471,137 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
       </div>
 
 
-      {/* Date Range Selection Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
-          <i className="fa-solid fa-calendar-days" style={{ color: '#6366f1' }}></i>
-          <span>Filter Date Range:</span>
-        </div>
-
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>From:</span>
-          <button
-            type="button"
-            onClick={() => setOpenCalendarTarget(openCalendarTarget === 'FROM' ? null : 'FROM')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              color: startDate ? '#0f172a' : '#94a3b8',
-              background: '#ffffff',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="fa-regular fa-calendar" style={{ color: '#d97706' }}></i>
-            {startDate || 'YYYY-MM-DD'}
-          </button>
-          {openCalendarTarget === 'FROM' && (
-            <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 9999 }}>
-              <CustomCalendarPicker
-                selectedDate={startDate}
-                onSelectDate={(d) => setStartDate(d)}
-                onClose={() => setOpenCalendarTarget(null)}
-              />
-            </div>
-          )}
-        </div>
-
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>To:</span>
-          <button
-            type="button"
-            onClick={() => setOpenCalendarTarget(openCalendarTarget === 'TO' ? null : 'TO')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              color: endDate ? '#0f172a' : '#94a3b8',
-              background: '#ffffff',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="fa-regular fa-calendar" style={{ color: '#d97706' }}></i>
-            {endDate || 'YYYY-MM-DD'}
-          </button>
-          {openCalendarTarget === 'TO' && (
-            <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 9999 }}>
-              <CustomCalendarPicker
-                selectedDate={endDate}
-                onSelectDate={(d) => setEndDate(d)}
-                onClose={() => setOpenCalendarTarget(null)}
-              />
-            </div>
-          )}
-        </div>
-
+      {/* Finance-Style Date Range Selection Bar */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#ffffff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #cbd5e1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', marginBottom: '1.15rem', flexWrap: 'wrap' }}>
+        {/* <i className="fa-solid fa-calendar-days" style={{ color: '#6366f1', fontSize: '0.85rem' }}></i> */}
+        {/* <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginRight: '2px' }}>Filter Date Range:</span> */}
+        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>From:</span>
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.3rem 0.5rem', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600, background: '#f8fafc' }}
+        />
+        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>To:</span>
+        <input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.3rem 0.5rem', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600, background: '#f8fafc' }}
+        />
         {(startDate || endDate) && (
           <button
             type="button"
             onClick={handleClearDates}
             style={{
-              padding: '5px 12px',
-              borderRadius: '8px',
+              padding: '0.3rem 0.6rem',
+              borderRadius: '6px',
               border: '1px solid #fca5a5',
               background: '#fef2f2',
               color: '#dc2626',
               fontWeight: 700,
-              fontSize: '0.76rem',
+              fontSize: '0.72rem',
               cursor: 'pointer',
               display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
             }}
           >
-            <i className="fa-solid fa-xmark"></i> Clear Filter
+            Clear
           </button>
         )}
       </div>
 
-
-      {/* 3 Interactive History Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.15rem', flexWrap: 'wrap' }}>
+      {/* Segmented Pill History Filter Control */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '4px', marginBottom: '1.15rem', flexWrap: 'wrap' }}>
         <button
+          type="button"
           onClick={() => setHistoryTab('ALL')}
           style={{
-            padding: '7px 14px',
-            borderRadius: '10px',
-            border: historyTab === 'ALL' ? '1px solid #0f172a' : '1px solid #cbd5e1',
-            background: historyTab === 'ALL' ? '#0f172a' : '#f8fafc',
-            color: historyTab === 'ALL' ? '#ffffff' : '#475569',
-            fontWeight: 700,
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: 'none',
+            background: historyTab === 'ALL' ? '#ffffff' : 'transparent',
+            color: historyTab === 'ALL' ? '#4f46e5' : '#64748b',
+            fontWeight: historyTab === 'ALL' ? 700 : 600,
             fontSize: '0.78rem',
             cursor: 'pointer',
+            boxShadow: historyTab === 'ALL' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            boxShadow: historyTab === 'ALL' ? '0 4px 12px rgba(15, 23, 42, 0.2)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
-          <i className="fa-solid fa-list-ul"></i> All History
+          <i className="fa-solid fa-layer-group" style={{ fontSize: '0.74rem' }}></i>
+          All ({totalBillsCount})
         </button>
 
         <button
+          type="button"
           onClick={() => setHistoryTab('SELL')}
           style={{
-            padding: '7px 14px',
-            borderRadius: '10px',
-            border: historyTab === 'SELL' ? '1px solid #b45309' : '1px solid #fde68a',
-            background: historyTab === 'SELL' ? '#b45309' : '#fef3c7',
-            color: historyTab === 'SELL' ? '#ffffff' : '#92400e',
-            fontWeight: 700,
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: 'none',
+            background: historyTab === 'SELL' ? '#ffffff' : 'transparent',
+            color: historyTab === 'SELL' ? '#b45309' : '#64748b',
+            fontWeight: historyTab === 'SELL' ? 700 : 600,
             fontSize: '0.78rem',
             cursor: 'pointer',
+            boxShadow: historyTab === 'SELL' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            boxShadow: historyTab === 'SELL' ? '0 4px 12px rgba(180, 83, 9, 0.25)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
-          <i className="fa-solid fa-cart-shopping"></i> Sell History
+          <i className="fa-solid fa-cart-shopping" style={{ fontSize: '0.74rem' }}></i>
+          Sell ({sellBillsCount})
         </button>
 
         <button
+          type="button"
           onClick={() => setHistoryTab('BUY')}
           style={{
-            padding: '7px 14px',
-            borderRadius: '10px',
-            border: historyTab === 'BUY' ? '1px solid #0369a1' : '1px solid #bae6fd',
-            background: historyTab === 'BUY' ? '#0369a1' : '#e0f2fe',
-            color: historyTab === 'BUY' ? '#ffffff' : '#075985',
-            fontWeight: 700,
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: 'none',
+            background: historyTab === 'BUY' ? '#ffffff' : 'transparent',
+            color: historyTab === 'BUY' ? '#0369a1' : '#64748b',
+            fontWeight: historyTab === 'BUY' ? 700 : 600,
             fontSize: '0.78rem',
             cursor: 'pointer',
+            boxShadow: historyTab === 'BUY' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            boxShadow: historyTab === 'BUY' ? '0 4px 12px rgba(3, 105, 161, 0.25)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
-          <i className="fa-solid fa-hand-holding-dollar"></i> Buy History
+          <i className="fa-solid fa-hand-holding-dollar" style={{ fontSize: '0.74rem' }}></i>
+          Buy ({buyBillsCount})
         </button>
 
         <button
+          type="button"
           onClick={() => setHistoryTab('EXCHANGE')}
           style={{
-            padding: '7px 14px',
-            borderRadius: '10px',
-            border: historyTab === 'EXCHANGE' ? '1px solid #6d28d9' : '1px solid #e9d5ff',
-            background: historyTab === 'EXCHANGE' ? '#6d28d9' : '#f3e8ff',
-            color: historyTab === 'EXCHANGE' ? '#ffffff' : '#5b21b6',
-            fontWeight: 700,
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: 'none',
+            background: historyTab === 'EXCHANGE' ? '#ffffff' : 'transparent',
+            color: historyTab === 'EXCHANGE' ? '#7c3aed' : '#64748b',
+            fontWeight: historyTab === 'EXCHANGE' ? 700 : 600,
             fontSize: '0.78rem',
             cursor: 'pointer',
+            boxShadow: historyTab === 'EXCHANGE' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            boxShadow: historyTab === 'EXCHANGE' ? '0 4px 12px rgba(109, 40, 217, 0.25)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
-          <i className="fa-solid fa-right-left"></i> Exchange History
+          <i className="fa-solid fa-rotate" style={{ fontSize: '0.74rem' }}></i>
+          Exchange ({exchangeBillsCount})
         </button>
       </div>
 

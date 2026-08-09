@@ -390,8 +390,26 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
         </div>
       </div>
 
-      {/* ── Summary Cards (First 2 Gold, Next 2 Silver - All Text in Black) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', marginBottom: '1.25rem' }}>
+      {/* ── Summary Cards (First 2 Gold, Next 2 Silver - Styled like CustomerDirectoryView) ── */}
+      <style>{`
+        .finance-kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 0.75rem;
+          margin-bottom: 1.25rem;
+        }
+        @media (max-width: 1024px) {
+          .finance-kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+        @media (max-width: 640px) {
+          .finance-kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+      `}</style>
+      <div className="finance-kpi-grid">
         {[
           { label: 'TOTAL DEBT PRINCIPAL', value: `₹${(summary?.totalDebtIssued || 0).toLocaleString('en-IN')}`, sub: 'Active loan capital', icon: 'fa-briefcase', isGold: true },
           { label: 'INTEREST ACCRUED', value: `₹${(summary?.totalInterestEarned || 0).toLocaleString('en-IN')}`, sub: 'Live per-month interest', icon: 'fa-chart-line', isGold: true },
@@ -401,33 +419,35 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
           <div
             key={i}
             style={{
+              position: 'relative',
+              overflow: 'hidden',
               background: card.isGold ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-              borderRadius: '0px',
-              padding: '1.15rem',
+              borderRadius: '12px',
+              padding: '0.75rem 0.85rem',
               border: card.isGold ? '1px solid #d99b26' : '1px solid #94a3b8',
-              boxShadow: card.isGold ? '0 6px 20px rgba(180,83,9,0.12)' : '0 6px 20px rgba(0,0,0,0.06)',
+              boxShadow: card.isGold ? '0 4px 14px rgba(180,83,9,0.1)' : '0 4px 14px rgba(0,0,0,0.06)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}
           >
             <div>
-              <span style={{ fontSize: '0.68rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>{card.label}</span>
-              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>{card.value}</div>
-              <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>{card.sub}</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: card.isGold ? '#78350f' : '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{card.label}</span>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1, margin: '3px 0' }}>{card.value}</div>
+              <span style={{ fontSize: '0.72rem', fontWeight: 400, color: card.isGold ? '#78350f' : '#64748b' }}>{card.sub}</span>
             </div>
             <div
               style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '0px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
                 background: card.isGold ? '#b45309' : '#475569',
                 color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1.1rem',
-                border: card.isGold ? '1px solid #92400e' : '1px solid #334155',
+                fontSize: '0.9rem',
+                flexShrink: 0,
               }}
             >
               <i className={`fa-solid ${card.icon}`} />

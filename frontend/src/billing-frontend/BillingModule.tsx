@@ -261,10 +261,26 @@ export const BillingModule: React.FC = () => {
   };
 
   const handleUpdateItem = (id: string, field: keyof BillItem, value: any) => {
-    setItems(
-      items.map((it) => {
+    setItems((prevItems) =>
+      prevItems.map((it) => {
         if (it.id === id) {
           const updated = { ...it, [field]: value };
+          delete (updated as any).lineTotal;
+          delete (updated as any).line_total;
+          delete (updated as any).metalVal;
+          delete (updated as any).metal_value;
+          return updated;
+        }
+        return it;
+      })
+    );
+  };
+
+  const handleUpdateItemMultiple = (id: string, updates: Partial<BillItem>) => {
+    setItems((prevItems) =>
+      prevItems.map((it) => {
+        if (it.id === id) {
+          const updated = { ...it, ...updates };
           delete (updated as any).lineTotal;
           delete (updated as any).line_total;
           delete (updated as any).metalVal;
@@ -823,8 +839,10 @@ export const BillingModule: React.FC = () => {
                               const defaultR = newMetal === 'GOLD'
                                 ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
                                 : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value);
-                              handleUpdateItem(it.id, 'metal_type', newMetal);
-                              handleUpdateItem(it.id, 'custom_rate_per_gram', defaultR || 0);
+                              handleUpdateItemMultiple(it.id, {
+                                metal_type: newMetal,
+                                custom_rate_per_gram: defaultR || 0,
+                              });
                             }}
                             style={{ width: '100%', padding: '0.55rem 0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
                           >
@@ -856,7 +874,7 @@ export const BillingModule: React.FC = () => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                       <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Gross Weight (Grams)</label>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Weight (Grams)</label>
                         <input
                           type="text"
                           inputMode="decimal"
@@ -869,7 +887,7 @@ export const BillingModule: React.FC = () => {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Purity (%)</label>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Quality (%)</label>
                         <input
                           type="text"
                           inputMode="decimal"
