@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+import { API_BASE } from '../config/apiConfig';
 
 interface InventoryProduct {
   id: string;

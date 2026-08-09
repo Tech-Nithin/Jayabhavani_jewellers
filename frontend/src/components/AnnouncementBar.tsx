@@ -17,7 +17,7 @@ interface MetalRates {
   silver_sell_value: number;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+import { API_BASE } from '../config/apiConfig';
 
 export default function AnnouncementBar({
   message,

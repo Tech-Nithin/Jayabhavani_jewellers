@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import ProductCard from '../components/ProductCard';
 import type { Product } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+import { API_BASE } from '../config/apiConfig';
 
 export const goldProducts: Product[] = [
   { id: 'g1', name: 'Royal 22K Gold Antique Necklace', category: '22K Gold Necklace', price: 145000, oldPrice: 160000, badge: 'hot', img: '/Diamond_Pendant_Set.jpg', color: '#e8d4c0' },
