@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { API_BASE } from '../../config/apiConfig';
 
 interface FinanceSummary {
   totalRevenue: number;
@@ -17,7 +18,7 @@ export const FinanceDashboard: React.FC = () => {
 
   const fetchFinanceOverview = async () => {
     try {
-      const res = await fetch('/api/finance/overview');
+      const res = await fetch(`${API_BASE}/finance/overview`);
       const json = await res.json();
       if (json.success) {
         setData(json);

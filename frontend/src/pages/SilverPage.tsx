@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import ProductCard from '../components/ProductCard';
 import type { Product } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+import { API_BASE } from '../config/apiConfig';
 
 export const silverProducts: Product[] = [
   { id: 's1', name: '999 Pure Silver Coin (50g)', category: '999 Silver Coin', price: 13500, oldPrice: 15000, badge: 'hot', img: '/Pearl_Drop_Earrings.jpg', color: '#e8e0d4' },

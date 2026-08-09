@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE } from '../../config/apiConfig';
 
 export const InvoiceGenerator: React.FC = () => {
   const [customer, setCustomer] = useState('');
@@ -13,7 +14,7 @@ export const InvoiceGenerator: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/billing/create', {
+      const res = await fetch(`${API_BASE}/billing/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

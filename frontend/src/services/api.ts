@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+import { API_BASE } from '../config/apiConfig';
+
+const API_BASE_URL = API_BASE;
 
 export interface LoginResponse {
   success: boolean;

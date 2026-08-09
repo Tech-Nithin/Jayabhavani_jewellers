@@ -5,7 +5,7 @@ import { CustomerDirectoryView } from './components/CustomerDirectoryView';
 import { EditRatesModal } from './components/EditRatesModal';
 import { InvoiceDetailsView } from './components/InvoiceDetailsView';
 
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+import { API_BASE } from '../config/apiConfig';
 
 /** Converts any string to Start Case (Title Case) — frontend-only display formatting */
 const toStartCase = (str: string): string =>

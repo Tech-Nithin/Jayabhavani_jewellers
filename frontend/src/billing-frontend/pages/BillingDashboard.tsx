@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { InvoiceGenerator } from '../components/InvoiceGenerator';
+import { API_BASE } from '../../config/apiConfig';
 
 interface Invoice {
   id: string;
@@ -19,7 +20,7 @@ export const BillingDashboard: React.FC = () => {
 
   const fetchInvoices = async () => {
     try {
-      const res = await fetch('/api/billing/invoices');
+      const res = await fetch(`${API_BASE}/billing/invoices`);
       const data = await res.json();
       if (data.success) {
         setInvoices(data.invoices);
