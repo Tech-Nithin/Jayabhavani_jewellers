@@ -53,8 +53,11 @@ CREATE TABLE IF NOT EXISTS public.metal_history_rates (
 );
 
 -- 5. Create Billing Invoices Table (Gold & Silver Buy/Sell Transactions)
+CREATE SEQUENCE IF NOT EXISTS public.billing_invoices_seq START WITH 1 INCREMENT BY 1;
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE public.billing_invoices_seq TO anon, authenticated, service_role, postgres;
+
 CREATE TABLE IF NOT EXISTS public.billing_invoices (
-  id VARCHAR(50) PRIMARY KEY,
+  id VARCHAR(50) PRIMARY KEY DEFAULT ('INV-' || nextval('public.billing_invoices_seq')::TEXT),
   customer_name VARCHAR(255) NOT NULL,
   customer_phone VARCHAR(20),
   customer_address VARCHAR(500),

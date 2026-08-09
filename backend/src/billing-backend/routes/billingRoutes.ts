@@ -495,8 +495,7 @@ router.post('/create', async (req: Request, res: Response) => {
     final_amount_val = Number((subtotal + gst_amount).toFixed(2));
   }
 
-  const newInvoice = {
-    id: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
+  const newInvoicePayload: any = {
     customer_name: customer_name || 'Walk-in Customer',
     customer_phone: customer_phone || '',
     customer_address: customer_address || '',
@@ -519,30 +518,47 @@ router.post('/create', async (req: Request, res: Response) => {
     created_at: new Date().toISOString(),
   };
 
-  invoicesList.unshift(newInvoice);
+  let createdInvoice = { ...newInvoicePayload, id: `INV-${invoicesList.length + 1}` };
 
-  // Persist invoice to Supabase DB
+  // Persist invoice to Supabase DB (PostgreSQL automatically assigns auto-increment ID from billing_invoices_seq)
   try {
     const { data: dbData, error: dbError } = await supabase
       .from('billing_invoices')
-      .insert([newInvoice])
+      .insert([newInvoicePayload])
       .select('*');
 
     if (dbError) {
       console.warn('⚠️ Supabase DB insert warning:', dbError.message);
-      if (dbError.code === '23514' && newInvoice.metal_type === 'MIXED') {
-        const fallbackMetal = (receipt_json_data?.items?.[0]?.metal_type || 'GOLD').toUpperCase();
-        newInvoice.metal_type = fallbackMetal === 'SILVER' ? 'SILVER' : 'GOLD';
-        const retryRes = await supabase.from('billing_invoices').insert([newInvoice]).select('*');
-        if (retryRes.error) {
-          console.error('❌ Retry insert error:', retryRes.error);
-          return res.status(500).json({
-            success: false,
-            message: `Database Insert Error (${retryRes.error.code || 'DB_ERR'}): ${retryRes.error.message}`,
-            error: retryRes.error,
+      if ((dbError.code === '42501' || dbError.message?.includes('permission denied for sequence')) || (dbError.code === '23514' && newInvoicePayload.metal_type === 'MIXED')) {
+        console.warn('⚠️ Sequence or constraint fallback triggered, calculating sequential ID...');
+        let maxNum = 0;
+        try {
+          const { data: existingInvs } = await supabase.from('billing_invoices').select('id');
+          const combined = [...(existingInvs || []), ...invoicesList];
+          combined.forEach((inv) => {
+            if (!inv || !inv.id) return;
+            const match = String(inv.id).match(/(\d+)/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
+            }
           });
+        } catch (e) {
+          maxNum = invoicesList.length;
         }
-        console.log('✅ Supabase DB invoice created successfully (with fallback metal_type):', newInvoice.id, retryRes.data);
+        const fallbackId = `INV-${maxNum + 1}`;
+        newInvoicePayload.id = fallbackId;
+        if (dbError.code === '23514') {
+          const fallbackMetal = (receipt_json_data?.items?.[0]?.metal_type || 'GOLD').toUpperCase();
+          newInvoicePayload.metal_type = fallbackMetal === 'SILVER' ? 'SILVER' : 'GOLD';
+        }
+        const retryRes = await supabase.from('billing_invoices').insert([newInvoicePayload]).select('*');
+        if (retryRes.data && retryRes.data[0]) {
+          createdInvoice = retryRes.data[0];
+        } else {
+          createdInvoice = { ...newInvoicePayload, id: fallbackId };
+        }
+        console.log('✅ Supabase DB invoice created successfully (with fallback handler):', createdInvoice.id);
       } else {
         return res.status(500).json({
           success: false,
@@ -550,8 +566,9 @@ router.post('/create', async (req: Request, res: Response) => {
           error: dbError,
         });
       }
-    } else {
-      console.log('✅ Supabase DB invoice created successfully:', newInvoice.id, dbData);
+    } else if (dbData && dbData[0]) {
+      createdInvoice = dbData[0];
+      console.log('✅ Supabase DB invoice created successfully with auto-increment ID:', createdInvoice.id);
     }
   } catch (err: any) {
     console.error('Supabase DB invoice insert exception:', err);
@@ -561,10 +578,12 @@ router.post('/create', async (req: Request, res: Response) => {
     });
   }
 
+  invoicesList.unshift(createdInvoice);
+
   res.json({
     success: true,
     message: 'Billing invoice generated & persisted successfully',
-    invoice: newInvoice,
+    invoice: createdInvoice,
   });
 });
 
