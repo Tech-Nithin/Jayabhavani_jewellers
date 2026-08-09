@@ -1,15 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { formatPrice } from '../utils';
 
 interface AnnouncementBarProps {
   message?: string;
+  mode?: 'store' | 'admin';
+  user?: { name: string; email: string } | null;
+  isTabletOrMobile?: boolean;
+  isMobileScreen?: boolean;
+  onToggleMobileMenu?: () => void;
 }
 
+interface MetalRates {
+  gold_buy_value: number;
+  gold_sell_value: number;
+  silver_buy_value: number;
+  silver_sell_value: number;
+}
+
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
+
 export default function AnnouncementBar({
-  message = '✦ Free shipping on orders above ₹1,00,000 \u00a0|\u00a0 ✦ BIS Hallmarked Gold \u00a0|\u00a0 ✦ Certified Diamonds',
+  message,
+  mode = 'store',
+  user: _user,
+  isTabletOrMobile: _isTabletOrMobile = false,
+  isMobileScreen = false,
+  onToggleMobileMenu: _onToggleMobileMenu,
 }: AnnouncementBarProps) {
   const [visible, setVisible] = useState(
-    !sessionStorage.getItem('jaya_bhavani_ann_closed')
+    mode === 'admin' ? true : !sessionStorage.getItem('jaya_bhavani_ann_closed')
   );
+  const [rates, setRates] = useState<MetalRates>({
+    gold_buy_value: 14200,
+    gold_sell_value: 14700,
+    silver_buy_value: 250,
+    silver_sell_value: 270,
+  });
+
+  useEffect(() => {
+    async function fetchMetalRates() {
+      try {
+        const res = await fetch(`${API_BASE}/billing/rates`);
+        const data = await res.json();
+        if (data.success && data.rates) {
+          setRates({
+            gold_buy_value: Number(data.rates.gold_buy_value) || 14200,
+            gold_sell_value: Number(data.rates.gold_sell_value) || 14700,
+            silver_buy_value: Number(data.rates.silver_buy_value) || 250,
+            silver_sell_value: Number(data.rates.silver_sell_value) || 270,
+          });
+        }
+      } catch {
+        // Fall back gracefully to initial default rates
+      }
+    }
+    fetchMetalRates();
+    const interval = setInterval(fetchMetalRates, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleClose = () => {
     setVisible(false);
@@ -18,9 +66,65 @@ export default function AnnouncementBar({
 
   if (!visible) return null;
 
+  const displayMessage = message || `✦ Gold Buy: ${formatPrice(rates.gold_buy_value)}/g \u00a0|\u00a0 ✦ Gold Sell: ${formatPrice(rates.gold_sell_value)}/g \u00a0|\u00a0 ✦ Silver Buy: ${formatPrice(rates.silver_buy_value)}/g \u00a0|\u00a0 ✦ Silver Sell: ${formatPrice(rates.silver_sell_value)}/g`;
+
+  if (mode === 'admin') {
+    return (
+      <header
+        className="announcement-bar"
+        style={{
+          background: 'linear-gradient(90deg, var(--rose-deep), var(--rose-gold), var(--gold-deep))',
+          color: '#ffffff',
+          padding: isMobileScreen ? '10px 16px' : '10px 24px',
+          fontSize: '0.78rem',
+          letterSpacing: '0.06em',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+          border: 'none',
+          borderRadius: '0px',
+        }}
+      >
+        {/* Center: Live Gold & Silver Market Rates Ticker */}
+        <div
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.85rem',
+            color: '#ffffff',
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            flexWrap: 'wrap',
+          }}
+        >
+          {displayMessage}
+        </div>
+
+        {/* Right: User Profile Avatar - JBAdmin */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.22)', border: '1.5px solid #ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#ffffff', fontSize: '0.75rem' }}>
+            JB
+          </div>
+          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
+            JB Admin
+          </span>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <div className="announcement-bar" id="announcement-bar">
-      <p>{message}</p>
+      <p>{displayMessage}</p>
       <button
         className="close-announcement"
         id="close-announcement"

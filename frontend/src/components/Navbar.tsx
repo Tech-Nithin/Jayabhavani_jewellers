@@ -4,10 +4,12 @@ import { useCart } from '../context/CartContext';
 interface NavbarProps {
   onSearchOpen: () => void;
   onAuthOpen: () => void;
+  onNavigate?: (view: 'store' | 'gold' | 'silver') => void;
+  currentView?: 'store' | 'gold' | 'silver' | 'dashboard';
   user?: { name: string; email: string } | null;
 }
 
-export default function Navbar({ onSearchOpen, onAuthOpen, user }: NavbarProps) {
+export default function Navbar({ onSearchOpen, onAuthOpen, onNavigate, currentView: _currentView, user }: NavbarProps) {
   const { cartCount, wishlistCount, openCart } = useCart();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -18,12 +20,18 @@ export default function Navbar({ onSearchOpen, onAuthOpen, user }: NavbarProps) 
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const handleNavClick = (view: 'store' | 'gold' | 'silver', _href: string, e: React.MouseEvent) => {
+    if (onNavigate && (view === 'gold' || view === 'silver' || view === 'store')) {
+      e.preventDefault();
+      onNavigate(view);
+    }
+  };
+
   const navLinks = [
-    { label: 'Collections', href: '#collections' },
-    { label: 'Rings', href: '#rings' },
-    { label: 'Necklaces', href: '#necklaces' },
-    { label: 'Earrings', href: '#earrings' },
-    { label: 'Our Story', href: '#about' },
+    { label: 'Collections', href: '#collections', view: 'store' as const },
+    { label: 'Gold', href: '?view=gold', view: 'gold' as const },
+    { label: 'Silver', href: '?view=silver', view: 'silver' as const },
+    { label: 'Our Story', href: '#about', view: 'store' as const },
   ];
 
   return (
@@ -31,7 +39,12 @@ export default function Navbar({ onSearchOpen, onAuthOpen, user }: NavbarProps) 
       <div className="nav-container">
 
         {/* ── 1. Brand Logo — leftmost ── */}
-        <a href="#" className="logo" aria-label="Jaya Bhavani Jewellers Home">
+        <a
+          href="#"
+          className="logo"
+          aria-label="Jaya Bhavani Jewellers Home"
+          onClick={(e) => handleNavClick('store', '#', e)}
+        >
           <img src="/JB_logo.png" alt="Jaya Bhavani Logo" className="logo-img" />
           <div className="logo-text">
             <span className="logo-main">JAYA BHAVANI</span>
@@ -42,7 +55,14 @@ export default function Navbar({ onSearchOpen, onAuthOpen, user }: NavbarProps) 
         {/* ── 2. Desktop Nav Links — middle ── */}
         <nav className="nav-links" id="nav-links">
           {navLinks.map(l => (
-            <a key={l.href} href={l.href} className="nav-link">{l.label}</a>
+            <a
+              key={l.label}
+              href={l.href}
+              className="nav-link"
+              onClick={(e) => handleNavClick(l.view, l.href, e)}
+            >
+              {l.label}
+            </a>
           ))}
         </nav>
 
@@ -85,10 +105,10 @@ export default function Navbar({ onSearchOpen, onAuthOpen, user }: NavbarProps) 
           </button>
 
           {/* Sign In / Account */}
-          <button 
-            className={`nav-icon ${user ? 'user-logged-in' : ''}`} 
-            id="login-btn" 
-            aria-label={user ? `Logged in as ${user.name}` : "Sign In"} 
+          <button
+            className={`nav-icon ${user ? 'user-logged-in' : ''}`}
+            id="login-btn"
+            aria-label={user ? `Logged in as ${user.name}` : "Sign In"}
             onClick={onAuthOpen}
             style={user ? { color: '#d4b8a0' } : undefined}
             title={user ? `Logged in as ${user.email}` : "Sign In"}
@@ -106,10 +126,13 @@ export default function Navbar({ onSearchOpen, onAuthOpen, user }: NavbarProps) 
         <div className="mobile-nav open" id="mobile-nav">
           {navLinks.map(l => (
             <a
-              key={l.href}
+              key={l.label}
               href={l.href}
               className="mobile-nav-link"
-              onClick={() => setMobileOpen(false)}
+              onClick={(e) => {
+                setMobileOpen(false);
+                handleNavClick(l.view, l.href, e);
+              }}
             >
               {l.label}
             </a>

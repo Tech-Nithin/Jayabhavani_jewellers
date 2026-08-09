@@ -56,7 +56,13 @@ export default function ProductCard({ product }: ProductCardProps) {
           alt={product.name}
           className="product-img"
           style={{ position: 'relative', zIndex: 1 }}
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          onError={(e) => {
+            const img = e.currentTarget as HTMLImageElement;
+            if (!img.dataset.failed) {
+              img.dataset.failed = 'true';
+              img.src = '/Pearl_Gold_Choker.jpeg';
+            }
+          }}
         />
 
         {product.badge && (
@@ -87,10 +93,13 @@ export default function ProductCard({ product }: ProductCardProps) {
         <h3 className="product-name">{product.name}</h3>
         <div className="product-price-row">
           <div>
-            <span className="product-price">{formatPrice(product.price)}</span>
-            {product.oldPrice && (
-              <span className="product-price-old">{formatPrice(product.oldPrice)}</span>
-            )}
+            <span className="product-price" style={{ fontSize: '0.9rem', fontWeight: 800, color: '#b45309' }}>
+              {product.weightFrom !== undefined && product.weightFrom !== null
+                ? (product.weightTo && Number(product.weightTo) !== Number(product.weightFrom)
+                    ? `${product.weightFrom}g - ${product.weightTo}g`
+                    : `${product.weightFrom}g`)
+                : (product.price ? `${(product.price / 15000).toFixed(1)}g - ${(product.price / 9000).toFixed(1)}g` : '5g - 10g')}
+            </span>
           </div>
           <button
             className="product-cart-btn"

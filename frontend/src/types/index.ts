@@ -11,6 +11,8 @@ export interface Product {
   badge: ProductBadge;
   img: string;
   color: string;
+  weightFrom?: number;
+  weightTo?: number;
 }
 
 export interface CartItem extends Product {
