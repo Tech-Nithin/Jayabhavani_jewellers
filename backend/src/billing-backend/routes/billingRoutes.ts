@@ -808,4 +808,63 @@ router.put('/update/:id', async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/billing/presets - Fetch presets 100% directly from billing_presets database table
+router.get('/presets', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('billing_presets')
+      .select('*')
+      .order('preset_name', { ascending: true });
+
+    if (error) {
+      console.warn('⚠️ Supabase billing_presets fetch error:', error);
+      return res.status(500).json({ success: false, message: error.message, presets: {} });
+    }
+
+    const grouped: Record<string, string[]> = {};
+
+    (data || []).forEach((row: any) => {
+      const cat = row.category_name;
+      if (!grouped[cat]) grouped[cat] = [];
+      if (!grouped[cat].includes(row.preset_name)) {
+        grouped[cat].push(row.preset_name);
+      }
+    });
+
+    res.json({ success: true, presets: grouped });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Server Error', presets: {} });
+  }
+});
+
+// POST /api/billing/presets - Insert new custom preset into database
+router.post('/presets', async (req: Request, res: Response) => {
+  try {
+    const { preset_name, category_name } = req.body;
+    if (!preset_name || !category_name) {
+      return res.status(400).json({ success: false, message: 'preset_name and category_name are required' });
+    }
+
+    const cleanName = String(preset_name).trim();
+    const cleanCat = String(category_name).trim().toLowerCase();
+
+    if (!cleanName) {
+      return res.status(400).json({ success: false, message: 'preset_name cannot be empty' });
+    }
+
+    const { data, error } = await supabase
+      .from('billing_presets')
+      .upsert([{ preset_name: cleanName, category_name: cleanCat }], { onConflict: 'preset_name,category_name' })
+      .select('*');
+
+    if (error) {
+      console.warn('Supabase billing_presets insert error:', error);
+    }
+
+    res.json({ success: true, message: 'Preset saved successfully', preset: { preset_name: cleanName, category_name: cleanCat } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Server error' });
+  }
+});
+
 export default router;

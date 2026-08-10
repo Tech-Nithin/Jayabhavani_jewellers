@@ -231,6 +231,46 @@ ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS item_deduction_weight_gram
 
 
 
+-- 8. Create Billing Presets Table (billing_presets)
+CREATE TABLE IF NOT EXISTS public.billing_presets (
+  id SERIAL PRIMARY KEY,
+  preset_name VARCHAR(255) NOT NULL,
+  category_name VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unique_preset_category UNIQUE(preset_name, category_name)
+);
+
+ALTER TABLE public.billing_presets DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON TABLE public.billing_presets TO postgres, anon, authenticated, service_role;
+GRANT ALL ON SEQUENCE public.billing_presets_id_seq TO postgres, anon, authenticated, service_role;
+
+-- Seed default presets
+INSERT INTO public.billing_presets (preset_name, category_name) VALUES
+('Ring', 'item_name'),
+('Chain', 'item_name'),
+('Necklace', 'item_name'),
+('Bangle', 'item_name'),
+('Earring', 'item_name'),
+('Anklet', 'item_name'),
+('Bracelet', 'item_name'),
+('Pendant', 'item_name'),
+('Coin', 'item_name'),
+('Bar', 'item_name'),
+('Stones', 'deduction_name'),
+('Wax', 'deduction_name'),
+('Thread', 'deduction_name'),
+('Enamel', 'deduction_name'),
+('Stones', 'additional_charge'),
+('Stone Cost', 'additional_charge'),
+('Making Fee', 'additional_charge'),
+('Hallmark Fee', 'additional_charge'),
+('Polishing', 'additional_charge'),
+('Gold', 'asset_name'),
+('Silver', 'asset_name'),
+('Asset', 'asset_name')
+ON CONFLICT (preset_name, category_name) DO NOTHING;
+
+
 
 
 

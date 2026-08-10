@@ -105,7 +105,7 @@ export default function AnnouncementBar({
             gap: '0.75rem',
             position: 'sticky',
             top: 0,
-            zIndex: 40,
+            zIndex: 1000,
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
             border: 'none',
             borderRadius: '0px',

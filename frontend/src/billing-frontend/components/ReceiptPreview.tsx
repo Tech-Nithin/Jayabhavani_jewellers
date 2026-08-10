@@ -15,6 +15,7 @@ interface ReceiptPreviewProps {
   netPayable: number;
   createdDate?: string;
   updatedDate?: string;
+  billType?: 'SALE_DONE' | 'ESTIMATION';
   onDownloadPNG?: () => void;
 }
 
@@ -33,6 +34,120 @@ const formatReceiptDateTime = (isoOrStr?: string) => {
     return `${dd}-${mm}-${yyyy} ${hours}:${minutes} ${ampm}`;
   } catch (err) {
     return isoOrStr;
+  }
+};
+
+/** Automatic 80mm Thermal Receipt Direct Printer (Format 80mm, Silent Kiosk Auto-Cut Ready) */
+export const printReceipt80mm = (receiptId: string) => {
+  const element = document.getElementById(receiptId);
+  if (!element) return;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.zIndex = '-9999';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (!doc) return;
+
+  const clone = element.cloneNode(true) as HTMLElement;
+  const buttons = clone.querySelectorAll('button');
+  buttons.forEach((btn) => (btn.style.display = 'none'));
+
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>80mm Thermal Print</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <style>
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+          html, body {
+            width: 80mm;
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          #${receiptId} {
+            width: 80mm !important;
+            min-width: 80mm !important;
+            max-width: 80mm !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 3mm !important;
+            margin: 0 !important;
+            top: 0 !important;
+          }
+        </style>
+      </head>
+      <body>
+        ${clone.outerHTML}
+      </body>
+    </html>
+  `);
+  doc.close();
+
+  const triggerPrint = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (e) {
+      console.error('Thermal print trigger error:', e);
+    }
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 2000);
+  };
+
+  const images = iframe.contentWindow?.document.querySelectorAll('img');
+  const totalImages = images?.length || 0;
+
+  if (totalImages === 0) {
+    setTimeout(triggerPrint, 200);
+  } else {
+    let printed = false;
+    let loadedCount = 0;
+
+    const checkAndPrint = () => {
+      if (!printed) {
+        printed = true;
+        triggerPrint();
+      }
+    };
+
+    const fallbackTimer = setTimeout(checkAndPrint, 600);
+
+    images?.forEach((img) => {
+      if (img.complete) {
+        loadedCount++;
+        if (loadedCount >= totalImages) {
+          clearTimeout(fallbackTimer);
+          setTimeout(checkAndPrint, 100);
+        }
+      } else {
+        img.onload = img.onerror = () => {
+          loadedCount++;
+          if (loadedCount >= totalImages) {
+            clearTimeout(fallbackTimer);
+            setTimeout(checkAndPrint, 100);
+          }
+        };
+      }
+    });
   }
 };
 
@@ -112,6 +227,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   totalBuyCredit,
   createdDate,
   updatedDate,
+  billType = 'SALE_DONE',
   onDownloadPNG,
 }) => {
   const getItemDetails = (item: any) => {
@@ -255,8 +371,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         <div style={{ borderBottom: '1px dashed #94a3b8', paddingBottom: '1rem', marginBottom: '1rem', fontSize: '0.7rem', color: '#334155' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ color: '#0f172a', fontWeight: 700 }}>MODE:</span>
-            <strong style={{ color: mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5' }}>
-              [{mode === 'SELL' ? 'JBJ SELLING BILL' : mode === 'BUY' ? 'JBJ BUYING BILL' : 'JBJ TRADE-IN EXCHANGE BILL'}]
+            <strong style={{ color: billType === 'ESTIMATION' ? '#d97706' : (mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5') }}>
+              [{billType === 'ESTIMATION' ? 'ESTIMATION BILL' : (mode === 'SELL' ? 'JBJ SELLING BILL' : mode === 'BUY' ? 'JBJ BUYING BILL' : 'JBJ TRADE-IN EXCHANGE BILL')}]
             </strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -382,7 +498,31 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         </div>
 
         {/* Clean Summary Breakdown based on Transaction Mode */}
-        <div style={{ borderTop: '1px dashed #94a3b8', paddingTop: '0.65rem', fontSize: '0.72rem', color: '#334155' }}>
+        <div style={{ borderTop: '1px dashed #94a3b8', paddingTop: '0.65rem', fontSize: '0.72rem', color: '#334155', position: 'relative' }}>
+          {/* Official Stamp Graphic Overlay */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '50px',
+              right: '75px',
+              pointerEvents: 'none',
+              zIndex: 10,
+              opacity: 0.88,
+              transform: 'rotate(-10deg)',
+            }}
+          >
+            <img
+              src={billType === 'ESTIMATION' ? '/images/Estimation.png' : '/images/jbj_sale_done_stamp.webp'}
+              alt={billType === 'ESTIMATION' ? 'Estimation Stamp' : 'Sale Done Stamp'}
+              style={{
+                width: billType === 'ESTIMATION' ? '120px' : '110px',
+                height: 'auto',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.15))',
+              }}
+            />
+          </div>
+
           {mode === 'BUY' ? (
             <>
               <div style={{ fontWeight: 800, color: '#0369a1', marginBottom: '4px' }}>Gross Buying Items:</div>
@@ -401,7 +541,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                 <div>
                   <div>GRAND TOTAL:</div>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#0369a1' }}>
-                    (Customer should pay)
+                    (Need to pay to customer)
                   </div>
                 </div>
                 <div>₹{totalBuyCredit.toLocaleString('en-IN')}</div>
@@ -448,18 +588,25 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     {totalBuyCredit > totalSellValue ? '(Need to pay to customer)' : '(Customer should pay)'}
                   </div>
                 </div>
-                <div>₹{Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}</div>
+                <div style={{ fontSize: '1rem', fontWeight: 900 }}>₹{Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}</div>
               </div>
             </>
           )}
         </div>
 
         {/* Thermal Barcode Graphic Footer */}
-        <div style={{ textAlign: 'center', marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px dashed #94a3b8' }}>
+        <div style={{ textAlign: 'center', marginTop: '0.2rem', paddingTop: '0.2rem', borderTop: '1px dashed #94a3b8' }}>
           <div style={{ letterSpacing: '4px', fontSize: '1.1rem', fontFamily: 'monospace', color: '#334155', opacity: 0.8 }}>
-            ||||| ||| |||| ||||| ||
+            ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
           </div>
-          <small style={{ fontSize: '0.7rem', color: '#181f30ff', display: 'block', marginTop: '4px' }}>
+          <div style={{ margin: '2px 0 2px 0', display: 'flex', justifyContent: 'center' }}>
+            <img
+              src="/Jaya_Bhavani_Jewellers_QR.svg"
+              alt="Jaya Bhavani Jewellers QR Code"
+              style={{ width: '100px', height: '100px', objectFit: 'contain' }}
+            />
+          </div>
+          <small style={{ fontSize: '0.7rem', color: '#181f30ff', display: 'block', marginTop: '2px' }}>
             Thank you for visiting Jaya Bhavani Jewellers!
           </small>
         </div>
