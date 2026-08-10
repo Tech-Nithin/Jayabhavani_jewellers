@@ -559,7 +559,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             />
           </div>
 
-          {/* Dropdown Date Range Filter Popover */}
+          {/* Dropdown Date Range Filter Pop over */}
           <div style={{ position: 'relative' }}>
             <button
               type="button"
