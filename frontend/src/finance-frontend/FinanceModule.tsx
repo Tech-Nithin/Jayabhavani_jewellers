@@ -23,7 +23,7 @@ interface LoanRecord {
   item_deduction_weight?: number;
   item_deduction_weight_grams?: number;
   item_purity_percent: number;
-  item_metal_type: 'gold' | 'silver';
+  item_metal_type: 'gold' | 'silver' | 'cash';
   item_pure_weight: number;
   item_metal_rate_per_gram: number;
   item_total_value: number;
@@ -1265,7 +1265,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                         <span style={{ fontSize: '0.68rem', color: '#b45309' }}>{pureWeight.toFixed(3)}g × ₹{ratePerGram}/g</span>
                       </div>
                     </div>
-                    {form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue && (
+                    {Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue && (
                       <div style={{ marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px solid #fde68a', color: '#dc2626', fontSize: '0.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '0.85rem' }} />
                         <span>Warning: Entered Loan Amount (₹{Number(form.amount).toLocaleString('en-IN')}) exceeds Total Asset Value (₹{itemTotalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })})</span>
@@ -1310,8 +1310,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                   {/* Amount */}
                   <div>
                     <label style={labelStyle}>Loan Amount (Principal ₹) *</label>
-                    <input type="number" required min="1" placeholder="50000" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={{ ...inputStyle, fontWeight: 700, color: form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#dc2626' : '#0f172a', borderColor: form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#ef4444' : '#cbd5e1' }} />
-                    {form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue && (
+                    <input type="number" required min="1" placeholder="50000" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={{ ...inputStyle, fontWeight: 700, color: (form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#dc2626' : '#0f172a', borderColor: (form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#ef4444' : '#cbd5e1' }} />
+                    {(form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue && (
                       <span style={{ marginTop: '4px', padding: '3px 8px', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.68rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <i className="fa-solid fa-triangle-exclamation" /> Loan amount exceeded
                       </span>
