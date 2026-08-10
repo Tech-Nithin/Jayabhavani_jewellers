@@ -19,6 +19,9 @@ interface LoanRecord {
   total_payable: number;
   item_name: string;
   item_weight_grams: number;
+  item_deduction_name?: string;
+  item_deduction_weight?: number;
+  item_deduction_weight_grams?: number;
   item_purity_percent: number;
   item_metal_type: 'gold' | 'silver';
   item_pure_weight: number;
@@ -160,6 +163,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
     timeline_months: '3',
     item_name: '',
     item_weight_grams: '',
+    item_deduction_name: '',
+    item_deduction_weight: '',
     item_purity_percent: '',
     item_metal_type: 'gold' as 'gold' | 'silver' | 'cash',
     item_image_url: '',
@@ -204,7 +209,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
 
   // ── Derived calculations ──────────────────────────────────────────────────
   const ratePerGram = form.item_metal_type === 'gold' ? metalRates.gold_rate_per_gram : metalRates.silver_rate_per_gram;
-  const pureWeight = Number(form.item_weight_grams) * (Number(form.item_purity_percent) / 100);
+  const grossWeight = Number(form.item_weight_grams || 0);
+  const deductionWeight = Number(form.item_deduction_weight || 0);
+  const rawPureWeight = grossWeight * (Number(form.item_purity_percent || 0) / 100);
+  const pureWeight = Math.max(0, rawPureWeight - deductionWeight);
   const itemTotalValue = pureWeight * ratePerGram;
   const monthlyInterest = Number(form.amount) * (Number(form.interest_rate_percent) / 100);
   const totalInterest = monthlyInterest * Number(form.timeline_months);
@@ -262,6 +270,9 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
         ...form,
         item_name: isCash ? (form.item_name || 'Cash') : form.item_name,
         item_weight_grams: isCash ? 0 : Number(form.item_weight_grams),
+        item_deduction_name: isCash ? '' : (form.item_deduction_name || ''),
+        item_deduction_weight: isCash ? 0 : Number(form.item_deduction_weight || 0),
+        item_deduction_weight_grams: isCash ? 0 : Number(form.item_deduction_weight || 0),
         item_purity_percent: isCash ? 0 : Number(form.item_purity_percent),
         amount: Number(form.amount),
         interest_rate_percent: Number(form.interest_rate_percent),
@@ -731,157 +742,160 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                 <tr><td colSpan={10} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No loan records found.</td></tr>
               ) : filteredLedger.map((rec, index) => {
                 const isCashLoan = rec.item_metal_type?.toLowerCase() === 'cash' || rec.item_name?.toLowerCase() === 'cash';
-                const liveMarketVal = isCashLoan ? 0 : Math.round(
-                  (Number(rec.item_weight_grams || 0) * (Number(rec.item_purity_percent || 100) / 100)) *
-                  (rec.item_metal_type?.toLowerCase() === 'silver' ? (metalRates.silver_rate_per_gram || 250) : (metalRates.gold_rate_per_gram || 15000))
-                );
+                const recDeductionWt = Number(rec.item_deduction_weight_grams ?? rec.item_deduction_weight ?? 0);
+                const recRawPureWt = (Number(rec.item_weight_grams || 0) * (Number(rec.item_purity_percent || 100) / 100));
+                const recPureWt = Math.max(0, recRawPureWt - recDeductionWt);
+                const currentBuyRate = rec.item_metal_type?.toLowerCase() === 'silver' ? (metalRates.silver_rate_per_gram || 250) : (metalRates.gold_rate_per_gram || 15000);
+                const liveMarketVal = isCashLoan ? 0 : Math.round(recPureWt * currentBuyRate);
                 const openTotalAmount = Number(rec.amount || 0) + Number(rec.month_wise_interest || 0);
                 const isExceeded = !isCashLoan && liveMarketVal > 0 && openTotalAmount > liveMarketVal;
 
                 return (
-                <tr key={rec.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '10px 12px', fontWeight: 700, color: '#6366f1', fontSize: '0.78rem' }}>{index + 1}</td>
-                  <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: '0.62rem', color: '#0f172a' }}>
-                    {rec.loan_date}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.customer_name} {rec.customer_surname}</div>
-                    <small style={{ color: '#64748b', display: 'block' }}>{rec.customer_phone}</small>
-                    {rec.customer_address && <small style={{ color: '#94a3b8', fontSize: '0.68rem', display: 'block' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', marginRight: '3px' }} /> {rec.customer_address}</small>}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {rec.item_image_url && (
-                        <img
-                          src={rec.item_image_url}
-                          alt={rec.item_name}
-                          onClick={() => setSelectedLedgerImage({
-                            url: rec.item_image_url!,
-                            title: rec.item_name,
-                            subtitle: `${rec.item_weight_grams}g · ${rec.item_purity_percent}% · ${rec.item_metal_type.toUpperCase()} · ${rec.customer_name} ${rec.customer_surname}`,
-                          })}
-                          title="Click to view full-size photo"
-                          style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #cbd5e1', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                          onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
-                          onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}
-                        />
-                      )}
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.item_name}</div>
-                        {!isCashLoan && (
-                          <small style={{ color: '#64748b' }}>{rec.item_weight_grams}g · {rec.item_purity_percent}% · {rec.item_metal_type}</small>
+                  <tr key={rec.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#6366f1', fontSize: '0.78rem' }}>{index + 1}</td>
+                    <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: '0.62rem', color: '#0f172a' }}>
+                      {rec.loan_date}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.customer_name} {rec.customer_surname}</div>
+                      <small style={{ color: '#64748b', display: 'block' }}>{rec.customer_phone}</small>
+                      {rec.customer_address && <small style={{ color: '#94a3b8', fontSize: '0.68rem', display: 'block' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', marginRight: '3px' }} /> {rec.customer_address}</small>}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {rec.item_image_url && (
+                          <img
+                            src={rec.item_image_url}
+                            alt={rec.item_name}
+                            onClick={() => setSelectedLedgerImage({
+                              url: rec.item_image_url!,
+                              title: rec.item_name,
+                              subtitle: `${rec.item_weight_grams}g · ${rec.item_purity_percent}% · ${rec.item_metal_type.toUpperCase()} · ${rec.customer_name} ${rec.customer_surname}`,
+                            })}
+                            title="Click to view full-size photo"
+                            style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #cbd5e1', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}
+                          />
                         )}
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px 12px', fontWeight: 700, color: '#b45309' }}>₹{Number(rec.amount).toLocaleString('en-IN')}</td>
-                  <td style={{ padding: '10px 12px', color: '#64748b' }}>{rec.timeline_months} mo</td>
-                  <td style={{ padding: '10px 12px' }}>
-
-                    <div style={{ color: '#4f46e5', fontWeight: 600, marginTop: '2px' }}>
-                      {rec.interest_rate_percent}%
-                    </div>
-                    <div style={{ fontWeight: 600, fontSize: '0.68rem', color: '#10b981' }}>
-                      ( ₹{Number(rec.monthly_interest).toLocaleString('en-IN')})
-                    </div>
-                  </td>
-                  {statusFilter === 'completed' ? (
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#059669' }}>
-                      ₹{Number(Number(rec.amount) + Number(rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0)).toLocaleString('en-IN')}
-                      <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Final Considered Settlement Total" />
-                      <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
-                        (₹{Number(rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0).toLocaleString('en-IN')} interest)
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.item_name}</div>
+                          {!isCashLoan && (
+                            <small style={{ color: '#64748b' }}>
+                              {rec.item_weight_grams}g {recDeductionWt > 0 ? `(Ded: ${recDeductionWt}g)` : ''} · {rec.item_purity_percent}% · {rec.item_metal_type}
+                            </small>
+                          )}
+                        </div>
                       </div>
                     </td>
-                  ) : (
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: (rec.status === 'CLOSED' && rec.considered_type === 'Month-Wise Interest') ? '#059669' : rec.status === 'CLOSED' ? '#64748b' : '#4f46e5' }}>
-                      {rec.status === 'CLOSED' ? (
-                        rec.considered_type === 'Month-Wise Interest' ? (
-                          <>
-                            ₹{Number(Number(rec.amount) + Number(rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0)).toLocaleString('en-IN')}
-                            <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Settled Total Amount" />
-                            <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
-                              (₹{Number(rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0).toLocaleString('en-IN')} interest) · Settled ({rec.closing_date})
-                            </div>
-                          </>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#b45309' }}>₹{Number(rec.amount).toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '10px 12px', color: '#64748b' }}>{rec.timeline_months} mo</td>
+                    <td style={{ padding: '10px 12px' }}>
+
+                      <div style={{ color: '#4f46e5', fontWeight: 600, marginTop: '2px' }}>
+                        {rec.interest_rate_percent}%
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: '0.68rem', color: '#10b981' }}>
+                        ( ₹{Number(rec.monthly_interest).toLocaleString('en-IN')})
+                      </div>
+                    </td>
+                    {statusFilter === 'completed' ? (
+                      <td style={{ padding: '10px 12px', fontWeight: 700, color: '#059669' }}>
+                        ₹{Number(Number(rec.amount) + Number(rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0)).toLocaleString('en-IN')}
+                        <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Final Considered Settlement Total" />
+                        <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
+                          (₹{Number(rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0).toLocaleString('en-IN')} interest)
+                        </div>
+                      </td>
+                    ) : (
+                      <td style={{ padding: '10px 12px', fontWeight: 700, color: (rec.status === 'CLOSED' && rec.considered_type === 'Month-Wise Interest') ? '#059669' : rec.status === 'CLOSED' ? '#64748b' : '#4f46e5' }}>
+                        {rec.status === 'CLOSED' ? (
+                          rec.considered_type === 'Month-Wise Interest' ? (
+                            <>
+                              ₹{Number(Number(rec.amount) + Number(rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0)).toLocaleString('en-IN')}
+                              <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Settled Total Amount" />
+                              <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
+                                (₹{Number(rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0).toLocaleString('en-IN')} interest) · Settled ({rec.closing_date})
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>-</span>
+                              <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 400 }}>Account Closed</div>
+                            </>
+                          )
                         ) : (
                           <>
-                            <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>-</span>
-                            <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 400 }}>Account Closed</div>
+                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                              <span>₹{openTotalAmount.toLocaleString('en-IN')}</span>
+                              {isExceeded && (
+                                <span style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }} title={`Total amount ₹${openTotalAmount.toLocaleString('en-IN')} exceeds live market value ₹${liveMarketVal.toLocaleString('en-IN')}`}>
+                                  <i className="fa-solid fa-triangle-exclamation" /> Exceeded
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: '#6366f1', fontWeight: 600, marginTop: '2px' }}>
+                              (₹{(rec.month_wise_interest || 0).toLocaleString('en-IN')} interest) · {rec.month_wise_count || 1} Month{(rec.month_wise_count || 1) > 1 ? 's' : ''}
+                            </div>
                           </>
-                        )
+                        )}
+                      </td>
+                    )}
+                    <td style={{ padding: '10px 12px' }}>
+                      {isCashLoan ? (
+                        <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <i className="fa-solid fa-money-bill-wave" /> Cash
+                        </span>
                       ) : (
                         <>
-                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                            <span>₹{openTotalAmount.toLocaleString('en-IN')}</span>
-                            {isExceeded && (
-                              <span style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }} title={`Total amount ₹${openTotalAmount.toLocaleString('en-IN')} exceeds live market value ₹${liveMarketVal.toLocaleString('en-IN')}`}>
-                                <i className="fa-solid fa-triangle-exclamation" /> Exceeded
-                              </span>
-                            )}
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                            ₹{Number(rec.item_total_value).toLocaleString('en-IN')}
                           </div>
-                          <div style={{ fontSize: '0.68rem', color: '#6366f1', fontWeight: 600, marginTop: '2px' }}>
-                            (₹{(rec.month_wise_interest || 0).toLocaleString('en-IN')} interest) · {rec.month_wise_count || 1} Month{(rec.month_wise_count || 1) > 1 ? 's' : ''}
+                          <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }} title="Daily Live Current Market Value based on today's metal rate">
+                            <i className="fa-solid fa-chart-line" style={{ fontSize: '0.65rem' }} />
+                            <span>₹{liveMarketVal.toLocaleString('en-IN')}</span>
+                            <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 400 }}>(Live Market)</span>
                           </div>
                         </>
                       )}
                     </td>
-                  )}
-                  <td style={{ padding: '10px 12px' }}>
-                    {isCashLoan ? (
-                      <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <i className="fa-solid fa-money-bill-wave" /> Cash
-                      </span>
-                    ) : (
-                      <>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                          ₹{Number(rec.item_total_value).toLocaleString('en-IN')}
+                    <td style={{ padding: '10px 12px' }}>
+                      {rec.status?.toUpperCase() === 'OPEN' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmCompleteRecord(rec);
+                              setEditableSettlementInterest(Number(rec.month_wise_interest || 0));
+                            }}
+                            title="Click to complete/settle this loan"
+                            style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.25)', transition: 'all 0.2s' }}
+                          >
+                            <i className="fa-solid fa-clock-rotate-left" /> Pending
+                          </button>
+                          {isRecordOverdue(rec) && (
+                            <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.66rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <i className="fa-solid fa-triangle-exclamation" /> Overdue
+                            </span>
+                          )}
                         </div>
-                        <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }} title="Daily Live Current Market Value based on today's metal rate">
-                          <i className="fa-solid fa-chart-line" style={{ fontSize: '0.65rem' }} />
-                          <span>₹{liveMarketVal.toLocaleString('en-IN')}</span>
-                          <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 400 }}>(Live Market)</span>
-                        </div>
-                      </>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    {rec.status?.toUpperCase() === 'OPEN' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setConfirmCompleteRecord(rec);
-                            setEditableSettlementInterest(Number(rec.month_wise_interest || 0));
-                          }}
-                          title="Click to complete/settle this loan"
-                          style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.25)', transition: 'all 0.2s' }}
-                        >
-                          <i className="fa-solid fa-clock-rotate-left" /> Pending
-                        </button>
-                        {isRecordOverdue(rec) && (
-                          <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.66rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <i className="fa-solid fa-triangle-exclamation" /> Overdue
+                      ) : (
+                        <div>
+                          <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, background: '#d1fae5', color: '#047857', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="fa-solid fa-circle-check" /> Completed
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <div>
-                        <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, background: '#d1fae5', color: '#047857', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <i className="fa-solid fa-circle-check" /> Completed
-                        </span>
-                        {rec.closing_date && (
-                          <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <i className="fa-solid fa-calendar-check" style={{ fontSize: '0.65rem' }} />
-                            {rec.closing_date}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+                          {rec.closing_date && (
+                            <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <i className="fa-solid fa-calendar-check" style={{ fontSize: '0.65rem' }} />
+                              {rec.closing_date}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -1196,7 +1210,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                       {/* Item Name */}
                       <div>
                         <label style={labelStyle}>Item Name *</label>
-                        <input type="text" required placeholder="e.g. 22K Gold Bangle Set" value={form.item_name} onChange={e => setForm(f => ({ ...f, item_name: e.target.value }))} style={inputStyle} />
+                        <input type="text" required placeholder="e.g. 22K Gold Bangle Set" value={form.item_name} onChange={e => setForm(f => ({ ...f, item_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
                       </div>
 
                       {/* Weight */}
@@ -1209,6 +1223,18 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                       <div>
                         <label style={labelStyle}>Item Purity (%) *</label>
                         <input type="number" required step="0.01" min="1" max="100" placeholder="70.00" value={form.item_purity_percent} onChange={e => setForm(f => ({ ...f, item_purity_percent: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={inputStyle} />
+                      </div>
+
+                      {/* Deduction Name */}
+                      <div>
+                        <label style={labelStyle}>Item Deduction Name</label>
+                        <input type="text" placeholder="e.g. Stones / Enamel / Wax" value={form.item_deduction_name} onChange={e => setForm(f => ({ ...f, item_deduction_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
+                      </div>
+
+                      {/* Deduction Weight */}
+                      <div>
+                        <label style={labelStyle}>Item Deduction Weight (Grams)</label>
+                        <input type="number" step="0.001" min="0" placeholder="0.000" value={form.item_deduction_weight} onChange={e => setForm(f => ({ ...f, item_deduction_weight: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={inputStyle} />
                       </div>
                     </>
                   )}
@@ -1224,7 +1250,9 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                       <div>
                         <span style={{ fontSize: '0.68rem', color: '#64748b' }}>Pure Metal Weight</span>
                         <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>{pureWeight.toFixed(3)} grams</div>
-                        <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{form.item_weight_grams}g × {form.item_purity_percent}%</span>
+                        <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                          {deductionWeight > 0 ? `(${form.item_weight_grams}g × ${form.item_purity_percent}%) - ${form.item_deduction_weight}g` : `${form.item_weight_grams}g × ${form.item_purity_percent}%`}
+                        </span>
                       </div>
                       <div>
                         <span style={{ fontSize: '0.68rem', color: '#64748b' }}>Current {form.item_metal_type === 'gold' ? 'Gold' : 'Silver'} Buy Rate</span>
@@ -1237,6 +1265,12 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                         <span style={{ fontSize: '0.68rem', color: '#b45309' }}>{pureWeight.toFixed(3)}g × ₹{ratePerGram}/g</span>
                       </div>
                     </div>
+                    {form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue && (
+                      <div style={{ marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px solid #fde68a', color: '#dc2626', fontSize: '0.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '0.85rem' }} />
+                        <span>Warning: Entered Loan Amount (₹{Number(form.amount).toLocaleString('en-IN')}) exceeds Total Asset Value (₹{itemTotalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })})</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1256,12 +1290,12 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                   {/* Name */}
                   <div>
                     <label style={labelStyle}>First Name *</label>
-                    <input type="text" required placeholder="Ramesh" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} style={inputStyle} />
+                    <input type="text" required placeholder="Ramesh" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
                   </div>
                   {/* Surname */}
                   <div>
                     <label style={labelStyle}>Surname *</label>
-                    <input type="text" required placeholder="Patel" value={form.customer_surname} onChange={e => setForm(f => ({ ...f, customer_surname: e.target.value }))} style={inputStyle} />
+                    <input type="text" required placeholder="Patel" value={form.customer_surname} onChange={e => setForm(f => ({ ...f, customer_surname: capitalizeWords(e.target.value) }))} style={textInputStyle} />
                   </div>
                   {/* Phone */}
                   <div>
@@ -1271,12 +1305,17 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                   {/* Address */}
                   <div>
                     <label style={labelStyle}>Address *</label>
-                    <input type="text" required placeholder="Main Street, House No. 12, Hyderabad" value={form.customer_address} onChange={e => setForm(f => ({ ...f, customer_address: e.target.value }))} style={inputStyle} />
+                    <input type="text" required placeholder="Main Street, House No. 12, Hyderabad" value={form.customer_address} onChange={e => setForm(f => ({ ...f, customer_address: capitalizeWords(e.target.value) }))} style={textInputStyle} />
                   </div>
                   {/* Amount */}
                   <div>
                     <label style={labelStyle}>Loan Amount (Principal ₹) *</label>
-                    <input type="number" required min="1" placeholder="50000" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={{ ...inputStyle, fontWeight: 700, color: '#0f172a' }} />
+                    <input type="number" required min="1" placeholder="50000" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={{ ...inputStyle, fontWeight: 700, color: form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#dc2626' : '#0f172a', borderColor: form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#ef4444' : '#cbd5e1' }} />
+                    {form.item_metal_type !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue && (
+                      <span style={{ marginTop: '4px', padding: '3px 8px', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.68rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <i className="fa-solid fa-triangle-exclamation" /> Loan amount exceeded
+                      </span>
+                    )}
                   </div>
                   {/* Rate (Custom Floating Dropdown matching user screenshot) */}
                   <div style={{ position: 'relative' }} ref={rateDropdownRef}>
@@ -1678,6 +1717,13 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
   background: '#ffffff',
   boxSizing: 'border-box',
+};
+
+const capitalizeWords = (str: string) => str.replace(/\b\w/g, char => char.toUpperCase());
+
+const textInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  textTransform: 'capitalize',
 };
 
 export default FinanceModule;

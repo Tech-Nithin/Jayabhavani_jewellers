@@ -217,6 +217,9 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     timeline_months,
     item_name,
     item_weight_grams,
+    item_deduction_name,
+    item_deduction_weight,
+    item_deduction_weight_grams,
     item_purity_percent,
     item_metal_type,
     item_metal_rate_per_gram,
@@ -233,7 +236,12 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, message: 'Missing required loan fields' });
   }
 
-  const payload = {
+  const grossWeight = isCash ? 0 : Number(item_weight_grams || 0);
+  const purityPct = isCash ? 0 : Number(item_purity_percent || 0);
+  const deductionWt = isCash ? 0 : Number(item_deduction_weight_grams ?? item_deduction_weight ?? 0);
+  const ratePerGram = isCash ? 0 : Number(item_metal_rate_per_gram || 0);
+
+  const payload: any = {
     loan_date: loan_date || new Date().toISOString().split('T')[0],
     customer_name: String(customer_name).trim(),
     customer_surname: String(customer_surname).trim(),
@@ -243,10 +251,12 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     interest_rate_percent: Number(interest_rate_percent),
     timeline_months: Number(timeline_months),
     item_name: isCash ? 'Cash' : String(item_name).trim(),
-    item_weight_grams: isCash ? 0 : Number(item_weight_grams || 0),
-    item_purity_percent: isCash ? 0 : Number(item_purity_percent || 0),
+    item_weight_grams: grossWeight,
+    item_deduction_name: isCash ? '' : (item_deduction_name ? String(item_deduction_name).trim() : ''),
+    item_deduction_weight_grams: deductionWt,
+    item_purity_percent: purityPct,
     item_metal_type: String(item_metal_type),
-    item_metal_rate_per_gram: isCash ? 0 : Number(item_metal_rate_per_gram || 0),
+    item_metal_rate_per_gram: ratePerGram,
     item_image_url: item_image_url || null,
     status: 'OPEN',
   };
@@ -271,51 +281,20 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     }
 
     if (error || !data) {
-      console.warn('⚠️ Supabase insert into interests failed:', JSON.stringify(error || 'No data returned'));
-      const pureWt = Number(item_weight_grams) * (Number(item_purity_percent) / 100);
-      const monthlyInt = Number(amount) * (Number(interest_rate_percent) / 100);
-      const totalInt = monthlyInt * Number(timeline_months);
-
-      const fallbackRecord = {
-        id: String(fallbackLedger.length + 1),
-        customer_id: `CUST-${String(fallbackLedger.length + 1).padStart(2, '0')}`,
-        ...payload,
-        monthly_interest: monthlyInt,
-        total_interest: totalInt,
-        total_payable: Number(amount) + totalInt,
-        item_pure_weight: pureWt,
-        item_total_value: pureWt * Number(item_metal_rate_per_gram),
-        actual_timeline_till_date: '0 Mos 0 Days',
-        total_interest_till_today: 0,
-        total_payable_till_today: Number(amount),
-      };
-
-      fallbackLedger.unshift(fallbackRecord);
-      return res.json({ success: true, message: 'Loan created (in-memory mode)', record: fallbackRecord });
+      console.error('❌ Supabase insert into interests failed:', error);
+      return res.status(500).json({
+        success: false,
+        message: `not stored: ${error?.message || 'Database insertion failed'}`,
+      });
     }
 
     res.json({ success: true, message: 'Pledge loan record created successfully', record: data });
   } catch (err: any) {
-    const pureWt = Number(item_weight_grams) * (Number(item_purity_percent) / 100);
-    const monthlyInt = Number(amount) * (Number(interest_rate_percent) / 100);
-    const totalInt = monthlyInt * Number(timeline_months);
-
-    const fallbackRecord = {
-      id: String(fallbackLedger.length + 1),
-      customer_id: `CUST-${String(fallbackLedger.length + 1).padStart(4, '0')}`,
-      ...payload,
-      monthly_interest: monthlyInt,
-      total_interest: totalInt,
-      total_payable: Number(amount) + totalInt,
-      item_pure_weight: pureWt,
-      item_total_value: pureWt * Number(item_metal_rate_per_gram),
-      actual_timeline_till_date: '0 Mos 0 Days',
-      total_interest_till_today: 0,
-      total_payable_till_today: Number(amount),
-    };
-
-    fallbackLedger.unshift(fallbackRecord);
-    res.json({ success: true, message: 'Loan created (fallback mode)', record: fallbackRecord });
+    console.error('❌ Error creating loan record:', err);
+    return res.status(500).json({
+      success: false,
+      message: `not stored: ${err?.message || 'Server error'}`,
+    });
   }
 });
 

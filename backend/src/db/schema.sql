@@ -177,27 +177,29 @@ CREATE TABLE IF NOT EXISTS public.interests (
   ) STORED NULL,
   item_name TEXT NOT NULL,
   item_weight_grams NUMERIC(10, 3) NOT NULL,
+  item_deduction_name TEXT NULL,
+  item_deduction_weight_grams NUMERIC(10, 3) NOT NULL DEFAULT 0,
   item_purity_percent NUMERIC(5, 2) NOT NULL,
   item_metal_type TEXT NOT NULL,
-  item_pure_weight NUMERIC GENERATED ALWAYS AS (
+  item_pure_weight NUMERIC(10, 3) GENERATED ALWAYS AS (
     ROUND(
       (
-        (item_weight_grams * item_purity_percent) / (100)::numeric
+        ((item_weight_grams * item_purity_percent) / (100)::numeric) - COALESCE(item_deduction_weight_grams, 0)
       ),
       3
     )
-  ) STORED NULL,
+  ) STORED,
   item_metal_rate_per_gram NUMERIC(12, 2) NOT NULL,
-  item_total_value NUMERIC GENERATED ALWAYS AS (
+  item_total_value NUMERIC(12, 2) GENERATED ALWAYS AS (
     ROUND(
       (
         (
-          (item_weight_grams * item_purity_percent) / (100)::numeric
+          ((item_weight_grams * item_purity_percent) / (100)::numeric) - COALESCE(item_deduction_weight_grams, 0)
         ) * item_metal_rate_per_gram
       ),
       2
     )
-  ) STORED NULL,
+  ) STORED,
   item_image_url TEXT NULL,
   status TEXT NOT NULL DEFAULT 'OPEN'::text,
   final_consideration_interest_amount NUMERIC(12, 2) NULL,
@@ -206,7 +208,7 @@ CREATE TABLE IF NOT EXISTS public.interests (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   CONSTRAINT interests_pkey PRIMARY KEY (id),
-  CONSTRAINT interests_item_metal_type_check CHECK (item_metal_type = ANY (ARRAY['gold'::text, 'silver'::text])),
+  CONSTRAINT interests_item_metal_type_check CHECK (item_metal_type = ANY (ARRAY['gold'::text, 'silver'::text, 'cash'::text])),
   CONSTRAINT interests_status_check CHECK (status = ANY (ARRAY['OPEN'::text, 'CLOSED'::text]))
 );
 
@@ -226,6 +228,10 @@ GRANT ALL ON SEQUENCE public.interests_id_seq TO postgres, anon, authenticated, 
 ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS final_consideration_interest_amount NUMERIC(12, 2);
 ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS closing_date DATE DEFAULT CURRENT_DATE;
 ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS considered_type TEXT;
+ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS item_deduction_name TEXT;
+ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS item_deduction_weight_grams NUMERIC(10, 3) DEFAULT 0;
+
+
 
 
 
