@@ -37,6 +37,7 @@ interface LoanRecord {
   final_consideration_interest_amount?: number;
   closing_date?: string;
   considered_type?: string;
+  record_action?: string | null;
 }
 
 interface MetalRates {
@@ -50,12 +51,11 @@ const TIMELINE_MONTHS = Array.from({ length: 24 }, (_, i) => i + 1);
 // ── FinanceModule ──────────────────────────────────────────────────────────
 export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearch = '' }) => {
   const [ledger, setLedger] = useState<LoanRecord[]>([]);
-  const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(globalSearch);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'overdue' | 'deleted'>('all');
   const [metalFilter, setMetalFilter] = useState<'all' | 'gold' | 'silver' | 'cash'>('all');
   const [metalRates, setMetalRates] = useState<MetalRates>({ gold_rate_per_gram: 1420, silver_rate_per_gram: 25 });
   const [showModal, setShowModal] = useState(false);
@@ -66,6 +66,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // Full-size Image Preview Lightbox Modal State
   const [selectedLedgerImage, setSelectedLedgerImage] = useState<{ url: string; title: string; subtitle: string } | null>(null);
 
@@ -73,6 +77,11 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
   const [confirmCompleteRecord, setConfirmCompleteRecord] = useState<LoanRecord | null>(null);
   const [editableSettlementInterest, setEditableSettlementInterest] = useState<number>(0);
   const [completingLoan, setCompletingLoan] = useState(false);
+
+  // Edit & Delete State
+  const [editingRecord, setEditingRecord] = useState<LoanRecord | null>(null);
+  const [deleteConfirmRecord, setDeleteConfirmRecord] = useState<LoanRecord | null>(null);
+  const [actionUpdating, setActionUpdating] = useState<string | null>(null);
 
   // Custom Dropdown Popover States
   const [openRateSelect, setOpenRateSelect] = useState(false);
@@ -173,6 +182,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
 
   useEffect(() => { setSearchTerm(globalSearch); }, [globalSearch]);
   useEffect(() => { fetchData(); fetchMetalRates(); }, []);
+  useEffect(() => { setCurrentPage(1); }, [statusFilter, metalFilter, searchTerm, startDate, endDate]);
 
   // Prevent mouse wheel from changing input values when scrolling over focused number inputs
   useEffect(() => {
@@ -202,7 +212,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
     try {
       const res = await fetch(`${API_BASE}/finance/overview`);
       const data = await res.json();
-      if (data.success) { setLedger(data.ledger || []); setSummary(data.summary); }
+      if (data.success) { setLedger(data.ledger || []); }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -303,9 +313,106 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
 
   const handleCloseModal = () => {
     setShowModal(false);
+    setEditingRecord(null);
     setForm(emptyForm);
     setSelectedFile(null);
     setImagePreview(null);
+  };
+
+  const handleEditRecord = (rec: LoanRecord) => {
+    setEditingRecord(rec);
+    setForm({
+      loan_date: rec.loan_date || new Date().toISOString().split('T')[0],
+      customer_name: rec.customer_name || '',
+      customer_surname: rec.customer_surname || '',
+      customer_phone: rec.customer_phone || '',
+      customer_address: rec.customer_address || '',
+      amount: String(rec.amount || ''),
+      interest_rate_percent: String(rec.interest_rate_percent || '3'),
+      timeline_months: String(rec.timeline_months || '3'),
+      item_name: rec.item_name || '',
+      item_weight_grams: String(rec.item_weight_grams || ''),
+      item_deduction_name: rec.item_deduction_name || '',
+      item_deduction_weight: String(rec.item_deduction_weight_grams ?? rec.item_deduction_weight ?? ''),
+      item_purity_percent: String(rec.item_purity_percent || ''),
+      item_metal_type: (rec.item_metal_type as 'gold' | 'silver' | 'cash') || 'gold',
+      item_image_url: rec.item_image_url || '',
+    });
+    setImagePreview(rec.item_image_url || null);
+    setShowModal(true);
+  };
+
+  const handleUpdateRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+    const isCash = form.item_metal_type === 'cash';
+    setSubmitting(true);
+    try {
+      let finalImageUrl = form.item_image_url;
+      if (selectedFile) {
+        setImageUploading(true);
+        const formData = new FormData();
+        formData.append('image', selectedFile);
+        const uploadRes = await fetch(`${API_BASE}/finance/upload-image`, { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        if (!uploadData.success) {
+          alert('Image upload failed: ' + uploadData.message);
+          setSubmitting(false); setImageUploading(false); return;
+        }
+        finalImageUrl = uploadData.url;
+        setImageUploading(false);
+      }
+      const payload = {
+        loan_date: form.loan_date,
+        customer_name: form.customer_name,
+        customer_surname: form.customer_surname,
+        customer_phone: form.customer_phone,
+        customer_address: form.customer_address,
+        amount: Number(form.amount),
+        interest_rate_percent: Number(form.interest_rate_percent),
+        timeline_months: Number(form.timeline_months),
+        item_name: isCash ? 'Cash' : form.item_name,
+        item_weight_grams: isCash ? 0 : Number(form.item_weight_grams),
+        item_deduction_name: isCash ? '' : (form.item_deduction_name || ''),
+        item_deduction_weight_grams: isCash ? 0 : Number(form.item_deduction_weight || 0),
+        item_purity_percent: isCash ? 0 : Number(form.item_purity_percent),
+        item_metal_type: form.item_metal_type,
+        item_metal_rate_per_gram: isCash ? 0 : (ratePerGram || 0),
+        item_image_url: finalImageUrl || undefined,
+      };
+      const res = await fetch(`${API_BASE}/finance/debt/${editingRecord.id}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLedger(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...payload } : r));
+        handleCloseModal();
+        fetchData();
+      } else {
+        alert('Failed to update: ' + data.message);
+      }
+    } catch { alert('Server error updating loan.'); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleRecordAction = async (id: string, action: string | null) => {
+    setActionUpdating(id);
+    try {
+      const res = await fetch(`${API_BASE}/finance/debt/${id}/action`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record_action: action }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLedger(prev => prev.map(r => r.id === id ? { ...r, record_action: action } : r));
+      } else {
+        alert('Failed to update action: ' + data.message);
+      }
+    } catch { alert('Server error updating record action.'); }
+    finally { setActionUpdating(null); }
   };
 
   const handleCompleteLoan = async (rec: LoanRecord) => {
@@ -360,11 +467,16 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
     return true;
   });
 
-  const pendingMetalCount = metalFilteredLedger.filter(r => r.status === 'OPEN').length;
-  const completedMetalCount = metalFilteredLedger.filter(r => r.status === 'CLOSED').length;
-  const overdueMetalCount = metalFilteredLedger.filter(isRecordOverdue).length;
+  const pendingMetalCount = metalFilteredLedger.filter(r => r.status === 'OPEN' && r.record_action !== 'deleted').length;
+  const completedMetalCount = metalFilteredLedger.filter(r => r.status === 'CLOSED' && r.record_action !== 'deleted').length;
+  const overdueMetalCount = metalFilteredLedger.filter(r => isRecordOverdue(r) && r.record_action !== 'deleted').length;
+  const deletedMetalCount = metalFilteredLedger.filter(r => r.record_action === 'deleted').length;
 
   const filteredLedger = metalFilteredLedger.filter(rec => {
+    // Deleted tab: show only deleted records
+    if (statusFilter === 'deleted') return rec.record_action === 'deleted';
+    // All other tabs: exclude deleted records
+    if (rec.record_action === 'deleted') return false;
     if (statusFilter === 'pending' && rec.status !== 'OPEN') return false;
     if (statusFilter === 'completed' && rec.status !== 'CLOSED') return false;
     if (statusFilter === 'overdue' && !isRecordOverdue(rec)) return false;
@@ -392,6 +504,23 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
     if (endDate && d > new Date(endDate)) return false;
     return match;
   });
+
+  // ── KPI values computed live from metalFilteredLedger ──────────────────
+  const kpiOpenLoans = metalFilteredLedger.filter(r => r.status === 'OPEN' && r.record_action !== 'deleted');
+  const kpiClosedLoans = metalFilteredLedger.filter(r => r.status === 'CLOSED' && r.record_action !== 'deleted');
+  const kpiTotalDebt = kpiOpenLoans.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const kpiTotalInterest = metalFilteredLedger
+    .filter(r => r.record_action !== 'deleted')
+    .reduce((acc, r) => {
+      const interest = r.status === 'CLOSED'
+        ? Number(r.final_consideration_interest_amount ?? r.total_interest_till_today ?? 0)
+        : Number(r.month_wise_interest || 0);
+      return acc + interest;
+    }, 0);
+
+  // ── Pagination derived ──────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(filteredLedger.length / pageSize));
+  const paginatedLedger = filteredLedger.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // ────────────────────────────────────────────────────────────────────────
   return (
@@ -426,7 +555,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
         </div>
       </div>
 
-      {/* ── Summary Cards (First 2 Gold, Next 2 Silver - Styled like CustomerDirectoryView) ── */}
+      {/* ── Summary Cards ── */}
       <style>{`
         .finance-kpi-grid {
           display: grid;
@@ -447,10 +576,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
       `}</style>
       <div className="finance-kpi-grid">
         {[
-          { label: 'TOTAL DEBT PRINCIPAL', value: `₹${(summary?.totalDebtIssued || 0).toLocaleString('en-IN')}`, sub: 'Active loan capital', icon: 'fa-briefcase', isGold: true },
-          { label: 'INTEREST ACCRUED', value: `₹${(summary?.totalInterestEarned || 0).toLocaleString('en-IN')}`, sub: 'Live per-month interest', icon: 'fa-chart-line', isGold: true },
-          { label: 'OPEN LOAN ACCOUNTS', value: String(summary?.activeOpenLoans || 0), sub: 'Active interest monthly', icon: 'fa-key', isGold: false },
-          { label: 'CLOSED ACCOUNTS', value: String(summary?.totalClosedLoans || 0), sub: 'Fully settled', icon: 'fa-circle-check', isGold: false },
+          { label: 'TOTAL DEBT PRINCIPAL', value: `₹${kpiTotalDebt.toLocaleString('en-IN')}`, sub: metalFilter === 'all' ? 'Active loan capital' : `Active capital – ${metalFilter.toUpperCase()}`, icon: 'fa-briefcase', isGold: true },
+          { label: 'INTEREST ACCRUED', value: `₹${Math.round(kpiTotalInterest).toLocaleString('en-IN')}`, sub: metalFilter === 'all' ? 'Live per-month interest' : `Interest – ${metalFilter.toUpperCase()}`, icon: 'fa-chart-line', isGold: true },
+          { label: 'OPEN LOAN ACCOUNTS', value: String(kpiOpenLoans.length), sub: metalFilter === 'all' ? 'Active interest monthly' : `Active – ${metalFilter.toUpperCase()}`, icon: 'fa-key', isGold: false },
+          { label: 'CLOSED ACCOUNTS', value: String(kpiClosedLoans.length), sub: metalFilter === 'all' ? 'Fully settled' : `Settled – ${metalFilter.toUpperCase()}`, icon: 'fa-circle-check', isGold: false },
         ].map((card, i) => (
           <div
             key={i}
@@ -623,6 +752,28 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
             >
               <i className="fa-solid fa-triangle-exclamation" /> Overdue ({overdueMetalCount})
             </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('deleted')}
+              style={{
+                padding: '5px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: statusFilter === 'deleted' ? 'linear-gradient(135deg, #6b7280 0%, #374151 100%)' : 'transparent',
+                color: statusFilter === 'deleted' ? '#ffffff' : '#64748b',
+                boxShadow: statusFilter === 'deleted' ? '0 2px 6px rgba(55, 65, 81, 0.35)' : 'none',
+                transition: 'all 0.2s',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              <i className="fa-solid fa-trash" /> Deleted ({deletedMetalCount})
+            </button>
           </div>
 
           {/* Line 2: Gold & Silver Metal Filter Toggle Bar */}
@@ -722,7 +873,24 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
             <p>Loading records...</p>
           </div>
         ) : (
-          <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+          <>
+            {/* Pagination controls top bar */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                Showing <strong>{filteredLedger.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong>–<strong>{Math.min(currentPage * pageSize, filteredLedger.length)}</strong> of <strong>{filteredLedger.length}</strong> records
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Rows per page:</label>
+                <select
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '7px', padding: '3px 8px', fontSize: '0.78rem', color: '#0f172a', background: '#ffffff', cursor: 'pointer', outline: 'none' }}
+                >
+                  {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </div>
+            <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #eaecf0', background: '#f8fafc', color: '#475569' }}>
                 <th style={{ padding: '10px 12px' }}>S.No</th>
@@ -735,12 +903,13 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                 <th style={{ padding: '10px 12px' }}>Total Amount</th>
                 <th style={{ padding: '10px 12px' }}>Item Value</th>
                 <th style={{ padding: '10px 12px' }}>Status</th>
+                <th style={{ padding: '10px 12px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredLedger.length === 0 ? (
-                <tr><td colSpan={10} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No loan records found.</td></tr>
-              ) : filteredLedger.map((rec, index) => {
+                <tr><td colSpan={11} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No loan records found.</td></tr>
+              ) : paginatedLedger.map((rec, index) => {
                 const isCashLoan = rec.item_metal_type?.toLowerCase() === 'cash' || rec.item_name?.toLowerCase() === 'cash';
                 const recDeductionWt = Number(rec.item_deduction_weight_grams ?? rec.item_deduction_weight ?? 0);
                 const recRawPureWt = (Number(rec.item_weight_grams || 0) * (Number(rec.item_purity_percent || 100) / 100));
@@ -893,13 +1062,105 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
                         </div>
                       )}
                     </td>
+                    {/* ── Actions Column ── */}
+                    <td style={{ padding: '10px 12px' }}>
+                      {statusFilter === 'deleted' ? (
+                        // Deleted tab: show Undo button
+                        <button
+                          type="button"
+                          onClick={() => handleRecordAction(rec.id, null)}
+                          disabled={actionUpdating === rec.id}
+                          title="Undo delete — restore this record"
+                          style={{ padding: '5px 12px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', color: '#ffffff', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)', opacity: actionUpdating === rec.id ? 0.6 : 1 }}
+                        >
+                          {actionUpdating === rec.id ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-rotate-left" />} Undo
+                        </button>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleEditRecord(rec)}
+                            title="Edit this loan record"
+                            style={{ width: '30px', height: '30px', border: '1px solid #c7d2fe', borderRadius: '7px', background: '#eef2ff', color: '#4f46e5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#6366f1'; e.currentTarget.style.color = '#ffffff'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.color = '#4f46e5'; }}
+                          >
+                            <i className="fa-solid fa-pen-to-square" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmRecord(rec)}
+                            title="Delete this loan record"
+                            style={{ width: '30px', height: '30px', border: '1px solid #fecaca', borderRadius: '7px', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = '#ffffff'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                          >
+                            <i className="fa-solid fa-trash" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          {/* Pagination Footer */}
+          {filteredLedger.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                <button type="button" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === 1 ? '#f8fafc' : '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#475569', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>«</button>
+                <button type="button" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === 1 ? '#f8fafc' : '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#475569', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>‹ Prev</button>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', padding: '4px 10px' }}>Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></span>
+                <button type="button" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === totalPages ? '#f8fafc' : '#ffffff', color: currentPage === totalPages ? '#cbd5e1' : '#475569', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>Next ›</button>
+                <button type="button" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === totalPages ? '#f8fafc' : '#ffffff', color: currentPage === totalPages ? '#cbd5e1' : '#475569', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>»</button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
+
+      {/* ── Delete Confirmation Dialog ── */}
+      {deleteConfirmRecord && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#ffffff', borderRadius: '18px', width: '100%', maxWidth: '420px', padding: '1.75rem', boxShadow: '0 24px 64px rgba(15,23,42,0.25)', border: '1px solid #fee2e2' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#dc2626', flexShrink: 0 }}>
+                <i className="fa-solid fa-trash" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>Delete Loan Record?</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>This record will be moved to the Deleted tab. You can undo this action.</div>
+              </div>
+            </div>
+            <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.75rem', marginBottom: '1.25rem', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{deleteConfirmRecord.customer_name} {deleteConfirmRecord.customer_surname}</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{deleteConfirmRecord.item_name} · ₹{Number(deleteConfirmRecord.amount).toLocaleString('en-IN')} · {deleteConfirmRecord.loan_date}</div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmRecord(null)}
+                style={{ flex: 1, padding: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', color: '#475569' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionUpdating === deleteConfirmRecord.id}
+                onClick={async () => {
+                  await handleRecordAction(deleteConfirmRecord.id, 'deleted');
+                  setDeleteConfirmRecord(null);
+                }}
+                style={{ flex: 1, padding: '10px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', opacity: actionUpdating === deleteConfirmRecord.id ? 0.7 : 1 }}
+              >
+                {actionUpdating === deleteConfirmRecord.id ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-trash" />} Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal Overlay ── */}
       {showModal && (
@@ -909,12 +1170,12 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
             {/* ── Modal Header ── */}
             <div style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid #eaecf0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#ffffff', zIndex: 10, borderRadius: '24px 24px 0 0', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#e0e7ff', padding: '2px 10px', borderRadius: '20px', fontSize: '0.68rem', color: '#4338ca', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-                  <i className="fa-solid fa-scale-balanced" /> Girvi Loan Processing
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: editingRecord ? '#fef3c7' : '#e0e7ff', padding: '2px 10px', borderRadius: '20px', fontSize: '0.68rem', color: editingRecord ? '#92400e' : '#4338ca', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                  <i className={editingRecord ? 'fa-solid fa-pen-to-square' : 'fa-solid fa-scale-balanced'} /> {editingRecord ? 'Edit Loan Record' : 'Girvi Loan Processing'}
                 </div>
                 <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 800, letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="fa-solid fa-hand-holding-dollar" style={{ color: '#6366f1' }} />
-                  Issue New Pledge Loan
+                  <i className={editingRecord ? 'fa-solid fa-pen-to-square' : 'fa-solid fa-hand-holding-dollar'} style={{ color: editingRecord ? '#d97706' : '#6366f1' }} />
+                  {editingRecord ? 'Edit Pledge Loan' : 'Issue New Pledge Loan'}
                 </h3>
               </div>
 
@@ -938,7 +1199,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} style={{ padding: '1.75rem' }}>
+            <form onSubmit={editingRecord ? handleUpdateRecord : handleSubmit} style={{ padding: '1.75rem' }}>
 
               {/* ── SECTION 1 (FIRST): Pledged Asset Details & Live Valuation ── */}
               <div style={{ background: '#fffbeb', borderRadius: '18px', padding: '1.25rem', border: '1px solid #fde68a', marginBottom: '1.5rem' }}>

@@ -350,4 +350,77 @@ router.patch('/debt/:id/close', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/finance/debt/:id/action
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/debt/:id/action', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { record_action } = req.body || {};
+
+  try {
+    const { data, error } = await supabase
+      .from('interests')
+      .update({ record_action: record_action ?? null, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('⚠️ Supabase update record_action failed:', error?.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    res.json({ success: true, message: 'Record action updated', record: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err?.message || 'Server error' });
+  }
+});
+
+// PATCH /api/finance/debt/:id/update
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/debt/:id/update', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const {
+    loan_date, customer_name, customer_surname, customer_phone, customer_address,
+    amount, interest_rate_percent, timeline_months,
+    item_name, item_weight_grams, item_deduction_name, item_deduction_weight_grams,
+    item_purity_percent, item_metal_type, item_metal_rate_per_gram, item_image_url,
+  } = req.body;
+
+  const updateFields: any = { updated_at: new Date().toISOString() };
+  if (loan_date !== undefined) updateFields.loan_date = loan_date;
+  if (customer_name !== undefined) updateFields.customer_name = String(customer_name).trim();
+  if (customer_surname !== undefined) updateFields.customer_surname = String(customer_surname).trim();
+  if (customer_phone !== undefined) updateFields.customer_phone = String(customer_phone).trim();
+  if (customer_address !== undefined) updateFields.customer_address = String(customer_address).trim();
+  if (amount !== undefined) updateFields.amount = Number(amount);
+  if (interest_rate_percent !== undefined) updateFields.interest_rate_percent = Number(interest_rate_percent);
+  if (timeline_months !== undefined) updateFields.timeline_months = Number(timeline_months);
+  if (item_name !== undefined) updateFields.item_name = String(item_name).trim();
+  if (item_weight_grams !== undefined) updateFields.item_weight_grams = Number(item_weight_grams);
+  if (item_deduction_name !== undefined) updateFields.item_deduction_name = String(item_deduction_name ?? '').trim();
+  if (item_deduction_weight_grams !== undefined) updateFields.item_deduction_weight_grams = Number(item_deduction_weight_grams);
+  if (item_purity_percent !== undefined) updateFields.item_purity_percent = Number(item_purity_percent);
+  if (item_metal_type !== undefined) updateFields.item_metal_type = String(item_metal_type);
+  if (item_metal_rate_per_gram !== undefined) updateFields.item_metal_rate_per_gram = Number(item_metal_rate_per_gram);
+  if (item_image_url !== undefined) updateFields.item_image_url = item_image_url || null;
+
+  try {
+    const { data, error } = await supabase
+      .from('interests')
+      .update(updateFields)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('⚠️ Supabase update loan failed:', error?.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    res.json({ success: true, message: 'Loan record updated successfully', record: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err?.message || 'Server error' });
+  }
+});
+
 export default router;
