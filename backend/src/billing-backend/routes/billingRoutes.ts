@@ -209,7 +209,7 @@ router.post('/calculate', (req: Request, res: Response) => {
   const currentRates = rates || activeMetalValues;
 
   if (items && Array.isArray(items)) {
-    const itemDetails: Record<string, { metalVal: number; makingVal: number; gstVal: number; lineTotal: number; pureWeight: number; rate: number }> = {};
+    const itemDetails: Record<string, { metalVal: number; netWeight: number; pureWeight: number; wastageVal: number; makingVal: number; additionalVal: number; lineTotal: number; rate: number }> = {};
     let totalSellValue = 0;
     let totalBuyCredit = 0;
 
@@ -222,20 +222,28 @@ router.post('/calculate', (req: Request, res: Response) => {
         : (isSell ? currentRates.silver_sell_value || 0 : currentRates.silver_buy_value || 0);
       const rate = customRate > 0 ? customRate : defaultRate;
 
-      const weightNum = Number(it.weight_grams) || 0;
-      const purityNum = Number(it.purity_percentage) || 0;
-      const makingNum = Number(it.making_charges_per_gram) || 0;
-      const gstNum = Number(it.gst_percent) || 0;
+      const grossWeight = Number(it.weight_grams) || 0;
+      const deductionWeight = Number(it.deduction_weight_grams) || 0;
+      const netWeight = Math.max(0, Number((grossWeight - deductionWeight).toFixed(3)));
 
-      const pureWeight = Number((weightNum * (purityNum / 100)).toFixed(3));
-      const weightUsed = isSell ? weightNum : pureWeight;
-      const metalVal = Number((weightUsed * rate).toFixed(2));
-      const makingVal = isSell ? Number(makingNum.toFixed(2)) : 0;
-      const subtotal = metalVal + makingVal;
-      const gstVal = isSell ? Number((subtotal * (gstNum / 100)).toFixed(2)) : 0;
-      const lineTotal = Number((subtotal + gstVal).toFixed(2));
+      const purityPercent = isSell ? 100 : (Number(it.purity_percentage) || 100);
+      const pureWeight = Number((netWeight * (purityPercent / 100)).toFixed(3));
 
-      itemDetails[it.id] = { metalVal, makingVal, gstVal, lineTotal, pureWeight, rate };
+      const wastagePercent = Number(it.wastage_percent) || 0;
+      const makingCharges = Number(it.making_charges_per_gram) || 0;
+      const additionalCharges = Number(it.additional_charges_amount) || 0;
+
+      const metalVal = isSell
+        ? Number((netWeight * rate).toFixed(2))
+        : Number((pureWeight * rate).toFixed(2));
+
+      const wastageVal = isSell ? Number(((wastagePercent / 100) * netWeight * rate).toFixed(2)) : 0;
+      const makingVal = isSell ? Number(makingCharges.toFixed(2)) : 0;
+      const additionalVal = isSell ? Number(additionalCharges.toFixed(2)) : 0;
+
+      const lineTotal = Number((metalVal + wastageVal + makingVal + additionalVal).toFixed(2));
+
+      itemDetails[it.id] = { metalVal, netWeight, pureWeight, wastageVal, makingVal, additionalVal, lineTotal, rate };
 
       if (isSell) {
         totalSellValue += lineTotal;
@@ -426,31 +434,40 @@ router.post('/create', async (req: Request, res: Response) => {
         : (isSell ? activeMetalValues.silver_sell_value : activeMetalValues.silver_buy_value);
       const rate = customRate > 0 ? customRate : defaultRate;
 
-      const wNum = Number(it.weight_grams) || 0;
-      const pNum = Number(it.purity_percentage) || 100;
-      const mNum = Number(it.making_charges_per_gram) || 0;
-      const gNum = Number(it.gst_percent) || 0;
+      const grossWeight = Number(it.weight_grams) || 0;
+      const deductionWeight = Number(it.deduction_weight_grams) || 0;
+      const netWeight = Math.max(0, Number((grossWeight - deductionWeight).toFixed(3)));
 
-      const pWeight = Number((wNum * (pNum / 100)).toFixed(3));
-      const wUsed = isSell ? wNum : pWeight;
-      const mVal = Number((wUsed * rate).toFixed(2));
-      const mChg = isSell ? Number(mNum.toFixed(2)) : 0;
-      const sub = mVal + mChg;
-      const gst = isSell ? Number((sub * (gNum / 100)).toFixed(2)) : 0;
-      const lineTotal = Number((sub + gst).toFixed(2));
+      const purityPercent = isSell ? 100 : (Number(it.purity_percentage) || 100);
+      const pureWeight = Number((netWeight * (purityPercent / 100)).toFixed(3));
 
-      sumPureW += pWeight;
-      sumMetalVal += mVal;
-      sumMaking += mChg;
-      sumGst += gst;
+      const wastagePercent = Number(it.wastage_percent) || 0;
+      const makingCharges = Number(it.making_charges_per_gram) || 0;
+      const additionalCharges = Number(it.additional_charges_amount) || 0;
+
+      const metalVal = isSell
+        ? Number((netWeight * rate).toFixed(2))
+        : Number((pureWeight * rate).toFixed(2));
+
+      const wastageVal = isSell ? Number(((wastagePercent / 100) * netWeight * rate).toFixed(2)) : 0;
+      const makingVal = isSell ? Number(makingCharges.toFixed(2)) : 0;
+      const additionalVal = isSell ? Number(additionalCharges.toFixed(2)) : 0;
+
+      const lineTotal = Number((metalVal + wastageVal + makingVal + additionalVal).toFixed(2));
+
+      sumPureW += pureWeight;
+      sumMetalVal += metalVal;
+      sumMaking += makingVal;
+      sumGst += wastageVal;
 
       return {
         ...it,
-        pureWeight: pWeight,
-        pure_weight_grams: pWeight,
-        metalVal: mVal,
-        makingVal: mChg,
-        gstVal: gst,
+        net_weight_grams: netWeight,
+        netWeight,
+        metalVal,
+        wastageVal,
+        makingVal,
+        additionalVal,
         appliedRate: rate,
         applied_rate_per_gram: rate,
         lineTotal,
@@ -636,40 +653,49 @@ router.put('/update/:id', async (req: Request, res: Response) => {
         ? (isSell ? activeMetalValues.gold_sell_value : activeMetalValues.gold_buy_value)
         : (isSell ? activeMetalValues.silver_sell_value : activeMetalValues.silver_buy_value);
 
-      const wNum = Number(it.weight_grams) || 0;
-      const pNum = Number(it.purity_percentage) || 100;
-      const mNum = Number(it.making_charges_per_gram) || 0;
-      const gNum = Number(it.gst_percent) || 0;
+      const grossWeight = Number(it.weight_grams) || 0;
+      const deductionWeight = Number(it.deduction_weight_grams) || 0;
+      const netWeight = Math.max(0, Number((grossWeight - deductionWeight).toFixed(3)));
 
-      const pWeight = Number((wNum * (pNum / 100)).toFixed(3));
-      const wUsed = isSell ? wNum : pWeight;
-      const mVal = Number((wUsed * rate).toFixed(2));
-      const mChg = isSell ? Number(mNum.toFixed(2)) : 0;
-      const sub = mVal + mChg;
-      const gst = isSell ? Number((sub * (gNum / 100)).toFixed(2)) : 0;
-      const lineTotal = Number((sub + gst).toFixed(2));
+      const purityPercent = isSell ? 100 : (Number(it.purity_percentage) || 100);
+      const pureWeight = Number((netWeight * (purityPercent / 100)).toFixed(3));
 
-      sumWeight += wNum;
-      pure_metal_weight += pWeight;
-      metal_value += mVal;
-      making_charges += mChg;
-      gst_amount += gst;
+      const wastagePercent = Number(it.wastage_percent) || 0;
+      const makingCharges = Number(it.making_charges_per_gram) || 0;
+      const additionalCharges = Number(it.additional_charges_amount) || 0;
+
+      const metalVal = isSell
+        ? Number((netWeight * rate).toFixed(2))
+        : Number((pureWeight * rate).toFixed(2));
+
+      const wastageVal = isSell ? Number(((wastagePercent / 100) * netWeight * rate).toFixed(2)) : 0;
+      const makingVal = isSell ? Number(makingCharges.toFixed(2)) : 0;
+      const additionalVal = isSell ? Number(additionalCharges.toFixed(2)) : 0;
+
+      const lineTotal = Number((metalVal + wastageVal + makingVal + additionalVal).toFixed(2));
+
+      sumWeight += grossWeight;
+      pure_metal_weight += pureWeight;
+      metal_value += metalVal;
+      making_charges += makingVal;
+      gst_amount += wastageVal;
 
       if (isSell) totalSell += lineTotal;
       else totalBuy += lineTotal;
 
-      it.pureWeight = pWeight;
-      it.pure_weight_grams = pWeight;
-      it.metalVal = mVal;
-      it.makingVal = mChg;
-      it.gstVal = gst;
+      it.netWeight = netWeight;
+      it.net_weight_grams = netWeight;
+      it.metalVal = metalVal;
+      it.wastageVal = wastageVal;
+      it.makingVal = makingVal;
+      it.additionalVal = additionalVal;
       it.appliedRate = rate;
       it.applied_rate_per_gram = rate;
       it.lineTotal = lineTotal;
       it.line_total = lineTotal;
 
       const itemName = it.product_name || `${it.metal_type} Item`;
-      names.push(`${itemName} (${wNum}g)`);
+      names.push(`${itemName} (${grossWeight}g)`);
     });
 
     final_weight = Number(sumWeight.toFixed(3));

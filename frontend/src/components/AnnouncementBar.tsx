@@ -70,55 +70,78 @@ export default function AnnouncementBar({
 
   if (mode === 'admin') {
     return (
-      <header
-        className="announcement-bar"
-        style={{
-          background: 'linear-gradient(90deg, var(--rose-deep), var(--rose-gold), var(--gold-deep))',
-          color: '#ffffff',
-          padding: isMobileScreen ? '10px 16px' : '10px 24px',
-          fontSize: '0.78rem',
-          letterSpacing: '0.06em',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-          position: 'sticky',
-          top: 0,
-          zIndex: 40,
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
-          border: 'none',
-          borderRadius: '0px',
-        }}
-      >
-        {/* Center: Live Gold & Silver Market Rates Ticker */}
-        <div
+      <>
+        <style>{`
+          @media (max-width: 1024px) {
+            .announcement-bar-admin {
+              padding: 7px 12px !important;
+            }
+            .announcement-bar-ticker {
+              font-size: 0.7rem !important;
+              gap: 0.4rem !important;
+              letter-spacing: 0.02em !important;
+            }
+            .announcement-bar-avatar {
+              width: 22px !important;
+              height: 22px !important;
+              font-size: 0.58rem !important;
+            }
+            .announcement-bar-name {
+              font-size: 0.65rem !important;
+            }
+          }
+        `}</style>
+        <header
+          className="announcement-bar announcement-bar-admin"
           style={{
-            flex: 1,
-            textAlign: 'center',
+            background: 'linear-gradient(90deg, var(--rose-deep), var(--rose-gold), var(--gold-deep))',
+            color: '#ffffff',
+            padding: isMobileScreen ? '8px 16px' : '10px 24px',
+            fontSize: '0.78rem',
+            letterSpacing: '0.06em',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.85rem',
-            color: '#ffffff',
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            letterSpacing: '0.06em',
-            flexWrap: 'wrap',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            position: 'sticky',
+            top: 0,
+            zIndex: 40,
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+            border: 'none',
+            borderRadius: '0px',
           }}
         >
-          {displayMessage}
-        </div>
-
-        {/* Right: User Profile Avatar - JBAdmin */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.22)', border: '1.5px solid #ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#ffffff', fontSize: '0.75rem' }}>
-            JB
+          {/* Center: Live Gold & Silver Market Rates Ticker */}
+          <div
+            className="announcement-bar-ticker"
+            style={{
+              flex: 1,
+              textAlign: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.85rem',
+              color: '#ffffff',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              flexWrap: 'wrap',
+            }}
+          >
+            {displayMessage}
           </div>
-          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
-            JB Admin
-          </span>
-        </div>
-      </header>
+
+          {/* Right: User Profile Avatar - JBAdmin */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            <div className="announcement-bar-avatar" style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.22)', border: '1.5px solid #ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#ffffff', fontSize: '0.75rem' }}>
+              JB
+            </div>
+            <span className="announcement-bar-name" style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
+              JB Admin
+            </span>
+          </div>
+        </header>
+      </>
     );
   }
 

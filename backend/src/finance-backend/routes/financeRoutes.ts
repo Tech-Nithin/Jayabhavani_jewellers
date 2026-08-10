@@ -217,22 +217,31 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     timeline_months,
     item_name,
     item_weight_grams,
+    item_deduction_name,
+    item_deduction_weight,
+    item_deduction_weight_grams,
     item_purity_percent,
     item_metal_type,
     item_metal_rate_per_gram,
     item_image_url,
   } = req.body;
 
+  const isCash = String(item_metal_type).toLowerCase() === 'cash';
+
   if (
     !customer_name || !customer_surname || !customer_phone ||
-    !amount || !interest_rate_percent || !timeline_months ||
-    !item_name || !item_weight_grams || !item_purity_percent ||
-    !item_metal_type || !item_metal_rate_per_gram
+    !amount || !interest_rate_percent || !timeline_months || !item_metal_type ||
+    (!isCash && (!item_name || item_weight_grams === undefined || item_weight_grams === null || item_purity_percent === undefined || item_purity_percent === null || item_metal_rate_per_gram === undefined || item_metal_rate_per_gram === null))
   ) {
     return res.status(400).json({ success: false, message: 'Missing required loan fields' });
   }
 
-  const payload = {
+  const grossWeight = isCash ? 0 : Number(item_weight_grams || 0);
+  const purityPct = isCash ? 0 : Number(item_purity_percent || 0);
+  const deductionWt = isCash ? 0 : Number(item_deduction_weight_grams ?? item_deduction_weight ?? 0);
+  const ratePerGram = isCash ? 0 : Number(item_metal_rate_per_gram || 0);
+
+  const payload: any = {
     loan_date: loan_date || new Date().toISOString().split('T')[0],
     customer_name: String(customer_name).trim(),
     customer_surname: String(customer_surname).trim(),
@@ -241,68 +250,51 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     amount: Number(amount),
     interest_rate_percent: Number(interest_rate_percent),
     timeline_months: Number(timeline_months),
-    item_name: String(item_name).trim(),
-    item_weight_grams: Number(item_weight_grams),
-    item_purity_percent: Number(item_purity_percent),
+    item_name: isCash ? 'Cash' : String(item_name).trim(),
+    item_weight_grams: grossWeight,
+    item_deduction_name: isCash ? '' : (item_deduction_name ? String(item_deduction_name).trim() : ''),
+    item_deduction_weight_grams: deductionWt,
+    item_purity_percent: purityPct,
     item_metal_type: String(item_metal_type),
-    item_metal_rate_per_gram: Number(item_metal_rate_per_gram),
+    item_metal_rate_per_gram: ratePerGram,
     item_image_url: item_image_url || null,
     status: 'OPEN',
   };
 
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('interests')
       .insert(payload)
       .select()
       .single();
 
+    if (error && isCash && error.message?.includes('interests_item_metal_type_check')) {
+      console.warn('⚠️ interests_item_metal_type_check active on Supabase. Retrying Cash insert with item_metal_type = gold...');
+      const fallbackPayload = { ...payload, item_metal_type: 'gold' };
+      const retryRes = await supabase
+        .from('interests')
+        .insert(fallbackPayload)
+        .select()
+        .single();
+      data = retryRes.data;
+      error = retryRes.error;
+    }
+
     if (error || !data) {
-      console.warn('⚠️ Supabase insert into interests failed:', JSON.stringify(error || 'No data returned'));
-      const pureWt = Number(item_weight_grams) * (Number(item_purity_percent) / 100);
-      const monthlyInt = Number(amount) * (Number(interest_rate_percent) / 100);
-      const totalInt = monthlyInt * Number(timeline_months);
-
-      const fallbackRecord = {
-        id: String(fallbackLedger.length + 1),
-        customer_id: `CUST-${String(fallbackLedger.length + 1).padStart(2, '0')}`,
-        ...payload,
-        monthly_interest: monthlyInt,
-        total_interest: totalInt,
-        total_payable: Number(amount) + totalInt,
-        item_pure_weight: pureWt,
-        item_total_value: pureWt * Number(item_metal_rate_per_gram),
-        actual_timeline_till_date: '0 Mos 0 Days',
-        total_interest_till_today: 0,
-        total_payable_till_today: Number(amount),
-      };
-
-      fallbackLedger.unshift(fallbackRecord);
-      return res.json({ success: true, message: 'Loan created (in-memory mode)', record: fallbackRecord });
+      console.error('❌ Supabase insert into interests failed:', error);
+      return res.status(500).json({
+        success: false,
+        message: `not stored: ${error?.message || 'Database insertion failed'}`,
+      });
     }
 
     res.json({ success: true, message: 'Pledge loan record created successfully', record: data });
   } catch (err: any) {
-    const pureWt = Number(item_weight_grams) * (Number(item_purity_percent) / 100);
-    const monthlyInt = Number(amount) * (Number(interest_rate_percent) / 100);
-    const totalInt = monthlyInt * Number(timeline_months);
-
-    const fallbackRecord = {
-      id: String(fallbackLedger.length + 1),
-      customer_id: `CUST-${String(fallbackLedger.length + 1).padStart(4, '0')}`,
-      ...payload,
-      monthly_interest: monthlyInt,
-      total_interest: totalInt,
-      total_payable: Number(amount) + totalInt,
-      item_pure_weight: pureWt,
-      item_total_value: pureWt * Number(item_metal_rate_per_gram),
-      actual_timeline_till_date: '0 Mos 0 Days',
-      total_interest_till_today: 0,
-      total_payable_till_today: Number(amount),
-    };
-
-    fallbackLedger.unshift(fallbackRecord);
-    res.json({ success: true, message: 'Loan created (fallback mode)', record: fallbackRecord });
+    console.error('❌ Error creating loan record:', err);
+    return res.status(500).json({
+      success: false,
+      message: `not stored: ${err?.message || 'Server error'}`,
+    });
   }
 });
 
