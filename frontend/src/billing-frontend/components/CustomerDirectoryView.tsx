@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { SeeBillModal } from './SeeBillModal';
+import { translations } from '../../utils/translations';
+import type { Language } from '../../utils/translations';
 
 interface CustomerDirectoryViewProps {
   customers: CustomerDirectoryRecord[];
   rates: GlobalRates | null;
   formatDate: (date?: string) => string;
+  lang?: Language;
   onBackToPOS?: () => void;
   onSelectCustomerForBill?: (name: string, phone: string) => void;
   onEditCustomerRecord?: (cust: CustomerDirectoryRecord) => void;
@@ -16,11 +19,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   customers,
   rates,
   formatDate,
+  lang = 'EN',
   onBackToPOS,
   onSelectCustomerForBill,
   onEditCustomerRecord,
   onViewInvoiceDetails,
 }) => {
+  const t = translations[lang] || translations.EN;
   void onSelectCustomerForBill;
   void onEditCustomerRecord;
   const [search, setSearch] = useState(() => {
@@ -259,11 +264,11 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                 transition: 'all 0.15s ease',
               }}
             >
-              <i className="fa-solid fa-arrow-left"></i> Billing
+              <i className="fa-solid fa-arrow-left"></i> {t.billing}
             </button>
           )}
           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className="fa-solid fa-address-book" style={{ color: '#0284c7' }}></i>Purchase History ({filtered.length})
+            <i className="fa-solid fa-address-book" style={{ color: '#0284c7' }}></i>{t.purchaseHistoryTitle} ({filtered.length})
           </h3>
         </div>
       </div>
@@ -371,7 +376,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥇</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Sold</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.goldSoldMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.goldSoldWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#78350f', marginTop: '2px' }}>{fmtAmt(kpi.goldSoldAmount)}</div>
@@ -401,13 +406,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥇</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Bought</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.goldBoughtMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.goldBoughtWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#78350f', marginTop: '2px' }}>{fmtAmt(kpi.goldBoughtAmount)}</div>
             <div style={{ fontSize: '0.65rem', fontWeight: 400, color: '#78350f', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-flask" style={{ fontSize: '0.6rem' }}></i>
-              Avg Purity: {fmtPurity(goldBoughtAvgPurity)}
+              {t.avgPurityLabel} {fmtPurity(goldBoughtAvgPurity)}
             </div>
           </div>
         </div>
@@ -435,7 +440,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥈</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Sold</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.silverSoldMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.silverSoldWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.silverSoldAmount)}</div>
@@ -465,13 +470,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥈</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Bought</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.silverBoughtMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.silverBoughtWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.silverBoughtAmount)}</div>
             <div style={{ fontSize: '0.65rem', fontWeight: 400, color: '#334155', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-flask" style={{ fontSize: '0.6rem' }}></i>
-              Avg Purity: {fmtPurity(silverBoughtAvgPurity)}
+              {t.avgPurityLabel} {fmtPurity(silverBoughtAvgPurity)}
             </div>
           </div>
         </div>
@@ -552,7 +557,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             <i className="fa-solid fa-magnifying-glass" style={{ color: '#94a3b8', fontSize: '0.78rem' }}></i>
             <input
               type="text"
-              placeholder="Search name or phone..."
+              placeholder={t.searchPlaceholder}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.80rem', color: '#0f172a' }}
@@ -585,7 +590,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               {startDate || endDate ? (
                 <span>{startDate || 'Start'} → {endDate || 'End'}</span>
               ) : (
-                <span>Filter Date Range</span>
+                <span>{t.filterDateRange}</span>
               )}
               <i className={`fa-solid fa-chevron-${showDateDropdown ? 'up' : 'down'}`} style={{ fontSize: '0.68rem', marginLeft: '4px' }}></i>
             </button>
@@ -608,7 +613,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                 }}
               >
                 <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Select Date Range</span>
+                  <span>{t.filterDateRange}</span>
                   <i className="fa-solid fa-xmark" style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => setShowDateDropdown(false)}></i>
                 </div>
 
@@ -660,7 +665,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       cursor: 'pointer',
                     }}
                   >
-                    Clear
+                    {t.cancelBtn}
                   </button>
 
                   <button
@@ -713,7 +718,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-layer-group" style={{ fontSize: '0.74rem' }}></i>
-            All ({totalBillsCount})
+            {t.allFilter} ({totalBillsCount})
           </button>
 
           <button
@@ -736,7 +741,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-cart-shopping" style={{ fontSize: '0.74rem' }}></i>
-            Sell ({sellBillsCount})
+            {t.sellFilter} ({sellBillsCount})
           </button>
 
           <button
@@ -759,7 +764,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-hand-holding-dollar" style={{ fontSize: '0.74rem' }}></i>
-            Buy ({buyBillsCount})
+            {t.buyFilter} ({buyBillsCount})
           </button>
 
           <button
@@ -782,7 +787,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-rotate" style={{ fontSize: '0.74rem' }}></i>
-            Exchange ({exchangeBillsCount})
+            {t.exchangeFilter} ({exchangeBillsCount})
           </button>
         </div>
       </div>
@@ -829,12 +834,12 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
         <table className="customer-history-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f4ede4', borderBottom: '1px solid #e6decb', color: '#4a3e35', fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
-              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}># / MODE</th>
-              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '14%' }}>DATE &amp; TIME</th>
-              <th className="col-customer" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '24%' }}>CUSTOMER</th>
-              <th className="col-product" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '28%' }}>PRODUCT (JBJ Sell/BUY)</th>
-              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '11%' }}>WEIGHT</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '13%' }}>FINAL AMOUNT</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}>{t.thMode}</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '14%' }}>{t.thDateTime}</th>
+              <th className="col-customer" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '24%' }}>{t.thCustomer}</th>
+              <th className="col-product" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '28%' }}>{t.thProduct}</th>
+              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '11%' }}>{t.thWeight}</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '13%' }}>{t.thFinalAmount}</th>
             </tr>
           </thead>
           <tbody>
@@ -1046,7 +1051,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                             ₹{displayAmt.toLocaleString('en-IN')}
                           </div>
                           <div style={{ fontSize: '0.60rem', color: isJbjPaid ? '#0284c7' : '#64748b', fontWeight: 400, marginTop: '1px' }}>
-                            {isJbjPaid ? '(JBJ paid)' : '(Customer paid)'}
+                            {isJbjPaid ? t.needToPayCustomerTag : t.customerPaidTag}
                           </div>
                         </td>
                       );

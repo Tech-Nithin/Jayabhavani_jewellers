@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import type { GlobalRates } from '../types';
+import { translations } from '../../utils/translations';
+import type { Language } from '../../utils/translations';
 
 interface EditRatesModalProps {
   rates: GlobalRates | null;
@@ -7,6 +9,7 @@ interface EditRatesModalProps {
   onClose: () => void;
   onUpdateRates: (tab: 'GOLD' | 'SILVER', goldBuy: number, goldSell: number, silverBuy: number, silverSell: number) => Promise<void>;
   formatDate: (date?: string) => string;
+  lang?: Language;
 }
 
 export const EditRatesModal: React.FC<EditRatesModalProps> = ({
@@ -15,7 +18,9 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
   onClose,
   onUpdateRates,
   formatDate,
+  lang = 'EN',
 }) => {
+  const t = translations[lang] || translations.EN;
   const [rateTab, setRateTab] = useState<'GOLD' | 'SILVER'>(activeMetalTab);
   const [goldBuyInput, setGoldBuyInput] = useState<number | string>(rates?.gold_buy_value || '');
   const [goldSellInput, setGoldSellInput] = useState<number | string>(rates?.gold_sell_value || '');
@@ -100,10 +105,10 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
             }}
           >
             <h3 style={{ margin: 0, color: '#0f172a', fontWeight: 800, fontSize: '1.15rem' }}>
-              Edit Live Market Rates
+              {t.editRatesTitle}
             </h3>
             <span style={{ fontSize: '0.72rem', color: '#1e293b', fontWeight: 700 }}>
-              Jaya Bhavani Jewellers
+              {t.storeName}
             </span>
           </div>
         </div>
@@ -126,7 +131,7 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
               boxShadow: rateTab === 'GOLD' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
             }}
           >
-            🥇 Gold Market Rates
+            🥇 {t.goldMetal} {t.editMarketRatesBtn}
           </button>
           <button
             type="button"
@@ -144,7 +149,7 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
               boxShadow: rateTab === 'SILVER' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
             }}
           >
-            🥈 Silver Market Rates
+            🥈 {t.silverMetal} {t.editMarketRatesBtn}
           </button>
         </div>
 
@@ -154,7 +159,7 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
             <div style={{ display: 'grid', gap: '1rem' }}>
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                  Gold Buy Rate (₹ / Gram)
+                  {t.goldBuyRateLabel}
                 </label>
                 <input
                   type="number"
@@ -166,13 +171,13 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
                   required
                 />
                 <small style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                  Last updated: {formatDate(rates?.gold_buy_value_updated_at)}
+                  {t.lastUpdated} {formatDate(rates?.gold_buy_value_updated_at)}
                 </small>
               </div>
 
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                  Gold Sell Rate (₹ / Gram)
+                  {t.goldSellRateLabel}
                 </label>
                 <input
                   type="number"
@@ -184,7 +189,7 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
                   required
                 />
                 <small style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                  Last updated: {formatDate(rates?.gold_sell_value_updated_at)}
+                  {t.lastUpdated} {formatDate(rates?.gold_sell_value_updated_at)}
                 </small>
               </div>
             </div>
@@ -192,7 +197,7 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
             <div style={{ display: 'grid', gap: '1rem' }}>
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                  Silver Buy Rate (₹ / Gram)
+                  {t.silverBuyRateLabel}
                 </label>
                 <input
                   type="number"
@@ -204,13 +209,13 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
                   required
                 />
                 <small style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                  Last updated: {formatDate(rates?.silver_buy_value_updated_at)}
+                  {t.lastUpdated} {formatDate(rates?.silver_buy_value_updated_at)}
                 </small>
               </div>
 
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                  Silver Sell Rate (₹ / Gram)
+                  {t.silverSellRateLabel}
                 </label>
                 <input
                   type="number"
@@ -222,7 +227,7 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
                   required
                 />
                 <small style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                  Last updated: {formatDate(rates?.silver_sell_value_updated_at)}
+                  {t.lastUpdated} {formatDate(rates?.silver_sell_value_updated_at)}
                 </small>
               </div>
             </div>
@@ -235,14 +240,14 @@ export const EditRatesModal: React.FC<EditRatesModalProps> = ({
               onClick={onClose}
               style={{ padding: '0.6rem 1.15rem', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}
             >
-              Cancel
+              {t.cancelBtn}
             </button>
             <button
               type="submit"
               disabled={updating}
               style={{ padding: '0.6rem 1.4rem', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', color: '#ffffff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(99,102,241,0.3)' }}
             >
-              {updating ? 'Broadcasting...' : 'Update & Broadcast Rates'}
+              {updating ? t.updatingRatesBtn : t.saveRatesBtn}
             </button>
           </div>
         </form>

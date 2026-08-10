@@ -6,6 +6,9 @@ import { InventoryModule } from '../inventory-frontend/InventoryModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
 import AnnouncementBar from './AnnouncementBar';
 
+import { translations } from '../utils/translations';
+import type { Language } from '../utils/translations';
+
 interface AdminDashboardProps {
   user?: { name: string; email: string };
   onLogout: () => void;
@@ -24,6 +27,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
+  const [lang, setLang] = useState<Language>('EN');
 
   // Silence unused state check
   void setGlobalSearch;
@@ -51,11 +55,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.history.pushState({}, '', url.toString());
   };
 
+  const t = translations[lang];
+
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-pie' },
-    { id: 'billing', label: 'Billing', icon: 'fa-solid fa-cash-register' },
-    { id: 'finance', label: 'Finance / Girvi', icon: 'fa-solid fa-scale-balanced' },
-    { id: 'inventory', label: 'Inventory', icon: 'fa-solid fa-boxes-stacked' },
+    { id: 'dashboard', label: t.dashboard, icon: 'fa-solid fa-chart-pie' },
+    { id: 'billing', label: t.billing, icon: 'fa-solid fa-cash-register' },
+    { id: 'finance', label: t.finance, icon: 'fa-solid fa-scale-balanced' },
+    { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-boxes-stacked' },
   ];
 
   return (
@@ -479,12 +485,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           isTabletOrMobile={isTabletOrMobile}
           isMobileScreen={isMobileScreen}
           onToggleMobileMenu={() => setMobileMenuOpen(true)}
+          lang={lang}
+          onToggleLang={() => setLang((prev) => (prev === 'EN' ? 'TE' : 'EN'))}
         />
         <main style={{ padding: isMobileScreen ? '0.5rem' : isTabletOrMobile ? '0.5rem 0.65rem' : '0.75rem 1rem', flex: 1 }}>
-          {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} />}
-          {currentTab === 'billing' && <BillingModule />}
-          {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} />}
-          {currentTab === 'inventory' && <InventoryModule globalSearch={globalSearch} />}
+          {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} lang={lang} />}
+          {currentTab === 'billing' && <BillingModule lang={lang} />}
+          {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} lang={lang} />}
+          {currentTab === 'inventory' && <InventoryModule globalSearch={globalSearch} lang={lang} />}
         </main>
       </div>
     </div>

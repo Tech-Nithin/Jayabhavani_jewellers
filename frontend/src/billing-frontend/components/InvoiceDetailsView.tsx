@@ -1,10 +1,13 @@
 import React from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { ReceiptPreview, downloadReceiptAsPNG } from './ReceiptPreview';
+import { translations } from '../../utils/translations';
+import type { Language } from '../../utils/translations';
 
 interface InvoiceDetailsViewProps {
   customerRecord: CustomerDirectoryRecord;
   rates: GlobalRates | null;
+  lang?: Language;
   onBack: () => void;
   onEdit: (invoice: any) => void;
 }
@@ -12,9 +15,11 @@ interface InvoiceDetailsViewProps {
 export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
   customerRecord,
   rates,
+  lang = 'EN',
   onBack,
   onEdit,
 }) => {
+  const t = translations[lang] || translations.EN;
   const inv = customerRecord.latestInvoice;
   let storedPayload: any = null;
 
@@ -104,7 +109,7 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
             boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
           }}
         >
-          <i className="fa-solid fa-arrow-left"></i> Back to Purchase History
+          <i className="fa-solid fa-arrow-left"></i> {t.backToHistoryBtn}
         </button>
 
         <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
@@ -126,7 +131,7 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
                 gap: '6px',
               }}
             >
-              <i className="fa-solid fa-pen-to-square"></i> Edit Invoice
+              <i className="fa-solid fa-pen-to-square"></i> {t.editInvoiceBtn}
             </button>
           )}
 
@@ -148,7 +153,7 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
               boxShadow: '0 4px 14px rgba(180,83,9,0.25)',
             }}
           >
-            <i className="fa-solid fa-download"></i> Download PNG Receipt
+            <i className="fa-solid fa-download"></i> {t.downloadPngBtn}
           </button>
         </div>
       </div>
@@ -169,6 +174,7 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
           netPayable={netPayable}
           createdDate={createdAtDate}
           updatedDate={updatedAtDate}
+          lang={lang}
           onDownloadPNG={() => downloadReceiptAsPNG(`centered-details-receipt-${inv?.id || '1'}`, customerRecord.name)}
         />
 

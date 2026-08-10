@@ -2,6 +2,9 @@ import React from 'react';
 import html2canvas from 'html2canvas';
 import type { BillItem, GlobalRates } from '../types';
 
+import { translations } from '../../utils/translations';
+import type { Language } from '../../utils/translations';
+
 interface ReceiptPreviewProps {
   receiptId: string;
   mode: 'SELL' | 'BUY' | 'EXCHANGE';
@@ -16,6 +19,7 @@ interface ReceiptPreviewProps {
   createdDate?: string;
   updatedDate?: string;
   billType?: 'SALE_DONE' | 'ESTIMATION';
+  lang?: Language;
   onDownloadPNG?: () => void;
 }
 
@@ -228,8 +232,11 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   createdDate,
   updatedDate,
   billType = 'SALE_DONE',
+  lang = 'EN',
   onDownloadPNG,
 }) => {
+  const t = translations[lang] || translations.EN;
+
   const getItemDetails = (item: any) => {
     const isGold = (item.metal_type || '').toUpperCase() === 'GOLD';
     const isSell = (item.item_type || '').toUpperCase() === 'SELL';
@@ -350,19 +357,19 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           </button>
 
           <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.5px' }}>
-            JAYA BHAVANI JEWELLERS
+            {t.storeName}
           </h4>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.62rem', color: '#0f172a', fontWeight: 700 }}>
-            4-3-4/A, Old bustand to kaman road, Patelpura, Siddipet, Telangana, 502103
+            {t.storeAddress}
           </p>
         </div>
 
         <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#475569', fontWeight: 700, marginBottom: '0.85rem' }}>
-          <div>DATE: {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}</div>
+          <div>{t.dateLabel} {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}</div>
           {updatedDate && (
             <div style={{ color: '#d97706', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-pen-to-square" style={{ fontSize: '0.6rem' }}></i>
-              LAST UPDATED: {formatReceiptDateTime(updatedDate)}
+              {t.lastUpdated} {formatReceiptDateTime(updatedDate)}
             </div>
           )}
         </div>
@@ -370,21 +377,21 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         {/* Transaction Mode & Customer Info */}
         <div style={{ borderBottom: '1px dashed #94a3b8', paddingBottom: '1rem', marginBottom: '1rem', fontSize: '0.7rem', color: '#334155' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ color: '#0f172a', fontWeight: 700 }}>MODE:</span>
+            <span style={{ color: '#0f172a', fontWeight: 700 }}>{t.modeLabel}</span>
             <strong style={{ color: billType === 'ESTIMATION' ? '#d97706' : (mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5') }}>
-              [{billType === 'ESTIMATION' ? 'ESTIMATION BILL' : (mode === 'SELL' ? 'JBJ SELLING BILL' : mode === 'BUY' ? 'JBJ BUYING BILL' : 'JBJ TRADE-IN EXCHANGE BILL')}]
+              [{billType === 'ESTIMATION' ? t.estimationBill : (mode === 'SELL' ? t.sellingBill : mode === 'BUY' ? t.buyingBill : t.exchangeBill)}]
             </strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 700 }}>CUSTOMER:</span>
-            <strong style={{ color: '#0f172a' }}>{customerName || 'Walk-in Customer'}</strong>
+            <span style={{ fontWeight: 700 }}>{t.customerLabel}</span>
+            <strong style={{ color: '#0f172a' }}>{customerName || t.walkInCustomer}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 700 }}>PHONE:</span>
+            <span style={{ fontWeight: 700 }}>{t.phoneLabel}</span>
             <strong style={{ color: '#0f172a' }}>{customerPhone || 'N/A'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 700 }}>ADDRESS:</span>
+            <span style={{ fontWeight: 700 }}>{t.addressLabel}</span>
             <strong style={{ color: '#0f172a' }}>{customerAddress || 'Siddipet, Telangana'}</strong>
           </div>
         </div>
@@ -409,37 +416,36 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             const customRate = Number(it.custom_rate_per_gram || it.customRate || it.appliedRate);
             const isGold = (it.metal_type || '').toUpperCase() === 'GOLD';
             const rate = customRate > 0 ? customRate : (isGold ? (isSell ? rates?.gold_sell_value : rates?.gold_buy_value) : (isSell ? rates?.silver_sell_value : rates?.silver_buy_value)) || 0;
-            const metalName = isGold ? 'Gold' : 'Silver';
 
             return (
               <div key={it.id || idx} style={{ background: 'rgba(248, 250, 252, 0.65)', borderRadius: '8px', padding: '0.65rem 0.75rem', marginBottom: '0.6rem', border: '1px solid #94a3b8', fontSize: '0.68rem', color: '#0f172a' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, borderBottom: '1px dashed #94a3b8', paddingBottom: '3px', marginBottom: '4px' }}>
                   <span>#{idx + 1} {it.product_name || (it.metal_type + ' Item')}</span>
                   <span style={{ color: isSell ? '#b45309' : '#0284c7', fontWeight: 800 }}>
-                    {isSell ? '[CUST BUYING]' : '[CUST SELLING]'}
+                    {isSell ? t.custBuyingTag : t.custSellingTag}
                   </span>
                 </div>
 
                 <div style={{ display: 'grid', gap: '2px', color: '#0f172a' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                    <span style={{ fontWeight: 700 }}>Metal Category:</span>
-                    <strong>{it.metal_type}</strong>
+                    <span style={{ fontWeight: 700 }}>{t.metalCategoryReceipt}</span>
+                    <strong>{isGold ? t.goldMetal : t.silverMetal}</strong>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                    <span style={{ fontWeight: 700 }}>Gross Item Weight:</span>
+                    <span style={{ fontWeight: 700 }}>{t.grossItemWeightReceipt}</span>
                     <strong>{formatMax2Decimals(details.grossWeight)} gm</strong>
                   </div>
 
                   {details.deductionWeight > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                      <span style={{ fontWeight: 700 }}>Deduction ({it.deduction_name || 'Stones/Wax'}):</span>
+                      <span style={{ fontWeight: 700 }}>{t.deductionReceipt} ({it.deduction_name || 'Stones/Wax'}):</span>
                       <strong>- {formatMax2Decimals(details.deductionWeight)} gm</strong>
                     </div>
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                    <span>Net {metalName} Weight:</span>
+                    <span>{isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel}:</span>
                     <strong>{formatMax2Decimals(details.netWeight)} gm</strong>
                   </div>
 
@@ -453,11 +459,11 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                   {!isSell && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
-                        <span>Item Quality:</span>
+                        <span>{t.itemQualityReceipt}</span>
                         <strong>{formatMax2Decimals(details.purityPercent)}%</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                        <span>Pure {metalName} Weight ({formatMax2Decimals(details.purityPercent)}% of {formatMax2Decimals(details.netWeight)}g):</span>
+                        <span>{isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel} ({formatMax2Decimals(details.purityPercent)}%):</span>
                         <strong>{formatMax2Decimals(details.pureWeight)} gm</strong>
                       </div>
                     </>
@@ -465,7 +471,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                     <span style={{ fontWeight: 700 }}>
-                      {metalName} Value (₹{rate}/g):
+                      {isGold ? t.goldValueReceipt : t.silverValueReceipt} (₹{rate}/g):
                     </span>
                     <strong style={{ color: '#0f172a', fontWeight: 700 }}>₹{details.metalVal.toLocaleString('en-IN')}</strong>
                   </div>
@@ -474,12 +480,12 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <>
                       {details.makingVal > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                          <span>Making Charges:</span>
+                          <span>{t.makingChargesReceipt}</span>
                           <strong>+ ₹{details.makingVal.toLocaleString('en-IN')}</strong>
                         </div>
                       )}
                       {details.additionalVal > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
                           <span>{it.additional_charges_name || 'Additional Charges'}:</span>
                           <strong>+ ₹{details.additionalVal.toLocaleString('en-IN')}</strong>
                         </div>
@@ -488,7 +494,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: isSell ? '#15803d' : '#0284c7', borderTop: '1px dashed #94a3b8', paddingTop: '3px', marginTop: '2px' }}>
-                    <span>Item Subtotal:</span>
+                    <span>{t.itemSubtotalReceipt}</span>
                     <strong>₹{details.lineTotal > 0 ? details.lineTotal.toLocaleString('en-IN') : '0'}</strong>
                   </div>
                 </div>
@@ -525,7 +531,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
           {mode === 'BUY' ? (
             <>
-              <div style={{ fontWeight: 800, color: '#0369a1', marginBottom: '4px' }}>Gross Buying Items:</div>
+              <div style={{ fontWeight: 800, color: '#0369a1', marginBottom: '4px' }}>{t.grossBuyingItems}</div>
               <div style={{ display: 'grid', gap: '3px', paddingLeft: '4px', marginBottom: '6px' }}>
                 {items.filter(i => i.item_type === 'BUY').map((it, idx) => {
                   const details = getItemDetails(it);
@@ -539,9 +545,9 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0369a1', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
-                  <div>GRAND TOTAL:</div>
+                  <div>{t.grandTotal}</div>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#0369a1' }}>
-                    (Need to pay to customer)
+                    {t.needToPayCustomer}
                   </div>
                 </div>
                 <div>₹{totalBuyCredit.toLocaleString('en-IN')}</div>
@@ -549,7 +555,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             </>
           ) : mode === 'SELL' ? (
             <>
-              <div style={{ fontWeight: 800, color: '#b45309', marginBottom: '4px' }}>Gross Selling Items:</div>
+              <div style={{ fontWeight: 800, color: '#b45309', marginBottom: '4px' }}>{t.grossSellingItems}</div>
               <div style={{ display: 'grid', gap: '3px', paddingLeft: '4px', marginBottom: '6px' }}>
                 {items.filter(i => i.item_type === 'SELL').map((it, idx) => {
                   const details = getItemDetails(it);
@@ -563,9 +569,9 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
-                  <div>GRAND TOTAL:</div>
+                  <div>{t.grandTotal}</div>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#475569' }}>
-                    (Customer should pay)
+                    {t.customerShouldPay}
                   </div>
                 </div>
                 <div>₹{totalSellValue.toLocaleString('en-IN')}</div>
@@ -574,18 +580,18 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontWeight: 700, color: '#b45309' }}>
-                <span>Gross Selling Total:</span>
+                <span>{t.grossSellingTotal}</span>
                 <span>₹{totalSellValue.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 700, color: '#0369a1' }}>
-                <span>Less Item Exchange Credit:</span>
+                <span>{t.lessExchangeCredit}</span>
                 <span>- ₹{totalBuyCredit.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
-                  <div>GRAND TOTAL:</div>
+                  <div>{t.grandTotal}</div>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: totalBuyCredit > totalSellValue ? '#0369a1' : '#475569' }}>
-                    {totalBuyCredit > totalSellValue ? '(Need to pay to customer)' : '(Customer should pay)'}
+                    {totalBuyCredit > totalSellValue ? t.needToPayCustomer : t.customerShouldPay}
                   </div>
                 </div>
                 <div style={{ fontSize: '1rem', fontWeight: 900 }}>₹{Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}</div>
@@ -607,7 +613,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             />
           </div>
           <small style={{ fontSize: '0.7rem', color: '#181f30ff', display: 'block', marginTop: '2px' }}>
-            Thank you for visiting Jaya Bhavani Jewellers!
+            {t.thankYouMessage}
           </small>
         </div>
       </div>

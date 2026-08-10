@@ -3,7 +3,11 @@ import { API_BASE } from '../config/apiConfig';
 import type { LoanRecord, MetalRates } from './types';
 import { IssueNewLoanModal, DeleteConfirmDialog, SettlementDialog } from './components';
 
-export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearch = '' }) => {
+import { translations } from '../utils/translations';
+import type { Language } from '../utils/translations';
+
+export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }> = ({ globalSearch = '', lang = 'EN' }) => {
+  const t = translations[lang] || translations.EN;
   const [ledger, setLedger] = useState<LoanRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(globalSearch);
@@ -198,10 +202,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string }> = ({ globalSearc
         <div>
           <h2 style={{ fontSize: '1.5rem', color: '#0f172a', fontWeight: 800, margin: 0 }}>
             <i className="fa-solid fa-scale-balanced" style={{ color: '#6366f1', marginRight: '8px' }} />
-            Girvi / Pledge Loan Ledger
+            {t.financeModuleTitle}
           </h2>
           <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.8rem' }}>
-            Customer pledge records with interest tracking — using live gold/silver buy rates
+            {t.financeModuleSub}
           </p>
         </div>
 

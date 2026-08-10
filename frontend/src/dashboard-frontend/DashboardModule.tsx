@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 
 import { API_BASE } from '../config/apiConfig';
 
+import { translations } from '../utils/translations';
+import type { Language } from '../utils/translations';
+
 interface ProductMetadata {
   id: string;
   name: string;
@@ -22,7 +25,8 @@ interface CustomerRecord {
   created_at: string;
 }
 
-export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSearch = '' }) => {
+export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language }> = ({ globalSearch = '', lang = 'EN' }) => {
+  const t = translations[lang] || translations.EN;
   const [products, setProducts] = useState<ProductMetadata[]>([]);
   const [invoices, setInvoices] = useState<CustomerRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState(globalSearch);
@@ -141,11 +145,11 @@ export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSea
         {/* Card 1: Total Revenue (GOLDEN) */}
         <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '0px', padding: '1.15rem', border: '1px solid #d99b26', boxShadow: '0 6px 20px rgba(180,83,9,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>TOTAL SALES REVENUE</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>{t.todaySales}</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>
               ₹{totalRevenue.toLocaleString('en-IN')}
             </div>
-            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>↑ +14.2% this month</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>↑ +14.2%</span>
           </div>
           <div style={{ width: '42px', height: '42px', borderRadius: '0px', background: '#b45309', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', border: '1px solid #92400e' }}>
             <i className="fa-solid fa-sack-dollar"></i>
@@ -155,11 +159,11 @@ export const DashboardModule: React.FC<{ globalSearch?: string }> = ({ globalSea
         {/* Card 2: Active Customers (GOLDEN) */}
         <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '0px', padding: '1.15rem', border: '1px solid #d99b26', boxShadow: '0 6px 20px rgba(180,83,9,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>ACTIVE CUSTOMERS</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 800, textTransform: 'uppercase' }}>{t.activeCustomers}</span>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#000000', margin: '2px 0' }}>
               {totalCustomers}
             </div>
-            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>Unique buyers logged</span>
+            <span style={{ fontSize: '0.7rem', color: '#000000', fontWeight: 700 }}>{t.walkInCustomer}</span>
           </div>
           <div style={{ width: '42px', height: '42px', borderRadius: '0px', background: '#b45309', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', border: '1px solid #92400e' }}>
             <i className="fa-solid fa-users"></i>

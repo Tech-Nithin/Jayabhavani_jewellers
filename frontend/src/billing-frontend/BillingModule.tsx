@@ -176,7 +176,15 @@ const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
   );
 };
 
-export const BillingModule: React.FC = () => {
+import { translations } from '../utils/translations';
+import type { Language } from '../utils/translations';
+
+interface BillingModuleProps {
+  lang?: Language;
+}
+
+export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => {
+  const t = translations[lang] || translations.EN;
   // Global Rates
   const [rates, setRates] = useState<GlobalRates | null>(null);
   const [editingRates, setEditingRates] = useState(false);
@@ -191,6 +199,7 @@ export const BillingModule: React.FC = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const getInitialItemsForMode = (m: 'SELL' | 'BUY' | 'EXCHANGE'): BillItem[] => {
     if (m === 'BUY') {
@@ -534,7 +543,14 @@ export const BillingModule: React.FC = () => {
   // Submit invoice
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName || items.length === 0) return;
+    const isNameMissing = !customerName.trim();
+    const isPhoneMissing = !customerPhone.trim() || customerPhone.trim().length < 10;
+
+    if (isNameMissing || isPhoneMissing || items.length === 0) {
+      setShowValidationErrors(true);
+      alert(`⚠️ Missing Customer Information:\n\nPlease fill in Customer Name and a valid 10-digit Phone Number before saving the bill.`);
+      return;
+    }
 
     // Validate deduction weights vs gross weights
     const invalidDeductionItem = items.find((it) => {
@@ -715,6 +731,7 @@ export const BillingModule: React.FC = () => {
         <InvoiceDetailsView
           customerRecord={selectedCustomerDetailsRecord}
           rates={rates}
+          lang={lang}
           onBack={() => {
             setSelectedCustomerDetailsRecord(null);
             handleSwitchView('CUSTOMERS');
@@ -734,6 +751,7 @@ export const BillingModule: React.FC = () => {
           customers={customerDirectory}
           rates={rates}
           formatDate={formatDate}
+          lang={lang}
           onBackToPOS={() => handleSwitchView('POS')}
           onSelectCustomerForBill={(name, phone) => {
             setCustomerName(name);
@@ -754,7 +772,7 @@ export const BillingModule: React.FC = () => {
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '0.5rem' }}>
               <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.35rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
-                Billing Screen
+                {t.billingScreenTitle}
               </h2>
 
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
@@ -777,7 +795,7 @@ export const BillingModule: React.FC = () => {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  <i className="fa-solid fa-address-book" style={{ fontSize: '0.74rem' }}></i> Purchase History
+                  <i className="fa-solid fa-address-book" style={{ fontSize: '0.74rem' }}></i> {t.purchaseHistoryBtn}
                 </button>
 
                 <button
@@ -799,13 +817,13 @@ export const BillingModule: React.FC = () => {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  <i className="fa-solid fa-sliders" style={{ fontSize: '0.74rem' }}></i> Edit Market Rates
+                  <i className="fa-solid fa-sliders" style={{ fontSize: '0.74rem' }}></i> {t.editMarketRatesBtn}
                 </button>
               </div>
             </div>
 
             <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.76rem' }}>
-              Gold &amp; Silver Selling, Buying, and Trade-in Exchange Billing
+              {t.billingScreenSub}
             </p>
           </div>
 
@@ -883,7 +901,7 @@ export const BillingModule: React.FC = () => {
                     boxShadow: mode === 'SELL' ? '0 3px 10px rgba(217, 119, 6, 0.25)' : 'none',
                   }}
                 >
-                  <i className="fa-solid fa-tag"></i> SELLING
+                  <i className="fa-solid fa-tag"></i> {t.sellingTab}
                 </button>
 
                 <button
@@ -924,7 +942,7 @@ export const BillingModule: React.FC = () => {
                     boxShadow: mode === 'BUY' ? '0 3px 10px rgba(30, 41, 59, 0.25)' : 'none',
                   }}
                 >
-                  <i className="fa-solid fa-money-bill-transfer"></i> BUYING
+                  <i className="fa-solid fa-money-bill-transfer"></i> {t.buyingTab}
                 </button>
 
                 <button
@@ -975,41 +993,77 @@ export const BillingModule: React.FC = () => {
                     boxShadow: mode === 'EXCHANGE' ? '0 3px 10px rgba(79, 70, 229, 0.25)' : 'none',
                   }}
                 >
-                  <i className="fa-solid fa-rotate"></i> TRADE-IN
+                  <i className="fa-solid fa-rotate"></i> {t.tradeInTab}
                 </button>
               </div>
 
               {/* Customer info */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>Customer Name</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: showValidationErrors && !customerName.trim() ? '#dc2626' : '#475569' }}>
+                      {t.custNameLabel}
+                    </label>
+                    {showValidationErrors && !customerName.trim() && (
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#dc2626' }}>* Required</span>
+                    )}
+                  </div>
                   <input
                     type="text"
-                    placeholder="Customer Name"
+                    placeholder={t.custNamePlaceholder}
                     value={customerName}
-                    onChange={(e) => setCustomerName(toStartCase(e.target.value))}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
+                    onChange={(e) => {
+                      setCustomerName(toStartCase(e.target.value));
+                      if (showValidationErrors) setShowValidationErrors(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.55rem 0.75rem',
+                      borderRadius: '6px',
+                      border: showValidationErrors && !customerName.trim() ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                      background: showValidationErrors && !customerName.trim() ? '#fef2f2' : '#ffffff',
+                      marginTop: '0.2rem',
+                      boxShadow: showValidationErrors && !customerName.trim() ? '0 0 0 3px rgba(239, 68, 68, 0.2)' : 'none',
+                    }}
                     required
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>Customer Phone</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#dc2626' : '#475569' }}>
+                      {t.custPhoneLabel}
+                    </label>
+                    {showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) && (
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#dc2626' }}>* 10 Digits Req</span>
+                    )}
+                  </div>
                   <input
                     type="tel"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     maxLength={10}
-                    placeholder="Phone Number"
+                    placeholder={t.custPhonePlaceholder}
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
+                    onChange={(e) => {
+                      setCustomerPhone(e.target.value.replace(/\D/g, ''));
+                      if (showValidationErrors) setShowValidationErrors(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.55rem 0.75rem',
+                      borderRadius: '6px',
+                      border: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                      background: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#fef2f2' : '#ffffff',
+                      marginTop: '0.2rem',
+                      boxShadow: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '0 0 0 3px rgba(239, 68, 68, 0.2)' : 'none',
+                    }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>Customer Address</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>{t.custAddrLabel}</label>
                   <input
                     type="text"
-                    placeholder="e.g. Siddipet, TS"
+                    placeholder={t.custAddrPlaceholder}
                     value={customerAddress}
                     onChange={(e) => setCustomerAddress(toStartCase(e.target.value))}
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
@@ -1020,7 +1074,7 @@ export const BillingModule: React.FC = () => {
               {/* Items List Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.4rem' }}>
                 <h4 style={{ margin: 0, fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <i className="fa-solid fa-list-check" style={{ color: '#6366f1' }}></i> Bill Products ({items.length})
+                  <i className="fa-solid fa-list-check" style={{ color: '#6366f1' }}></i> {t.billProductsTitle} ({items.length})
                 </h4>
 
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1030,7 +1084,7 @@ export const BillingModule: React.FC = () => {
                       onClick={() => handleAddItem('SELL')}
                       style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '5px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <i className="fa-solid fa-plus"></i> Add Sell Item
+                      <i className="fa-solid fa-plus"></i> {t.addSellItemBtn}
                     </button>
                   )}
 
@@ -1040,7 +1094,7 @@ export const BillingModule: React.FC = () => {
                       onClick={() => handleAddItem('BUY')}
                       style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '5px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <i className="fa-solid fa-plus"></i> Add Buy Item
+                      <i className="fa-solid fa-plus"></i> {t.addBuyItemBtn}
                     </button>
                   )}
                 </div>
@@ -1080,7 +1134,7 @@ export const BillingModule: React.FC = () => {
                       const netW = Math.max(0, grossW - dedW);
 
                       const isGold = it.metal_type === 'GOLD';
-                      const netWeightLabel = isGold ? 'Only Gold Weight' : 'Only Silver Weight';
+                      const netWeightLabel = isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel;
 
                       const wastagePct = Number(it.wastage_percent) || 0;
                       const totalWWithHmw = Number((netW + (netW * (wastagePct / 100))).toFixed(3));
@@ -1092,7 +1146,7 @@ export const BillingModule: React.FC = () => {
                           {/* Row 1 (2 fields): Metal Category & Rate */}
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Metal Category</label>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.metalCategoryLabel}</label>
                               <select
                                 value={it.metal_type}
                                 onChange={(e) => {
@@ -1107,14 +1161,14 @@ export const BillingModule: React.FC = () => {
                                 }}
                                 style={{ width: '100%', padding: '0.55rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
                               >
-                                <option value="GOLD">🥇 Gold</option>
-                                <option value="SILVER">🥈 Silver</option>
+                                <option value="GOLD">🥇 {t.goldMetal}</option>
+                                <option value="SILVER">🥈 {t.silverMetal}</option>
                               </select>
                             </div>
 
                             <div>
                               <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px', whiteSpace: 'nowrap' }}>
-                                Rate (₹/g)
+                                {t.rateLabel}
                               </label>
                               <input
                                 type="text"
@@ -1136,19 +1190,19 @@ export const BillingModule: React.FC = () => {
                           {/* Row 2 (2 fields): Item Name & Item Weight */}
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Name</label>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.itemNameLabel}</label>
                               <CreatablePresetSelect
                                 value={it.product_name}
                                 onChange={(val) => handleUpdateItem(it.id, 'product_name', toStartCase(val))}
                                 options={presets.item_name || []}
-                                placeholder="e.g. Ring / Chain"
+                                placeholder={t.itemNamePlaceholder}
                                 categoryName="item_name"
                                 onAddNewPreset={handleAddNewPreset}
                               />
                             </div>
 
                             <div>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Weight</label>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.itemWeightLabel}</label>
                               <div style={{ position: 'relative' }}>
                                 <input
                                   type="text"
@@ -1174,12 +1228,12 @@ export const BillingModule: React.FC = () => {
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                                 {/* Left Side: Deduction Name */}
                                 <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Deduction Name</label>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.deductionNameLabel}</label>
                                   <CreatablePresetSelect
                                     value={it.deduction_name ?? ''}
                                     onChange={(val) => handleUpdateItem(it.id, 'deduction_name', toStartCase(val))}
                                     options={presets.deduction_name || []}
-                                    placeholder="e.g. Stones / Wax"
+                                    placeholder={t.deductionNamePlaceholder}
                                     categoryName="deduction_name"
                                     onAddNewPreset={handleAddNewPreset}
                                   />
@@ -1189,7 +1243,7 @@ export const BillingModule: React.FC = () => {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                                   <div>
                                     <label style={{ fontSize: '0.75rem', fontWeight: 600, color: isDeductionTooHigh ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
-                                      Deduction Weight
+                                      {t.deductionWeightLabel}
                                     </label>
                                     <div style={{ position: 'relative' }}>
                                       <input
@@ -1248,7 +1302,7 @@ export const BillingModule: React.FC = () => {
                           {it.item_type === 'SELL' && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>HMW (%)</label>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.hmwLabel}</label>
                                 <input
                                   type="text"
                                   inputMode="decimal"
@@ -1261,7 +1315,7 @@ export const BillingModule: React.FC = () => {
                               </div>
 
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b45309', display: 'block', marginBottom: '3px' }}>Total Weight after HMW</label>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b45309', display: 'block', marginBottom: '3px' }}>{t.totalWeightAfterHmwLabel}</label>
                                 <div style={{ position: 'relative' }}>
                                   <input
                                     type="text"
@@ -1283,7 +1337,7 @@ export const BillingModule: React.FC = () => {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                               <div>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
-                                  Item Quality (%)
+                                  {t.itemQualityLabel}
                                 </label>
                                 <div style={{ position: 'relative' }}>
                                   <input
@@ -1305,7 +1359,7 @@ export const BillingModule: React.FC = () => {
                                 {(() => {
                                   const purityPct = Number(it.purity_percentage) || 0;
                                   const pureW = purityPct > 0 ? Number((netW * (purityPct / 100)).toFixed(3)) : 0;
-                                  const pureLabel = isGold ? 'Pure Gold Weight' : 'Pure Silver Weight';
+                                  const pureLabel = isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel;
                                   return (
                                     <>
                                       <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#d97706', display: 'block', marginBottom: '3px' }}>
@@ -1334,23 +1388,23 @@ export const BillingModule: React.FC = () => {
                           {it.item_type === 'SELL' && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Additional Charges Name</label>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.additionalChargesNameLabel}</label>
                                 <CreatablePresetSelect
                                   value={it.additional_charges_name ?? ''}
                                   onChange={(val) => handleUpdateItem(it.id, 'additional_charges_name', toStartCase(val))}
                                   options={presets.additional_charge || []}
-                                  placeholder="e.g. Stones / Stone Cost"
+                                  placeholder={t.additionalChargesNamePlaceholder}
                                   categoryName="additional_charge"
                                   onAddNewPreset={handleAddNewPreset}
                                 />
                               </div>
 
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Additional Charges Value (₹)</label>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.additionalChargesValLabel}</label>
                                 <input
                                   type="text"
                                   inputMode="decimal"
-                                  placeholder="e.g. 400"
+                                  placeholder={t.additionalChargesValPlaceholder}
                                   onFocus={(e) => e.target.select()}
                                   value={it.additional_charges_amount ? it.additional_charges_amount : ''}
                                   onChange={(e) => handleUpdateItem(it.id, 'additional_charges_amount', e.target.value)}
@@ -1364,7 +1418,7 @@ export const BillingModule: React.FC = () => {
                           {it.item_type === 'SELL' && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Making Charges (₹)</label>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.makingChargesLabel}</label>
                                 <input
                                   type="text"
                                   inputMode="decimal"
@@ -1377,7 +1431,7 @@ export const BillingModule: React.FC = () => {
                               </div>
 
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', display: 'block', marginBottom: '3px' }}>Total Item Value (₹)</label>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', display: 'block', marginBottom: '3px' }}>{t.itemTotalLabel}</label>
                                 <input
                                   type="text"
                                   readOnly
@@ -1394,7 +1448,7 @@ export const BillingModule: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0' }}>
                       <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                        Calculated Subtotal: <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>₹{(calcResults.itemDetails[it.id]?.lineTotal || 0).toLocaleString('en-IN')}</strong>
+                        {t.calculatedSubtotal} <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>₹{(calcResults.itemDetails[it.id]?.lineTotal || 0).toLocaleString('en-IN')}</strong>
                       </span>
                     </div>
                   </div>
@@ -1406,31 +1460,31 @@ export const BillingModule: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
                   {mode === 'BUY' ? (
                     <div>
-                      <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Gross Buying Amount:</span>
+                      <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossBuyingAmount}</span>
                       <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>₹{totalBuyCredit.toLocaleString('en-IN')}</div>
                     </div>
                   ) : mode === 'SELL' ? (
                     <div>
-                      <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Gross Selling Total:</span>
+                      <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossSellingTotal}</span>
                       <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>₹{totalSellValue.toLocaleString('en-IN')}</div>
                     </div>
                   ) : (
                     <>
                       <div>
-                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Gross Selling Total:</span>
+                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossSellingTotal}</span>
                         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>₹{totalSellValue.toLocaleString('en-IN')}</div>
                       </div>
                       <div>
-                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Less Item Exchange:</span>
+                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.lessItemExchange}</span>
                         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>- ₹{totalBuyCredit.toLocaleString('en-IN')}</div>
                       </div>
                     </>
                   )}
 
                   <div style={{ paddingLeft: '1rem', borderLeft: '2px solid #e2e8f0' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>GRAND TOTAL:</span>
+                    <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>{t.grandTotal}</span>
                     <span style={{ fontSize: '0.68rem', color: mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? '#0369a1' : '#64748b', fontWeight: 600, display: 'block', marginTop: '-2px' }}>
-                      {mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? '(Need to pay to customer)' : '(Customer should pay)'}
+                      {mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? t.needToPayCustomerTag : t.customerPaidTag}
                     </span>
                     <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
                       ₹{mode === 'BUY' ? totalBuyCredit.toLocaleString('en-IN') : mode === 'SELL' ? totalSellValue.toLocaleString('en-IN') : Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}
@@ -1463,7 +1517,7 @@ export const BillingModule: React.FC = () => {
                       gap: '6px',
                     }}
                   >
-                    <i className="fa-solid fa-calculator"></i> Estimation
+                    <i className="fa-solid fa-calculator"></i> {t.estimationBtn}
                   </button>
 
                   <button
@@ -1488,7 +1542,7 @@ export const BillingModule: React.FC = () => {
                       gap: '6px',
                     }}
                   >
-                    <i className="fa-solid fa-circle-check"></i> {creating ? 'Saving Sale...' : 'Sale done'}
+                    <i className="fa-solid fa-circle-check"></i> {creating ? t.savingSaleBtn : t.saleDoneBtn}
                   </button>
                 </div>
               </div>
@@ -1507,6 +1561,7 @@ export const BillingModule: React.FC = () => {
               totalBuyCredit={totalBuyCredit}
               netPayable={netPayable}
               billType={activeBillType}
+              lang={lang}
             />
           </div>
 
@@ -1519,11 +1574,11 @@ export const BillingModule: React.FC = () => {
                 </div>
 
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
-                  Are you sure?
+                  {t.confirmSaleTitle}
                 </h3>
 
                 <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.88rem', color: '#475569', lineHeight: '1.4' }}>
-                  Do you want to complete this sale and save the official invoice?
+                  {t.confirmSaleDesc}
                 </p>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
@@ -1532,7 +1587,7 @@ export const BillingModule: React.FC = () => {
                     onClick={() => setShowConfirmModal(false)}
                     style={{ padding: '0.65rem 1.25rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}
                   >
-                    Cancel
+                    {t.cancelBtn}
                   </button>
 
                   <button
@@ -1544,7 +1599,7 @@ export const BillingModule: React.FC = () => {
                     }}
                     style={{ padding: '0.65rem 1.4rem', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #228B22 0%, #33B249 100%)', color: '#ffffff', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', boxShadow: '0 4px 12px rgba(34, 139, 34, 0.3)' }}
                   >
-                    Yes, Complete Sale
+                    {t.yesCompleteSale}
                   </button>
                 </div>
               </div>
