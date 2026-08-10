@@ -7,7 +7,7 @@ interface CustomerDirectoryViewProps {
   rates: GlobalRates | null;
   formatDate: (date?: string) => string;
   onBackToPOS?: () => void;
-  onSelectCustomerForBill: (name: string, phone: string) => void;
+  onSelectCustomerForBill?: (name: string, phone: string) => void;
   onEditCustomerRecord?: (cust: CustomerDirectoryRecord) => void;
   onViewInvoiceDetails?: (cust: CustomerDirectoryRecord) => void;
 }
@@ -21,6 +21,8 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   onEditCustomerRecord,
   onViewInvoiceDetails,
 }) => {
+  void onSelectCustomerForBill;
+  void onEditCustomerRecord;
   const [search, setSearch] = useState(() => {
     return new URLSearchParams(window.location.search).get('search') || '';
   });
@@ -39,6 +41,15 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   const [endDate, setEndDate] = useState(() => {
     return new URLSearchParams(window.location.search).get('to') || '';
   });
+
+  const [showDateDropdown, setShowDateDropdown] = useState(false);
+  const [tempStartDate, setTempStartDate] = useState(startDate);
+  const [tempEndDate, setTempEndDate] = useState(endDate);
+
+  useEffect(() => {
+    setTempStartDate(startDate);
+    setTempEndDate(endDate);
+  }, [startDate, endDate]);
 
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDirectoryRecord | null>(null);
   const [activeKpiFilter, setActiveKpiFilter] = useState<null | 'GOLD_SELL' | 'GOLD_BUY' | 'SILVER_SELL' | 'SILVER_BUY'>(null);
@@ -230,9 +241,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   const fmtPurity = (p: number) => p > 0 ? `${p.toFixed(1)}%` : '—';
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', marginBottom: '1.25rem' }}>
+    <div className="history-main-card" style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', marginBottom: '0.85rem' }}>
       {/* Top Header Row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.15rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.6rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {onBackToPOS && (
             <button
@@ -255,21 +266,18 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             <i className="fa-solid fa-address-book" style={{ color: '#0284c7' }}></i>Purchase History ({filtered.length})
           </h3>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', width: '280px' }}>
-          <i className="fa-solid fa-magnifying-glass" style={{ color: '#94a3b8' }}></i>
-          <input
-            type="text"
-            placeholder="Search customer name or phone..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.82rem', color: '#0f172a', borderRadius: '6px' }}
-          />
-        </div>
       </div>
 
       {/* ── Reactive KPI Summary Cards ── */}
       <style>{`
+        .history-main-card {
+          padding: 0.75rem 0.85rem;
+        }
+        @media (max-width: 1024px) {
+          .history-main-card {
+            padding: 0.4rem 0.5rem !important;
+          }
+        }
         @keyframes kpiShimmer {
           0%   { left: -140%; opacity: 0; }
           4%   { opacity: 1; }
@@ -471,157 +479,368 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
       </div>
 
 
-      {/* Finance-Style Date Range Selection Bar */}
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#ffffff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #cbd5e1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', marginBottom: '1.15rem', flexWrap: 'wrap' }}>
-        {/* <i className="fa-solid fa-calendar-days" style={{ color: '#6366f1', fontSize: '0.85rem' }}></i> */}
-        {/* <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginRight: '2px' }}>Filter Date Range:</span> */}
-        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>From:</span>
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.3rem 0.5rem', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600, background: '#f8fafc' }}
-        />
-        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>To:</span>
-        <input
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.3rem 0.5rem', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600, background: '#f8fafc' }}
-        />
-        {(startDate || endDate) && (
+
+
+      {/* ── Responsive Purchase History Toolbar Controls ── */}
+      <style>{`
+        .history-controls-toolbar {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+          margin-bottom: 0.65rem;
+        }
+        .history-search-box {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: #ffffff;
+          padding: 0.45rem 0.85rem;
+          border-radius: 8px;
+          border: 1px solid #cbd5e1;
+          width: 250px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .history-pills-bar {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 4px;
+        }
+
+        @media (max-width: 1024px) {
+          .history-controls-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.65rem;
+          }
+          .history-row-1 {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            width: 100%;
+          }
+          .history-search-box {
+            flex: 1 !important;
+            width: auto !important;
+          }
+          .history-date-btn {
+            flex: 1 !important;
+            justify-content: center !important;
+          }
+          .history-pills-bar {
+            display: flex !important;
+            width: 100% !important;
+            justify-content: space-between !important;
+          }
+          .history-pills-bar button {
+            flex: 1 !important;
+            justify-content: center !important;
+            text-align: center !important;
+          }
+        }
+      `}</style>
+
+      <div className="history-controls-toolbar">
+        {/* Row 1 Group on Tablet: Search & Date Range */}
+        <div className="history-row-1" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          {/* Search Bar */}
+          <div className="history-search-box">
+            <i className="fa-solid fa-magnifying-glass" style={{ color: '#94a3b8', fontSize: '0.78rem' }}></i>
+            <input
+              type="text"
+              placeholder="Search name or phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.80rem', color: '#0f172a' }}
+            />
+          </div>
+
+          {/* Dropdown Date Range Filter Popover */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="history-date-btn"
+              onClick={() => setShowDateDropdown(!showDateDropdown)}
+              style={{
+                padding: '0.45rem 0.85rem',
+                borderRadius: '8px',
+                border: (startDate || endDate) ? '1px solid #6366f1' : '1px solid #cbd5e1',
+                background: (startDate || endDate) ? '#eef2ff' : '#ffffff',
+                color: (startDate || endDate) ? '#4338ca' : '#334155',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <i className="fa-solid fa-calendar-days" style={{ color: (startDate || endDate) ? '#4338ca' : '#6366f1' }}></i>
+              {startDate || endDate ? (
+                <span>{startDate || 'Start'} → {endDate || 'End'}</span>
+              ) : (
+                <span>Filter Date Range</span>
+              )}
+              <i className={`fa-solid fa-chevron-${showDateDropdown ? 'up' : 'down'}`} style={{ fontSize: '0.68rem', marginLeft: '4px' }}></i>
+            </button>
+
+            {showDateDropdown && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  zIndex: 100,
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  boxShadow: '0 12px 28px -4px rgba(15, 23, 42, 0.18)',
+                  width: '260px',
+                  display: 'grid',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Select Date Range</span>
+                  <i className="fa-solid fa-xmark" style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => setShowDateDropdown(false)}></i>
+                </div>
+
+                {/* Row 1: From Date */}
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                    From Date:
+                  </label>
+                  <input
+                    type="date"
+                    value={tempStartDate}
+                    onChange={(e) => setTempStartDate(e.target.value)}
+                    style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600, background: '#f8fafc' }}
+                  />
+                </div>
+
+                {/* Row 2: To Date */}
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                    To Date:
+                  </label>
+                  <input
+                    type="date"
+                    value={tempEndDate}
+                    onChange={(e) => setTempEndDate(e.target.value)}
+                    style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600, background: '#f8fafc' }}
+                  />
+                </div>
+
+                {/* Row 3: Action Buttons */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempStartDate('');
+                      setTempEndDate('');
+                      handleClearDates();
+                      setShowDateDropdown(false);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '0.4rem',
+                      borderRadius: '6px',
+                      border: '1px solid #fca5a5',
+                      background: '#fef2f2',
+                      color: '#dc2626',
+                      fontWeight: 700,
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Clear
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate(tempStartDate);
+                      setEndDate(tempEndDate);
+                      setShowDateDropdown(false);
+                    }}
+                    style={{
+                      flex: 1.2,
+                      padding: '0.4rem',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: '#4f46e5',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(79, 70, 229, 0.3)',
+                    }}
+                  >
+                    Apply Filter
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Category Pill Bar */}
+        <div className="history-pills-bar">
           <button
             type="button"
-            onClick={handleClearDates}
+            onClick={() => setHistoryTab('ALL')}
             style={{
-              padding: '0.3rem 0.6rem',
-              borderRadius: '6px',
-              border: '1px solid #fca5a5',
-              background: '#fef2f2',
-              color: '#dc2626',
-              fontWeight: 700,
-              fontSize: '0.72rem',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: historyTab === 'ALL' ? '#ffffff' : 'transparent',
+              color: historyTab === 'ALL' ? '#4f46e5' : '#64748b',
+              fontWeight: historyTab === 'ALL' ? 700 : 600,
+              fontSize: '0.78rem',
               cursor: 'pointer',
+              boxShadow: historyTab === 'ALL' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
               display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
             }}
           >
-            Clear
+            <i className="fa-solid fa-layer-group" style={{ fontSize: '0.74rem' }}></i>
+            All ({totalBillsCount})
           </button>
-        )}
+
+          <button
+            type="button"
+            onClick={() => setHistoryTab('SELL')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: historyTab === 'SELL' ? '#ffffff' : 'transparent',
+              color: historyTab === 'SELL' ? '#b45309' : '#64748b',
+              fontWeight: historyTab === 'SELL' ? 700 : 600,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              boxShadow: historyTab === 'SELL' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <i className="fa-solid fa-cart-shopping" style={{ fontSize: '0.74rem' }}></i>
+            Sell ({sellBillsCount})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryTab('BUY')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: historyTab === 'BUY' ? '#ffffff' : 'transparent',
+              color: historyTab === 'BUY' ? '#0369a1' : '#64748b',
+              fontWeight: historyTab === 'BUY' ? 700 : 600,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              boxShadow: historyTab === 'BUY' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <i className="fa-solid fa-hand-holding-dollar" style={{ fontSize: '0.74rem' }}></i>
+            Buy ({buyBillsCount})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryTab('EXCHANGE')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: historyTab === 'EXCHANGE' ? '#ffffff' : 'transparent',
+              color: historyTab === 'EXCHANGE' ? '#7c3aed' : '#64748b',
+              fontWeight: historyTab === 'EXCHANGE' ? 700 : 600,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              boxShadow: historyTab === 'EXCHANGE' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <i className="fa-solid fa-rotate" style={{ fontSize: '0.74rem' }}></i>
+            Exchange ({exchangeBillsCount})
+          </button>
+        </div>
       </div>
 
-      {/* Segmented Pill History Filter Control */}
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '4px', marginBottom: '1.15rem', flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          onClick={() => setHistoryTab('ALL')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '8px',
-            border: 'none',
-            background: historyTab === 'ALL' ? '#ffffff' : 'transparent',
-            color: historyTab === 'ALL' ? '#4f46e5' : '#64748b',
-            fontWeight: historyTab === 'ALL' ? 700 : 600,
-            fontSize: '0.78rem',
-            cursor: 'pointer',
-            boxShadow: historyTab === 'ALL' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <i className="fa-solid fa-layer-group" style={{ fontSize: '0.74rem' }}></i>
-          All ({totalBillsCount})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setHistoryTab('SELL')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '8px',
-            border: 'none',
-            background: historyTab === 'SELL' ? '#ffffff' : 'transparent',
-            color: historyTab === 'SELL' ? '#b45309' : '#64748b',
-            fontWeight: historyTab === 'SELL' ? 700 : 600,
-            fontSize: '0.78rem',
-            cursor: 'pointer',
-            boxShadow: historyTab === 'SELL' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <i className="fa-solid fa-cart-shopping" style={{ fontSize: '0.74rem' }}></i>
-          Sell ({sellBillsCount})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setHistoryTab('BUY')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '8px',
-            border: 'none',
-            background: historyTab === 'BUY' ? '#ffffff' : 'transparent',
-            color: historyTab === 'BUY' ? '#0369a1' : '#64748b',
-            fontWeight: historyTab === 'BUY' ? 700 : 600,
-            fontSize: '0.78rem',
-            cursor: 'pointer',
-            boxShadow: historyTab === 'BUY' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <i className="fa-solid fa-hand-holding-dollar" style={{ fontSize: '0.74rem' }}></i>
-          Buy ({buyBillsCount})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setHistoryTab('EXCHANGE')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '8px',
-            border: 'none',
-            background: historyTab === 'EXCHANGE' ? '#ffffff' : 'transparent',
-            color: historyTab === 'EXCHANGE' ? '#7c3aed' : '#64748b',
-            fontWeight: historyTab === 'EXCHANGE' ? 700 : 600,
-            fontSize: '0.78rem',
-            cursor: 'pointer',
-            boxShadow: historyTab === 'EXCHANGE' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <i className="fa-solid fa-rotate" style={{ fontSize: '0.74rem' }}></i>
-          Exchange ({exchangeBillsCount})
-        </button>
-      </div>
+      <style>{`
+        @media (max-width: 1024px) {
+          .customer-history-table {
+            font-size: 0.65rem !important;
+          }
+          .customer-history-table th,
+          .customer-history-table td {
+            padding: 0.45rem 0.25rem !important;
+            font-size: 0.65rem !important;
+          }
+          .customer-history-table th {
+            font-size: 0.58rem !important;
+          }
+          .customer-history-table th:first-child,
+          .customer-history-table td:first-child {
+            padding-left: 0.6rem !important;
+          }
+          .customer-history-table th:last-child,
+          .customer-history-table td:last-child {
+            padding-right: 0.6rem !important;
+          }
+          .customer-history-name {
+            font-size: 0.74rem !important;
+          }
+          .customer-history-amt {
+            font-size: 0.74rem !important;
+          }
+          .col-customer {
+            min-width: 100px !important;
+            width: 170px !important;
+          }
+          .col-product {
+            min-width: 150px !important;
+            width: 180px !important;
+          }
+        }
+      `}</style>
 
       <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e6decb' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', background: '#ffffff' }}>
+        <table className="customer-history-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f4ede4', borderBottom: '1px solid #e6decb', color: '#4a3e35', fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
-              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '75px' }}># / MODE</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left' }}>CUSTOMER DETAILS</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left' }}>PRODUCT &amp; WEIGHT</th>
-              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '90px' }}>PURITY</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>FINAL AMOUNT</th>
-              <th style={{ padding: '0.65rem 0.4rem', textAlign: 'center', width: '95px' }}>DATE &amp; TIME</th>
-              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '90px' }}>ACTIONS</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}># / MODE</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '14%' }}>DATE &amp; TIME</th>
+              <th className="col-customer" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '24%' }}>CUSTOMER</th>
+              <th className="col-product" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '28%' }}>PRODUCT (JBJ Sell/BUY)</th>
+              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '11%' }}>WEIGHT</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '13%' }}>FINAL AMOUNT</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
+                <td colSpan={6} style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
                   <i className="fa-solid fa-user-slash" style={{ fontSize: '1.3rem', marginBottom: '6px', display: 'block', color: '#cbd5e1' }}></i>
                   No customer records found in {historyTab} history.
                 </td>
@@ -663,180 +882,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       </span>
                     </td>
 
-                    {/* 2. Customer Details (ONLY Customer Name is BOLD) */}
-                    <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
-                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.84rem', letterSpacing: '-0.2px' }}>
-                        {cust.name}
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginTop: '2px', fontSize: '0.68rem', color: '#64748b', fontWeight: 400 }}>
-                        <span><i className="fa-solid fa-phone" style={{ color: '#0284c7', fontSize: '0.62rem', marginRight: '2px' }}></i>{cust.phone}</span>
-                        <span style={{ color: '#64748b' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', fontSize: '0.62rem', marginRight: '2px' }}></i>{addressStr}</span>
-                      </div>
-                    </td>
-
-                    {/* 3. Product & Weight (Shows Gross Weight → Pure Weight for each item) */}
-                    {(() => {
-                      const items: any[] = cust.latestInvoice?.receipt_json_data?.items || [];
-
-                      if (items.length > 0) {
-                        return (
-                          <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              {items.map((item: any, i: number) => {
-                                const grossW = Number(item.weight_grams) || 0;
-                                const purity = Number(item.purity_percentage) || 0;
-                                const pureW = Number(item.pureWeight || item.pure_weight_grams || (grossW * (purity / 100))) || 0;
-                                const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
-                                const itemType = (item.item_type || mode).toUpperCase();
-
-                                const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
-                                const itemTxn = (item.item_type || mode).toUpperCase();
-                                const isGoldSell = itemMetal === 'GOLD' && itemTxn === 'SELL';
-
-                                return (
-                                  <div key={i} style={{ fontSize: '0.74rem', color: '#334155' }}>
-                                    <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
-                                    {mode === 'EXCHANGE' && (
-                                      <span
-                                        style={{
-                                          marginLeft: '4px',
-                                          padding: '1px 4px',
-                                          borderRadius: '3px',
-                                          fontSize: '0.6rem',
-                                          fontWeight: 700,
-                                          background: itemType === 'SELL' ? '#fef3c7' : '#e0f2fe',
-                                          color: itemType === 'SELL' ? '#b45309' : '#0369a1',
-                                          border: itemType === 'SELL' ? '1px solid #fde68a' : '1px solid #bae6fd',
-                                        }}
-                                      >
-                                        {itemType}
-                                      </span>
-                                    )}
-                                    <div style={{ fontSize: '0.69rem', color: '#64748b', marginTop: '1px' }}>
-                                      <span
-                                        style={{
-                                          fontSize: '0.60rem',
-                                          fontWeight: 700,
-                                          padding: '1px 4px',
-                                          borderRadius: '3px',
-                                          background: itemMetal === 'GOLD' ? '#fffbeb' : '#f1f5f9',
-                                          color: itemMetal === 'GOLD' ? '#b45309' : '#475569',
-                                          border: itemMetal === 'GOLD' ? '1px solid #fde68a' : '1px solid #cbd5e1',
-                                          marginRight: '4px',
-                                        }}
-                                      >
-                                        {itemMetal}
-                                      </span>
-                                      <i className="fa-solid fa-scale-balanced" style={{ fontSize: '0.62rem', color: '#d97706', marginRight: '3px' }}></i>
-                                      <strong>{grossW.toFixed(1)}g</strong>
-                                      {/* {(() => {
-                                        const itemRate = Number(item.custom_rate_per_gram || item.applied_rate_per_gram || item.appliedRate || item.customRate || 0);
-                                        return itemRate > 0 ? (
-                                          <span style={{ color: '#4338ca', fontWeight: 700, marginLeft: '6px' }}>
-                                            @ ₹{itemRate.toLocaleString('en-IN')}/g
-                                          </span>
-                                        ) : null;
-                                      })()} */}
-                                      {!isGoldSell && purity > 0 && (
-                                        <span style={{ color: '#047857', fontWeight: 600 }}>
-                                          {' → '}{pureW.toFixed(1)}g Pure
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </td>
-                        );
-                      }
-
-                      // Fallback for single legacy records
-                      const singlePurity = Number(cust.latestInvoice?.purity_percentage) || 0;
-                      const singlePureW = Number((cust.latestInvoice as any)?.pure_metal_weight || (cust.totalWeight * (singlePurity / 100))) || 0;
-                      const singleMetal = (cust.latestInvoice?.metal_type || 'GOLD').toUpperCase();
-                      const singleTxn = (cust.latestInvoice?.transaction_type || mode).toUpperCase();
-                      const isSingleGoldSell = singleMetal === 'GOLD' && singleTxn === 'SELL';
-
-                      return (
-                        <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
-                          <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.76rem' }}>
-                            {cust.products.join(', ')}
-                          </div>
-                          <div style={{ marginTop: '2px', fontSize: '0.69rem', color: '#64748b' }}>
-                            <i className="fa-solid fa-scale-balanced" style={{ fontSize: '0.62rem', color: '#d97706', marginRight: '3px' }}></i>
-                            <strong>{cust.totalWeight.toFixed(1)}g</strong>
-                            {!isSingleGoldSell && singlePurity > 0 && (
-                              <span style={{ color: '#047857', fontWeight: 600 }}>
-                                {' → '}{singlePureW.toFixed(1)}g Pure
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })()}
-
-                    {/* 4. Purity column */}
-                    {(() => {
-                      const items: any[] = cust.latestInvoice?.receipt_json_data?.items || [];
-                      let purityDisplay: React.ReactNode;
-
-                      if (items.length > 1) {
-                        // Multi-item: show each item's purity on its own line
-                        purityDisplay = (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            {items.map((item: any, i: number) => {
-                              const p = Number(item.purity_percentage);
-                              return (
-                                <div key={i} style={{ fontSize: '0.7rem', fontWeight: 500, color: '#334155' }}>
-                                  {p > 0 ? `${p.toFixed(1)}%` : '—'}
-                                  <span style={{ fontSize: '0.6rem', color: '#94a3b8', marginLeft: '3px' }}>
-                                    ({(item.item_type || '').toUpperCase()})
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      } else if (items.length === 1) {
-                        const p = Number(items[0].purity_percentage);
-                        purityDisplay = <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#334155' }}>{p > 0 ? `${p.toFixed(1)}%` : '—'}</span>;
-                      } else {
-                        const p = Number(cust.latestInvoice?.purity_percentage);
-                        purityDisplay = <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#334155' }}>{p > 0 ? `${p.toFixed(1)}%` : '—'}</span>;
-                      }
-
-                      return (
-                        <td style={{ padding: '0.65rem 0.65rem', textAlign: 'center', verticalAlign: 'middle' }}>
-                          {purityDisplay}
-                        </td>
-                      );
-                    })()}
-
-                    {/* 5. Final Amount (Normal font weight) */}
-                    {(() => {
-                      const inv = cust.latestInvoice;
-                      const txnType = (inv?.transaction_type || mode).toUpperCase();
-                      const storedPayload = inv?.receipt_json_data;
-                      const sellVal = Number(storedPayload?.totalSellValue ?? 0);
-                      const buyVal = Number(storedPayload?.totalBuyCredit ?? 0);
-                      const isJbjPaid = txnType === 'BUY' || (txnType === 'EXCHANGE' && buyVal > sellVal);
-                      const netPay = storedPayload?.netPayable ?? inv?.final_amount;
-                      const displayAmt = netPay !== undefined && Number(netPay) >= 0 ? Number(netPay) : (cust.totalSpent || 0);
-
-                      return (
-                        <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'right' }}>
-                          <div style={{ fontWeight: 500, color: isJbjPaid ? '#0369a1' : '#0f172a', fontSize: '0.85rem' }}>
-                            ₹{displayAmt.toLocaleString('en-IN')}
-                          </div>
-                          <div style={{ fontSize: '0.60rem', color: isJbjPaid ? '#0284c7' : '#64748b', fontWeight: 400, marginTop: '1px' }}>
-                            {isJbjPaid ? '(JBJ paid)' : '(Customer paid)'}
-                          </div>
-                        </td>
-                      );
-                    })()}
-
-                    {/* 5. Date & Time (Stacked Layout: DD-MM-YYYY & Time) */}
+                    {/* 2. Date & Time (Stacked Layout: DD-MM-YYYY & Time) */}
                     <td style={{ padding: '0.55rem 0.4rem', textAlign: 'center', verticalAlign: 'middle', width: '95px' }}>
                       {(() => {
                         const { dateStr, timeStr } = formatDateTimeStacked(cust.lastDate);
@@ -856,107 +902,159 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       })()}
                     </td>
 
-                    {/* 6. Vertical Stacked Action Buttons */}
-                    <td style={{ padding: '0.55rem 0.55rem', textAlign: 'center', verticalAlign: 'middle', width: '90px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'stretch' }}>
-                        {/* <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onViewInvoiceDetails) onViewInvoiceDetails(cust);
-                          }}
-                          title="View Full Invoice Details & Audit Trail"
-                          style={{
-                            padding: '3px 6px',
-                            background: '#eef2ff',
-                            color: '#4338ca',
-                            border: '1px solid #c7d2fe',
-                            borderRadius: '5px',
-                            fontWeight: 500,
-                            fontSize: '0.65rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '3px',
-                          }}
-                        >
-                          <i className="fa-solid fa-eye"></i> Details
-                        </button> */}
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onEditCustomerRecord) {
-                              onEditCustomerRecord(cust);
-                            } else {
-                              onSelectCustomerForBill(cust.name, cust.phone);
-                            }
-                          }}
-                          title="Edit Record in POS Terminal"
-                          style={{
-                            padding: '3px 6px',
-                            background: '#e0f2fe',
-                            color: '#0369a1',
-                            border: '1px solid #bae6fd',
-                            borderRadius: '5px',
-                            fontWeight: 500,
-                            fontSize: '0.65rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '3px',
-                          }}
-                        >
-                          <i className="fa-solid fa-pen-to-square"></i> Edit
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedCustomer(cust);
-                          }}
-                          title="View Thermal Receipt Modal"
-                          style={{
-                            padding: '3px 6px',
-                            background: '#fef3c7',
-                            color: '#b45309',
-                            border: '1px solid #fde68a',
-                            borderRadius: '5px',
-                            fontWeight: 500,
-                            fontSize: '0.65rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '3px',
-                          }}
-                        >
-                          <i className="fa-solid fa-eye"></i> Bill
-                        </button>
-
-                        <button
-                          onClick={() => onSelectCustomerForBill(cust.name, cust.phone)}
-                          title="Create New Bill with Customer Pre-filled"
-                          style={{
-                            padding: '3px 6px',
-                            background: '#f8fafc',
-                            color: '#475569',
-                            border: '1px solid #cbd5e1',
-                            borderRadius: '5px',
-                            fontWeight: 500,
-                            fontSize: '0.65rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '3px',
-                          }}
-                        >
-                          <i className="fa-solid fa-plus"></i> New
-                        </button>
+                    {/* 2. Customer Details (ONLY Customer Name is BOLD) */}
+                    <td className="col-customer" style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
+                      <div className="customer-history-name" style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.84rem', letterSpacing: '-0.2px' }}>
+                        {cust.name}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginTop: '2px', fontSize: '0.68rem', color: '#64748b', fontWeight: 400 }}>
+                        <span><i className="fa-solid fa-phone" style={{ color: '#0284c7', fontSize: '0.62rem', marginRight: '2px' }}></i>{cust.phone}</span>
+                        <span style={{ color: '#64748b' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', fontSize: '0.62rem', marginRight: '2px' }}></i>{addressStr}</span>
                       </div>
                     </td>
+
+                    {/* 3. PRODUCT Column */}
+                    <td className="col-product" style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
+                      {(() => {
+                        const items: any[] = cust.latestInvoice?.receipt_json_data?.items || [];
+
+                        if (items.length > 0) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {items.map((item: any, i: number) => {
+                                const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
+                                const itemType = (item.item_type || mode).toUpperCase();
+                                const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
+
+                                return (
+                                  <div key={i} style={{ fontSize: '0.74rem', color: '#334155' }}>
+                                    <span
+                                      style={{
+                                        fontSize: '0.60rem',
+                                        fontWeight: 700,
+                                        padding: '1px 4px',
+                                        borderRadius: '3px',
+                                        background: itemMetal === 'GOLD' ? '#fffbeb' : '#f1f5f9',
+                                        color: itemMetal === 'GOLD' ? '#b45309' : '#475569',
+                                        border: itemMetal === 'GOLD' ? '1px solid #fde68a' : '1px solid #cbd5e1',
+                                      }}
+                                    >
+                                      {itemMetal}
+                                    </span>&nbsp;
+                                    <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
+                                    {mode === 'EXCHANGE' && (
+                                      <span
+                                        style={{
+                                          marginLeft: '4px',
+                                          padding: '1px 4px',
+                                          borderRadius: '3px',
+                                          fontSize: '0.6rem',
+                                          fontWeight: 700,
+                                          background: itemType === 'SELL' ? '#fef3c7' : '#e0f2fe',
+                                          color: itemType === 'SELL' ? '#b45309' : '#0369a1',
+                                          border: itemType === 'SELL' ? '1px solid #fde68a' : '1px solid #bae6fd',
+                                        }}
+                                      >
+                                        JBJ-{itemType}
+                                      </span>
+
+                                    )}
+
+                                    {/* <div style={{ fontSize: '0.69rem', color: '#64748b', marginTop: '1px' }}>
+                                      <span
+                                        style={{
+                                          fontSize: '0.60rem',
+                                          fontWeight: 700,
+                                          padding: '1px 4px',
+                                          borderRadius: '3px',
+                                          background: itemMetal === 'GOLD' ? '#fffbeb' : '#f1f5f9',
+                                          color: itemMetal === 'GOLD' ? '#b45309' : '#475569',
+                                          border: itemMetal === 'GOLD' ? '1px solid #fde68a' : '1px solid #cbd5e1',
+                                        }}
+                                      >
+                                        {itemMetal}
+                                      </span>
+                                    </div> */}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+
+                        // Fallback for single legacy records
+                        return (
+                          <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.76rem' }}>
+                            {cust.products.join(', ')}
+                          </div>
+                        );
+                      })()}
+                    </td>
+
+                    {/* 4. WEIGHT Column */}
+                    <td style={{ padding: '0.65rem 0.65rem', textAlign: 'center', verticalAlign: 'middle' }}>
+                      {(() => {
+                        const items: any[] = cust.latestInvoice?.receipt_json_data?.items || [];
+
+                        if (items.length > 0) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {items.map((item: any, i: number) => {
+                                const grossW = Number(item.weight_grams) || 0;
+                                // const dedW = Number(item.deduction_weight_grams) || 0;
+                                // const netW = Math.max(0, grossW - dedW);
+
+                                return (
+                                  <div key={i} style={{ fontSize: '0.73rem', color: '#334155' }}>
+                                    {/* <div style={{ fontWeight: 700, color: '#0369a1' }}>
+                                      {netW.toFixed(3)}g Net
+                                    </div> */}
+                                    <div style={{ fontSize: '0.66rem', color: '#64748b', marginTop: '1px' }}>
+                                      {/* <i className="fa-solid fa-scale-balanced" style={{ fontSize: '0.60rem', color: '#d97706', marginRight: '3px' }}></i> */}
+                                      <span>{grossW.toFixed(1)}g </span>
+                                      {/* {dedW > 0 && (
+                                        <span style={{ color: '#dc2626', fontWeight: 600, marginLeft: '3px' }}>
+                                          (-{dedW.toFixed(1)}g)
+                                        </span>
+                                      )} */}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+
+                        return <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0369a1' }}>{cust.totalWeight.toFixed(3)}g</span>;
+                      })()}
+                    </td>
+
+                    {/* 5. Final Amount (Normal font weight) */}
+                    {(() => {
+                      const inv = cust.latestInvoice;
+                      const txnType = (inv?.transaction_type || mode).toUpperCase();
+                      const storedPayload = inv?.receipt_json_data;
+                      const sellVal = Number(storedPayload?.totalSellValue ?? 0);
+                      const buyVal = Number(storedPayload?.totalBuyCredit ?? 0);
+                      const isJbjPaid = txnType === 'BUY' || (txnType === 'EXCHANGE' && buyVal > sellVal);
+                      const netPay = storedPayload?.netPayable ?? inv?.final_amount;
+                      const displayAmt = netPay !== undefined && Number(netPay) >= 0 ? Number(netPay) : (cust.totalSpent || 0);
+
+                      return (
+                        <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'right' }}>
+                          <div className="customer-history-amt" style={{ fontWeight: 500, color: isJbjPaid ? '#0369a1' : '#0f172a', fontSize: '0.85rem' }}>
+                            ₹{displayAmt.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '0.60rem', color: isJbjPaid ? '#0284c7' : '#64748b', fontWeight: 400, marginTop: '1px' }}>
+                            {isJbjPaid ? '(JBJ paid)' : '(Customer paid)'}
+                          </div>
+                        </td>
+                      );
+                    })()}
+
+
+
+
                   </tr>
                 );
               })

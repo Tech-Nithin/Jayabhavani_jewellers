@@ -1,4 +1,4 @@
-# Project Rules & Instructions for AI Agents
+<!-- # Project Rules & Instructions for AI Agents
 
 ## 1. Mandatory Change Proposal Requirement
 
@@ -16,4 +16,4 @@ Before performing any code modification or file edit in this project, the AI age
 
 ## 2. Git Push Control Rule
 
-> **STRICT RULE**: The AI agent MUST NEVER execute any `git push` command or push code to remote repositories UNTIL AND UNLESS the user explicitly instructs or asks to push the code.
+> **STRICT RULE**: The AI agent MUST NEVER execute any `git push` command or push code to remote repositories UNTIL AND UNLESS the user explicitly instructs or asks to push the code. -->

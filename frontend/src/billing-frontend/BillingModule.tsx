@@ -11,6 +11,14 @@ import { API_BASE } from '../config/apiConfig';
 const toStartCase = (str: string): string =>
   str.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 
+const formatMax2Decimals = (val: number | string | undefined | null): string => {
+  if (val === undefined || val === null || val === '') return '0';
+  const num = Number(val);
+  if (isNaN(num)) return '0';
+  const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+  return String(rounded);
+};
+
 export const BillingModule: React.FC = () => {
   // Global Rates
   const [rates, setRates] = useState<GlobalRates | null>(null);
@@ -246,10 +254,13 @@ export const BillingModule: React.FC = () => {
       id: `item-${Date.now()}`,
       metal_type: 'GOLD',
       product_name: '',
-      weight_grams: 0,
-      purity_percentage: 91.6,
+      weight_grams: '',
+      deduction_name: '',
+      deduction_weight_grams: 0,
+      wastage_percent: 0,
       making_charges_per_gram: 0,
-      gst_percent: 0,
+      additional_charges_name: '',
+      additional_charges_amount: 0,
       item_type: itemType,
     };
     setItems([...items, newItem]);
@@ -260,11 +271,34 @@ export const BillingModule: React.FC = () => {
     setItems(items.filter((i) => i.id !== id));
   };
 
+const NUMERIC_FIELDS = new Set<keyof BillItem>([
+  'weight_grams',
+  'deduction_weight_grams',
+  'purity_percentage',
+  'wastage_percent',
+  'making_charges_per_gram',
+  'additional_charges_amount',
+  'custom_rate_per_gram',
+]);
+
+const sanitizeNumericInput = (val: string): string => {
+  let cleaned = val.replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  if (parts.length > 2) {
+    cleaned = parts[0] + '.' + parts.slice(1).join('');
+  }
+  return cleaned;
+};
+
   const handleUpdateItem = (id: string, field: keyof BillItem, value: any) => {
+    let finalVal = value;
+    if (NUMERIC_FIELDS.has(field) && typeof value === 'string') {
+      finalVal = sanitizeNumericInput(value);
+    }
     setItems((prevItems) =>
       prevItems.map((it) => {
         if (it.id === id) {
-          const updated = { ...it, [field]: value };
+          const updated = { ...it, [field]: finalVal };
           delete (updated as any).lineTotal;
           delete (updated as any).line_total;
           delete (updated as any).metalVal;
@@ -298,6 +332,18 @@ export const BillingModule: React.FC = () => {
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName || items.length === 0) return;
+
+    // Validate deduction weights vs gross weights
+    const invalidDeductionItem = items.find((it) => {
+      const gW = Number(it.weight_grams) || 0;
+      const dW = Number(it.deduction_weight_grams) || 0;
+      return dW > gW;
+    });
+
+    if (invalidDeductionItem) {
+      alert(`⚠️ Cannot generate invoice: Deduction weight (${invalidDeductionItem.deduction_weight_grams} g) cannot be greater than Gross Weight (${invalidDeductionItem.weight_grams} g) for item "${invalidDeductionItem.product_name || 'Item'}".`);
+      return;
+    }
 
     setCreating(true);
     try {
@@ -872,65 +918,221 @@ export const BillingModule: React.FC = () => {
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Weight (Grams)</label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="e.g. 10.500"
-                          value={it.weight_grams ?? ''}
-                          onChange={(e) => handleUpdateItem(it.id, 'weight_grams', e.target.value)}
-                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                          required
-                        />
-                      </div>
+                    {/* Helper calculations for live row rendering */}
+                    {(() => {
+                      const grossW = Number(it.weight_grams) || 0;
+                      const dedW = Number(it.deduction_weight_grams) || 0;
+                      const netW = Math.max(0, grossW - dedW);
 
-                      <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Item Quality (%)</label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="91.6"
-                          value={it.purity_percentage ?? ''}
-                          onChange={(e) => handleUpdateItem(it.id, 'purity_percentage', e.target.value)}
-                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                          required
-                        />
-                      </div>
+                      const isGold = it.metal_type === 'GOLD';
+                      const netWeightLabel = isGold ? 'Net Gold Weight' : 'Net Silver Weight';
 
-                      {it.item_type === 'SELL' && (
+                      return (
                         <>
-                          <div>
-                            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Making Charges (₹ Total)</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="e.g. 4000"
-                              value={it.making_charges_per_gram ?? ''}
-                              onChange={(e) => handleUpdateItem(it.id, 'making_charges_per_gram', e.target.value)}
-                              style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                            />
+                          {/* Row 2 (2 fields): Gross Weight & Deduction Name */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                            <div>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Gross Weight</label>
+                              <div style={{ position: 'relative' }}>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="e.g. 10.000"
+                                  value={it.weight_grams ?? ''}
+                                  onChange={(e) => handleUpdateItem(it.id, 'weight_grams', e.target.value)}
+                                  style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}
+                                  required
+                                />
+                                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>
+                                  g
+                                </span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Deduction Name</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Stones/Wax"
+                                value={it.deduction_name ?? ''}
+                                onChange={(e) => handleUpdateItem(it.id, 'deduction_name', toStartCase(e.target.value))}
+                                style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                              />
+                            </div>
                           </div>
 
-                          <div>
-                            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>GST Tax (%)</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="3"
-                              value={it.gst_percent ?? ''}
-                              onChange={(e) => handleUpdateItem(it.id, 'gst_percent', e.target.value)}
-                              style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                            />
-                          </div>
+                          {/* Row 3 (2 fields): Deduction Weight & Net Metal Weight */}
+                          {(() => {
+                            const isDeductionTooHigh = dedW > grossW && grossW > 0;
+                            return (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: isDeductionTooHigh ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
+                                    Deduction Weight
+                                  </label>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      placeholder="e.g. 2.000"
+                                      value={it.deduction_weight_grams ?? ''}
+                                      onChange={(e) => handleUpdateItem(it.id, 'deduction_weight_grams', e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.55rem 2.2rem 0.55rem 0.75rem',
+                                        borderRadius: '6px',
+                                        border: isDeductionTooHigh ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
+                                        background: isDeductionTooHigh ? '#fef2f2' : '#ffffff',
+                                        color: isDeductionTooHigh ? '#dc2626' : '#1e293b',
+                                        fontSize: '0.85rem',
+                                        fontWeight: 600
+                                      }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: isDeductionTooHigh ? '#dc2626' : '#64748b', pointerEvents: 'none' }}>
+                                      g
+                                    </span>
+                                  </div>
+                                  {isDeductionTooHigh && (
+                                    <div style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 600, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <i className="fa-solid fa-circle-exclamation"></i>
+                                      Deduction weight cannot be greater than Gross Weight ({grossW} g)
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#15803d', display: 'block', marginBottom: '3px' }}>
+                                    {netWeightLabel}
+                                  </label>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="text"
+                                      readOnly
+                                      value={formatMax2Decimals(netW)}
+                                      style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', fontWeight: 700, color: '#15803d', fontSize: '0.85rem' }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#15803d', pointerEvents: 'none' }}>
+                                      g
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Row 4 (2 fields for SELL): Wastage (%) & Making Charges (₹) */}
+                          {it.item_type === 'SELL' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>HMW (%)</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="e.g. 3"
+                                  value={it.wastage_percent ?? ''}
+                                  onChange={(e) => handleUpdateItem(it.id, 'wastage_percent', e.target.value)}
+                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Making Charges (₹)</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="e.g. 200"
+                                  value={it.making_charges_per_gram ?? ''}
+                                  onChange={(e) => handleUpdateItem(it.id, 'making_charges_per_gram', e.target.value)}
+                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Row 4 (2 fields for BUY): Item Quality (%) & Pure Metal Weight */}
+                          {it.item_type === 'BUY' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                                  Item Quality (%)
+                                </label>
+                                <div style={{ position: 'relative' }}>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="e.g. 91.6"
+                                    value={it.purity_percentage ?? ''}
+                                    onChange={(e) => handleUpdateItem(it.id, 'purity_percentage', e.target.value)}
+                                    style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}
+                                  />
+                                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>
+                                    %
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div>
+                                {(() => {
+                                  const purityPct = Number(it.purity_percentage) || 100;
+                                  const pureW = Number((netW * (purityPct / 100)).toFixed(3));
+                                  const pureLabel = isGold ? 'Pure Gold Weight' : 'Pure Silver Weight';
+                                  return (
+                                    <>
+                                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#d97706', display: 'block', marginBottom: '3px' }}>
+                                        {pureLabel}
+                                      </label>
+                                      <div style={{ position: 'relative' }}>
+                                        <input
+                                          type="text"
+                                          readOnly
+                                          value={formatMax2Decimals(pureW)}
+                                          style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fffbeb', fontWeight: 700, color: '#d97706', fontSize: '0.85rem' }}
+                                        />
+                                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#d97706', pointerEvents: 'none' }}>
+                                          g
+                                        </span>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Row 5 (2 fields): Additional Charge Name & Additional Charges Value */}
+                          {it.item_type === 'SELL' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Additional Charge Name</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Stone Cost"
+                                  value={it.additional_charges_name ?? ''}
+                                  onChange={(e) => handleUpdateItem(it.id, 'additional_charges_name', toStartCase(e.target.value))}
+                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>Additional Charges Value (₹)</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="e.g. 400"
+                                  value={it.additional_charges_amount ?? ''}
+                                  onChange={(e) => handleUpdateItem(it.id, 'additional_charges_amount', e.target.value)}
+                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </>
-                      )}
-                    </div>
+                      );
+                    })()}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        Calculated Subtotal: <strong style={{ color: '#0f172a' }}>₹{(calcResults.itemDetails[it.id]?.lineTotal || 0).toLocaleString('en-IN')}</strong>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0' }}>
+                      <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        Calculated Subtotal: <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>₹{(calcResults.itemDetails[it.id]?.lineTotal || 0).toLocaleString('en-IN')}</strong>
                       </span>
                     </div>
                   </div>

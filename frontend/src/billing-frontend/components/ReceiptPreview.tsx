@@ -92,6 +92,14 @@ export const downloadReceiptAsPNG = async (receiptId: string, custName?: string)
   }
 };
 
+const formatMax2Decimals = (val: number | string | undefined | null): string => {
+  if (val === undefined || val === null || val === '') return '0';
+  const num = Number(val);
+  if (isNaN(num)) return '0';
+  const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+  return String(rounded);
+};
+
 export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   receiptId,
   mode,
@@ -110,41 +118,50 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
     const isGold = (item.metal_type || '').toUpperCase() === 'GOLD';
     const isSell = (item.item_type || '').toUpperCase() === 'SELL';
     const customRate = Number(item.custom_rate_per_gram || item.customRate || item.appliedRate);
-    const defaultRate = rates ? (
-      isGold
-        ? (isSell ? rates.gold_sell_value : rates.gold_buy_value)
-        : (isSell ? rates.silver_sell_value : rates.silver_buy_value)
-    ) : 0;
+    const defaultRate = isGold
+      ? (isSell ? rates?.gold_sell_value || 0 : rates?.gold_buy_value || 0)
+      : (isSell ? rates?.silver_sell_value || 0 : rates?.silver_buy_value || 0);
     const rate = customRate > 0 ? customRate : defaultRate;
 
-    // 1. Direct fetch from saved DB snapshot (only if not live-edited with custom_rate_per_gram):
-    const hasStoredTotal = (item.lineTotal !== undefined || item.line_total !== undefined) && !item.custom_rate_per_gram;
-    if (hasStoredTotal) {
-      const lineTotal = Number(item.lineTotal ?? item.line_total ?? 0);
-      const weightNum = Number(item.weight_grams) || 0;
-      const purityNum = Number(item.purity_percentage) || 0;
-      const pureWeight = Number(item.pureWeight ?? item.pure_weight_grams ?? (weightNum * (purityNum / 100)).toFixed(3));
-      const metalVal = Number(item.metalVal ?? item.metal_value ?? lineTotal);
-      const makingVal = Number(item.makingVal ?? item.making_charges ?? 0);
-      const gstVal = Number(item.gstVal ?? item.gst_amount ?? 0);
-      return { pureWeight, metalVal, makingVal, gstVal, lineTotal };
-    }
+    const grossWeight = Number((Number(item.weight_grams) || 0).toFixed(2));
+    const deductionWeight = Number((Number(item.deduction_weight_grams) || 0).toFixed(2));
+    const netWeight = Math.max(0, Number((grossWeight - deductionWeight).toFixed(2)));
 
-    // 2. Fallback / live drafting calculation:
-    const weightNum = Number(item.weight_grams) || 0;
-    const purityNum = Number(item.purity_percentage) || 0;
-    const makingNum = Number(item.making_charges_per_gram) || 0;
-    const gstNum = Number(item.gst_percent) || 0;
+    const purityPercent = isSell ? 100 : (Number(item.purity_percentage) || 100);
+    const pureWeight = Number((netWeight * (purityPercent / 100)).toFixed(2));
 
-    const pureWeight = Number((weightNum * (purityNum / 100)).toFixed(3));
-    const weightUsed = isSell ? weightNum : pureWeight;
-    const metalVal = Number((weightUsed * rate).toFixed(2));
-    const makingVal = isSell ? Number(makingNum.toFixed(2)) : 0;
-    const subtotal = metalVal + makingVal;
-    const gstVal = isSell ? Number((subtotal * (gstNum / 100)).toFixed(2)) : 0;
-    const computedLineTotal = Number((subtotal + gstVal).toFixed(2));
+    const wastagePercent = Number(item.wastage_percent) || 0;
+    const wastageWeight = isSell ? Number(((wastagePercent / 100) * netWeight).toFixed(3)) : 0;
+    const totalChargedWeight = isSell ? Number((netWeight + wastageWeight).toFixed(3)) : pureWeight;
 
-    return { pureWeight, metalVal, makingVal, gstVal, lineTotal: computedLineTotal };
+    const makingCharges = Number(item.making_charges_per_gram) || 0;
+    const additionalCharges = Number(item.additional_charges_amount) || 0;
+
+    const wastageVal = isSell ? Number(((wastagePercent / 100) * netWeight * rate).toFixed(2)) : 0;
+    const metalVal = isSell
+      ? Number((totalChargedWeight * rate).toFixed(2))
+      : Number((pureWeight * rate).toFixed(2));
+
+    const makingVal = isSell ? Number(makingCharges.toFixed(2)) : 0;
+    const additionalVal = isSell ? Number(additionalCharges.toFixed(2)) : 0;
+
+    const computedLineTotal = Number((metalVal + makingVal + additionalVal).toFixed(2));
+
+    return {
+      grossWeight,
+      deductionWeight,
+      netWeight,
+      purityPercent,
+      pureWeight,
+      wastagePercent,
+      wastageWeight,
+      totalChargedWeight,
+      metalVal,
+      wastageVal,
+      makingVal,
+      additionalVal,
+      lineTotal: computedLineTotal,
+    };
   };
 
   const handleDownload = () => {
@@ -170,7 +187,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         fontFamily: "'Courier New', Courier, monospace",
       }}
     >
-      {/* 35% Opacity Watermark Logo Background */}
+      {/* 25% Opacity Watermark Logo Background */}
       <div
         style={{
           position: 'absolute',
@@ -178,23 +195,14 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           left: '50%',
           transform: 'translate(-50%, -50%)',
           pointerEvents: 'none',
-          opacity: 0.20,
+          opacity: 0.25,
           zIndex: 0,
-          width: '85%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
         }}
       >
         <img
           src="/JB_logo.png"
-          alt="JB Logo Watermark"
-          style={{
-            maxWidth: '100%',
-            height: 'auto',
-            maxHeight: '340px',
-            objectFit: 'contain',
-          }}
+          alt="JB Watermark"
+          style={{ width: '220px', height: '220px', objectFit: 'contain' }}
         />
       </div>
 
@@ -281,72 +289,89 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         <div style={{ marginBottom: '1rem' }}>
           {items.map((it, idx) => {
             const details = getItemDetails(it);
-            const isGold = it.metal_type === 'GOLD';
             const isSell = it.item_type === 'SELL';
             const customRate = Number(it.custom_rate_per_gram || it.customRate || it.appliedRate);
-            const defaultRate = isGold
-              ? (isSell ? rates?.gold_sell_value || 0 : rates?.gold_buy_value || 0)
-              : (isSell ? rates?.silver_sell_value || 0 : rates?.silver_buy_value || 0);
-            const rate = customRate > 0 ? customRate : defaultRate;
+            const isGold = (it.metal_type || '').toUpperCase() === 'GOLD';
+            const rate = customRate > 0 ? customRate : (isGold ? (isSell ? rates?.gold_sell_value : rates?.gold_buy_value) : (isSell ? rates?.silver_sell_value : rates?.silver_buy_value)) || 0;
+            const metalName = isGold ? 'Gold' : 'Silver';
 
             return (
               <div key={it.id || idx} style={{ background: 'rgba(248, 250, 252, 0.65)', borderRadius: '8px', padding: '0.65rem 0.75rem', marginBottom: '0.6rem', border: '1px solid #94a3b8', fontSize: '0.68rem', color: '#0f172a' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, borderBottom: '1px dashed #94a3b8', paddingBottom: '3px', marginBottom: '4px' }}>
                   <span>#{idx + 1} {it.product_name || (it.metal_type + ' Item')}</span>
-                  <span style={{ color: isSell ? '#b45309' : '#0369a1' }}>
+                  <span style={{ color: isSell ? '#b45309' : '#0284c7', fontWeight: 800 }}>
                     {isSell ? '[CUST BUYING]' : '[CUST SELLING]'}
                   </span>
                 </div>
 
                 <div style={{ display: 'grid', gap: '2px', color: '#0f172a' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700 }}>Metal:</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
+                    <span style={{ fontWeight: 700 }}>Metal Category:</span>
                     <strong>{it.metal_type}</strong>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700 }}>Item Name:</span>
-                    <strong style={{ fontWeight: 700, color: '#0f172a' }}>{it.product_name || (it.metal_type + ' Item')}</strong>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
+                    <span style={{ fontWeight: 700 }}>Gross Item Weight:</span>
+                    <strong>{formatMax2Decimals(details.grossWeight)} gm</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700 }}>Item Weight:</span>
-                    <strong>{it.weight_grams ?? 0} gm</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700 }}>Item Quality:</span>
-                    <strong style={{ color: '#0f172a', fontWeight: 700 }}>{it.purity_percentage ?? 0}%</strong>
-                  </div>
-                  {!isSell && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0369a1' }}>
-                      <span style={{ fontWeight: 700 }}>Pure {it.metal_type} Weight:</span>
-                      <strong style={{ fontWeight: 800 }}>{details.pureWeight} gm</strong>
+                  {details.deductionWeight > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
+                      <span style={{ fontWeight: 700 }}>Deduction ({it.deduction_name || 'Stones/Wax'}):</span>
+                      <strong>- {formatMax2Decimals(details.deductionWeight)} gm</strong>
                     </div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                    <span>Net {metalName} Weight:</span>
+                    <strong>{formatMax2Decimals(details.netWeight)} gm</strong>
+                  </div>
+
+                  {isSell && details.wastagePercent > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
+                      <span>HMW ({formatMax2Decimals(details.wastagePercent)}%):</span>
+                      <strong>{formatMax2Decimals(details.totalChargedWeight)} gm</strong>
+                    </div>
+                  )}
+
+                  {!isSell && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
+                        <span>Item Quality:</span>
+                        <strong>{formatMax2Decimals(details.purityPercent)}%</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                        <span>Pure {metalName} Weight ({formatMax2Decimals(details.purityPercent)}% of {formatMax2Decimals(details.netWeight)}g):</span>
+                        <strong>{formatMax2Decimals(details.pureWeight)} gm</strong>
+                      </div>
+                    </>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                     <span style={{ fontWeight: 700 }}>
-                      {it.metal_type} Rate ({isSell ? `${it.weight_grams ?? 0}gm` : `${details.pureWeight}gm pure`} × ₹{rate}/g):
+                      {metalName} Value (₹{rate}/g):
                     </span>
                     <strong style={{ color: '#0f172a', fontWeight: 700 }}>₹{details.metalVal.toLocaleString('en-IN')}</strong>
                   </div>
 
                   {isSell && (
                     <>
-                      {Number(it.making_charges_per_gram) > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b45309', fontWeight: 800 }}>
+                      {details.makingVal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
                           <span>Making Charges:</span>
                           <strong>+ ₹{details.makingVal.toLocaleString('en-IN')}</strong>
                         </div>
                       )}
-                      {Number(it.gst_percent) > 0 && details.gstVal > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0284c7', fontWeight: 800 }}>
-                          <span>GST ({it.gst_percent}%):</span>
-                          <strong>+ ₹{details.gstVal.toLocaleString('en-IN')}</strong>
+                      {details.additionalVal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                          <span>{it.additional_charges_name || 'Additional Charges'}:</span>
+                          <strong>+ ₹{details.additionalVal.toLocaleString('en-IN')}</strong>
                         </div>
                       )}
                     </>
                   )}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: isSell ? '#15803d' : '#0369a1', borderTop: '1px dashed #94a3b8', paddingTop: '3px', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: isSell ? '#15803d' : '#0284c7', borderTop: '1px dashed #94a3b8', paddingTop: '3px', marginTop: '2px' }}>
                     <span>Item Subtotal:</span>
                     <strong>₹{details.lineTotal > 0 ? details.lineTotal.toLocaleString('en-IN') : '0'}</strong>
                   </div>

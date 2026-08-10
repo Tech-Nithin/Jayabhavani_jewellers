@@ -13,14 +13,21 @@ export interface BillItem {
   id: string;
   metal_type: 'GOLD' | 'SILVER';
   product_name: string;
-  weight_grams: number | string;
-  purity_percentage: number | string;
-  making_charges_per_gram: number | string;
-  gst_percent: number | string;
+  weight_grams: number | string; // Gross Weight
+  deduction_name?: string;
+  deduction_weight_grams?: number | string;
+  net_weight_grams?: number | string;
+  wastage_percent?: number | string;
+  wastage_amount?: number;
+  making_charges_per_gram?: number | string; // Making Charges amount
+  additional_charges_name?: string;
+  additional_charges_amount?: number | string;
   item_type: 'SELL' | 'BUY';
   custom_rate_per_gram?: number | string;
   customRate?: number;
   appliedRate?: number;
+  purity_percentage?: number | string;
+  gst_percent?: number | string;
 }
 
 export interface InvoiceRecord {
@@ -32,9 +39,16 @@ export interface InvoiceRecord {
   metal_type: string;
   product_name: string;
   weight_grams: number;
+  deduction_name?: string;
+  deduction_weight_grams?: number;
+  net_weight_grams?: number;
+  wastage_percent?: number;
+  wastage_amount?: number;
+  making_charges_per_gram?: number;
+  additional_charges_name?: string;
+  additional_charges_amount?: number;
   purity_percentage?: number;
   pure_metal_weight?: number;
-  making_charges_per_gram?: number;
   gst_percent?: number;
   final_amount: number;
   gold_buy_rate_snapshot?: number;
