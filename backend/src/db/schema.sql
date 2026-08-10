@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS public.interests (
   item_pure_weight NUMERIC(10, 3) GENERATED ALWAYS AS (
     ROUND(
       (
-        ((item_weight_grams * item_purity_percent) / (100)::numeric) - COALESCE(item_deduction_weight_grams, 0)
+        (item_weight_grams - COALESCE(item_deduction_weight_grams, 0)) * item_purity_percent / (100)::numeric
       ),
       3
     )
@@ -193,9 +193,7 @@ CREATE TABLE IF NOT EXISTS public.interests (
   item_total_value NUMERIC(12, 2) GENERATED ALWAYS AS (
     ROUND(
       (
-        (
-          ((item_weight_grams * item_purity_percent) / (100)::numeric) - COALESCE(item_deduction_weight_grams, 0)
-        ) * item_metal_rate_per_gram
+        ((item_weight_grams - COALESCE(item_deduction_weight_grams, 0)) * item_purity_percent / (100)::numeric) * item_metal_rate_per_gram
       ),
       2
     )
