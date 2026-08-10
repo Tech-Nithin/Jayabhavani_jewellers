@@ -223,11 +223,12 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     item_image_url,
   } = req.body;
 
+  const isCash = String(item_metal_type).toLowerCase() === 'cash';
+
   if (
     !customer_name || !customer_surname || !customer_phone ||
-    !amount || !interest_rate_percent || !timeline_months ||
-    !item_name || !item_weight_grams || !item_purity_percent ||
-    !item_metal_type || !item_metal_rate_per_gram
+    !amount || !interest_rate_percent || !timeline_months || !item_metal_type ||
+    (!isCash && (!item_name || item_weight_grams === undefined || item_weight_grams === null || item_purity_percent === undefined || item_purity_percent === null || item_metal_rate_per_gram === undefined || item_metal_rate_per_gram === null))
   ) {
     return res.status(400).json({ success: false, message: 'Missing required loan fields' });
   }
@@ -241,21 +242,33 @@ router.post('/debt/create', async (req: Request, res: Response) => {
     amount: Number(amount),
     interest_rate_percent: Number(interest_rate_percent),
     timeline_months: Number(timeline_months),
-    item_name: String(item_name).trim(),
-    item_weight_grams: Number(item_weight_grams),
-    item_purity_percent: Number(item_purity_percent),
+    item_name: isCash ? 'Cash' : String(item_name).trim(),
+    item_weight_grams: isCash ? 0 : Number(item_weight_grams || 0),
+    item_purity_percent: isCash ? 0 : Number(item_purity_percent || 0),
     item_metal_type: String(item_metal_type),
-    item_metal_rate_per_gram: Number(item_metal_rate_per_gram),
+    item_metal_rate_per_gram: isCash ? 0 : Number(item_metal_rate_per_gram || 0),
     item_image_url: item_image_url || null,
     status: 'OPEN',
   };
 
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('interests')
       .insert(payload)
       .select()
       .single();
+
+    if (error && isCash && error.message?.includes('interests_item_metal_type_check')) {
+      console.warn('⚠️ interests_item_metal_type_check active on Supabase. Retrying Cash insert with item_metal_type = gold...');
+      const fallbackPayload = { ...payload, item_metal_type: 'gold' };
+      const retryRes = await supabase
+        .from('interests')
+        .insert(fallbackPayload)
+        .select()
+        .single();
+      data = retryRes.data;
+      error = retryRes.error;
+    }
 
     if (error || !data) {
       console.warn('⚠️ Supabase insert into interests failed:', JSON.stringify(error || 'No data returned'));
