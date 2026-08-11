@@ -9,7 +9,7 @@ export default function Footer() {
         {/* Brand */}
         <div className="footer-brand">
           <span className="footer-logo">JAYA BHAVANI</span>
-          <p className="footer-tagline">Fine Jewellery since 1966</p>
+          <p className="footer-tagline"> Jewellery since 1966</p>
           <div className="footer-socials">
             {/* Instagram */}
             <a href="#" className="social-link" aria-label="Instagram">
@@ -51,7 +51,7 @@ export default function Footer() {
       </div>
 
       <div className="footer-bottom">
-        <p className="footer-copy">© 2025 Jaya Bhavani Fine Jewellery. All rights reserved.</p>
+        <p className="footer-copy">© 2025 Jaya Bhavani  Jewellery. All rights reserved.</p>
         <div className="footer-legal">
           <a href="#" className="footer-legal-link">Privacy Policy</a>
           <a href="#" className="footer-legal-link">Terms of Service</a>

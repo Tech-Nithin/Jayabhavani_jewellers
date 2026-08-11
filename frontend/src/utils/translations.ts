@@ -7,6 +7,7 @@ export const translations = {
     billing: 'Billing',
     finance: 'Finance',
     inventory: 'Inventory',
+    workAssignment: 'Work Assignment',
 
     // Billing Header & Subheader
     billingScreenTitle: 'Billing Screen',
@@ -200,6 +201,7 @@ export const translations = {
     billing: 'బిల్లింగ్',
     finance: 'ఫైనాన్స్',
     inventory: 'ఇన్వెంటరీ',
+    workAssignment: 'వర్క్ అసైన్‌మెంట్',
 
     // Billing Header & Subheader
     billingScreenTitle: 'బిల్లింగ్ స్క్రీన్',

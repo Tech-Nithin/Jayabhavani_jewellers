@@ -40,7 +40,7 @@ export default function IntroLoader() {
           className="stamp-logo-img"
         />
         <div className="stamp-brand-name">JAYA BHAVANI</div>
-        <div className="stamp-brand-sub">FINE JEWELLERY</div>
+        <div className="stamp-brand-sub"> JEWELLERY</div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { DashboardModule } from '../dashboard-frontend/DashboardModule';
 import { BillingModule } from '../billing-frontend/BillingModule';
 import { FinanceModule } from '../finance-frontend/FinanceModule';
 import { InventoryModule } from '../inventory-frontend/InventoryModule';
+import { WorkAssignmentModule } from '../work-assignment-frontend/WorkAssignmentModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
 import AnnouncementBar from './AnnouncementBar';
 
@@ -13,7 +14,7 @@ interface AdminDashboardProps {
   user?: { name: string; email: string };
   onLogout: () => void;
   onBackToStore?: () => void;
-  activeModule?: 'dashboard' | 'billing' | 'finance' | 'inventory';
+  activeModule?: 'dashboard' | 'billing' | 'finance' | 'inventory' | 'work-assignment';
 }
 
 
@@ -23,7 +24,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToStore,
   activeModule = 'billing',
 }) => {
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory'>(activeModule);
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory' | 'work-assignment'>(activeModule);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
@@ -41,12 +42,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const mod = params.get('module');
-    if (mod && ['dashboard', 'billing', 'finance', 'inventory'].includes(mod)) {
+    if (mod && ['dashboard', 'billing', 'finance', 'inventory', 'work-assignment'].includes(mod)) {
       setCurrentTab(mod as any);
     }
   }, []);
 
-  const handleTabChange = (tab: 'dashboard' | 'billing' | 'finance' | 'inventory') => {
+  const handleTabChange = (tab: 'dashboard' | 'billing' | 'finance' | 'inventory' | 'work-assignment') => {
     setCurrentTab(tab);
     setMobileMenuOpen(false);
 
@@ -62,6 +63,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'billing', label: t.billing, icon: 'fa-solid fa-cash-register' },
     { id: 'finance', label: t.finance, icon: 'fa-solid fa-scale-balanced' },
     { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-boxes-stacked' },
+    { id: 'work-assignment', label: t.workAssignment, icon: 'fa-solid fa-clipboard-list' },
   ];
 
   return (
@@ -493,6 +495,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {currentTab === 'billing' && <BillingModule lang={lang} />}
           {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} lang={lang} />}
           {currentTab === 'inventory' && <InventoryModule globalSearch={globalSearch} lang={lang} />}
+          {currentTab === 'work-assignment' && <WorkAssignmentModule globalSearch={globalSearch} lang={lang} />}
         </main>
       </div>
     </div>
