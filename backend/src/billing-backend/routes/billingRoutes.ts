@@ -311,41 +311,86 @@ router.post('/calculate', (req: Request, res: Response) => {
   });
 });
 
-// GET /api/billing/customer-directory - 1:1 Individual Invoice Directory Records
+// GET /api/billing/customer-directory - 1:1 Individual Invoice Directory Records with Server-Side Pagination
 router.get('/customer-directory', async (req: Request, res: Response) => {
-  let list: any[] = invoicesList;
   try {
-    const { data, error } = await supabase
+    const rawLimit = (req.query.limit as string) || '10';
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const search = ((req.query.search as string) || '').trim();
+    const history = ((req.query.history as string) || '').trim().toUpperCase();
+    const from = (req.query.from as string) || '';
+    const to = (req.query.to as string) || '';
+
+    const isAll = rawLimit.toUpperCase() === 'ALL' || rawLimit === '0';
+    const limit = isAll ? 0 : (parseInt(rawLimit, 10) || 10);
+
+    let query = supabase
       .from('billing_invoices')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' });
 
-    if (!error && data) {
-      list = data;
+    if (search) {
+      query = query.or(`customer_name.ilike.%${search}%,customer_phone.ilike.%${search}%,product_name.ilike.%${search}%`);
     }
+
+    if (history && history !== 'ALL') {
+      query = query.eq('transaction_type', history);
+    }
+
+    if (from) {
+      query = query.gte('created_at', from);
+    }
+
+    if (to) {
+      query = query.lte('created_at', to);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    if (!isAll && limit > 0) {
+      const offset = (page - 1) * limit;
+      query = query.range(offset, offset + limit - 1);
+    }
+
+    const { data, count, error } = await query;
+
+    let list: any[] = data || [];
+    let totalCount = count !== null && count !== undefined ? count : list.length;
+
+    if (error) {
+      console.warn('Supabase DB fetch customer-directory warning:', error);
+      list = invoicesList;
+      totalCount = list.length;
+    }
+
+    const customers = list.map((inv) => ({
+      name: inv.customer_name,
+      phone: inv.customer_phone || '-',
+      address: inv.customer_address || inv.receipt_json_data?.customer_address || 'N/A',
+      products: inv.product_name ? [inv.product_name] : ['-'],
+      totalWeight: Number(inv.weight_grams) || 0,
+      totalSpent: Number(inv.final_amount) || (inv.receipt_json_data ? Math.abs(Number(inv.receipt_json_data.totalSellValue || 0) - Number(inv.receipt_json_data.totalBuyCredit || 0)) : 0),
+      ordersCount: 1,
+      lastDate: inv.created_at,
+      latestInvoice: {
+        ...inv,
+        transaction_type: inv.transaction_type || inv.receipt_json_data?.transaction_type || 'SELL',
+      },
+    }));
+
+    const totalPages = isAll || limit <= 0 ? 1 : Math.max(1, Math.ceil(totalCount / limit));
+
+    return res.json({
+      success: true,
+      customers,
+      totalCount,
+      page,
+      limit: isAll ? 'ALL' : limit,
+      totalPages,
+    });
   } catch (err) {
-    console.error('Supabase DB fetch customer-directory warning:', err);
+    console.error('Error in customer-directory route:', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching customer directory.' });
   }
-
-  const customers = list.map((inv) => ({
-    name: inv.customer_name,
-    phone: inv.customer_phone || '-',
-    address: inv.customer_address || inv.receipt_json_data?.customer_address || 'N/A',
-    products: inv.product_name ? [inv.product_name] : ['-'],
-    totalWeight: Number(inv.weight_grams) || 0,
-    totalSpent: Number(inv.final_amount) || (inv.receipt_json_data ? Math.abs(Number(inv.receipt_json_data.totalSellValue || 0) - Number(inv.receipt_json_data.totalBuyCredit || 0)) : 0),
-    ordersCount: 1,
-    lastDate: inv.created_at,
-    latestInvoice: {
-      ...inv,
-      transaction_type: inv.transaction_type || inv.receipt_json_data?.transaction_type || 'SELL',
-    },
-  }));
-
-  res.json({
-    success: true,
-    customers,
-  });
 });
 
 // GET /api/billing/invoices - Fetch all invoice records from PostgreSQL / Supabase

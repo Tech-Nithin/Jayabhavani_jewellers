@@ -1,6 +1,7 @@
 import React from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { ReceiptPreview, downloadReceiptAsPNG } from './ReceiptPreview';
+import { getTeluguTransliterationSync } from '../../utils/transliterate';
 
 interface SeeBillModalProps {
   customer: CustomerDirectoryRecord | null;
@@ -117,6 +118,8 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
           customerName={customer.name}
           customerPhone={customer.phone}
           customerAddress={inv?.customer_address || inv?.receipt_json_data?.customer_address || customer.address}
+          teluguCustomerName={getTeluguTransliterationSync(customer.name)}
+          teluguCustomerAddress={getTeluguTransliterationSync(inv?.customer_address || inv?.receipt_json_data?.customer_address || customer.address)}
           rates={effectiveRates}
           items={itemsList}
           totalSellValue={totalSellValue}

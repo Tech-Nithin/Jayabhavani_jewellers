@@ -3,6 +3,7 @@ import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { ReceiptPreview, downloadReceiptAsPNG } from './ReceiptPreview';
 import { translations } from '../../utils/translations';
 import type { Language } from '../../utils/translations';
+import { getTeluguTransliterationSync } from '../../utils/transliterate';
 
 interface InvoiceDetailsViewProps {
   customerRecord: CustomerDirectoryRecord;
@@ -167,6 +168,8 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
           customerName={customerRecord.name}
           customerPhone={customerRecord.phone}
           customerAddress={customerRecord.address || inv?.customer_address || inv?.receipt_json_data?.customer_address}
+          teluguCustomerName={getTeluguTransliterationSync(customerRecord.name)}
+          teluguCustomerAddress={getTeluguTransliterationSync(customerRecord.address || inv?.customer_address || inv?.receipt_json_data?.customer_address || '')}
           rates={effectiveRates}
           items={itemsList}
           totalSellValue={totalSellValue}
@@ -184,25 +187,25 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
       <div style={{ marginTop: '1.5rem', background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
         <h4 style={{ margin: '0 0 0.85rem 0', fontSize: '0.92rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
           <i className="fa-solid fa-timeline" style={{ color: '#6366f1' }}></i>
-          Update History &amp; Audit Trail Timeline ({updateHistory.length} edits)
+          {t.auditTrailTitle} ({updateHistory.length} {t.auditTrailEdits})
         </h4>
 
         {updateHistory.length === 0 ? (
           <div style={{ fontSize: '0.8rem', color: '#475569', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             <i className="fa-solid fa-circle-info" style={{ marginRight: '6px', color: '#0284c7' }}></i>
-            This invoice was generated on <strong>{formatDateTime(createdAtDate)}</strong> and has not been modified since creation.
+            {t.auditTrailOriginalMsg} <strong>{formatDateTime(createdAtDate)}</strong> {t.auditTrailNotModifiedMsg}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8rem', background: '#f8fafc', padding: '9px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
               <span style={{ background: '#0f172a', color: '#ffffff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>1</span>
-              <span>Original Bill Created: <strong>{formatDateTime(createdAtDate)}</strong></span>
+              <span>{t.originalBillCreated} <strong>{formatDateTime(createdAtDate)}</strong></span>
             </div>
 
             {updateHistory.map((updIso: string, uIdx: number) => (
               <div key={uIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8rem', background: '#fffbeb', padding: '9px 12px', borderRadius: '8px', border: '1px solid #fde68a' }}>
                 <span style={{ background: '#b45309', color: '#ffffff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>{uIdx + 2}</span>
-                <span>Revision #{uIdx + 1} (Edited &amp; Updated): <strong style={{ color: '#92400e' }}>{formatDateTime(updIso)}</strong></span>
+                <span>{t.revisionLabel} #{uIdx + 1} {t.editedAndUpdatedMsg} <strong style={{ color: '#92400e' }}>{formatDateTime(updIso)}</strong></span>
               </div>
             ))}
           </div>

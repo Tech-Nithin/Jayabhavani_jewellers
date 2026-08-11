@@ -11,6 +11,8 @@ interface ReceiptPreviewProps {
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
+  teluguCustomerName?: string;
+  teluguCustomerAddress?: string;
   rates: GlobalRates | null;
   items: BillItem[];
   totalSellValue: number;
@@ -225,6 +227,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   customerName,
   customerPhone,
   customerAddress,
+  teluguCustomerName,
+  teluguCustomerAddress,
   rates,
   items,
   totalSellValue,
@@ -384,7 +388,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ fontWeight: 700 }}>{t.customerLabel}</span>
-            <strong style={{ color: '#0f172a' }}>{customerName || t.walkInCustomer}</strong>
+            <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerName ? teluguCustomerName : customerName) || t.walkInCustomer}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ fontWeight: 700 }}>{t.phoneLabel}</span>
@@ -392,7 +396,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ fontWeight: 700 }}>{t.addressLabel}</span>
-            <strong style={{ color: '#0f172a' }}>{customerAddress || 'Siddipet, Telangana'}</strong>
+            <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerAddress ? teluguCustomerAddress : customerAddress) || (lang === 'TE' ? 'సిద్దిపేట, తెలంగాణ' : 'Siddipet, Telangana')}</strong>
           </div>
         </div>
 

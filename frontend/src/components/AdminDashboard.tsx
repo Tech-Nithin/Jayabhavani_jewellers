@@ -28,7 +28,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
-  const [lang, setLang] = useState<Language>('EN');
+  const [lang, setLang] = useState<Language>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlLang = (params.get('lang') || '').toUpperCase();
+    if (urlLang === 'TE' || urlLang === 'EN') return urlLang as Language;
+    const localLang = (localStorage.getItem('jbj_selected_lang') || '').toUpperCase();
+    if (localLang === 'TE' || localLang === 'EN') return localLang as Language;
+    return 'EN';
+  });
 
   // Silence unused state check
   void setGlobalSearch;
@@ -38,14 +45,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const isTabletOrMobile = width < 1024;
   const isMobileScreen = width < 768;
 
-  // Sync tab with URL
+  // Sync tab & language with URL and localStorage & handle popstate swipe gestures
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const mod = params.get('module');
+      if (mod && ['dashboard', 'billing', 'finance', 'inventory', 'work-assignment'].includes(mod)) {
+        setCurrentTab(mod as any);
+      }
+      const urlLang = (params.get('lang') || '').toUpperCase();
+      if (urlLang === 'TE' || urlLang === 'EN') {
+        setLang(urlLang as Language);
+      }
+    };
+
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const mod = params.get('module');
-    if (mod && ['dashboard', 'billing', 'finance', 'inventory', 'work-assignment'].includes(mod)) {
-      setCurrentTab(mod as any);
-    }
-  }, []);
+    params.set('lang', lang.toLowerCase());
+    localStorage.setItem('jbj_selected_lang', lang);
+    window.history.replaceState({}, '', `?${params.toString()}`);
+  }, [lang]);
 
   const handleTabChange = (tab: 'dashboard' | 'billing' | 'finance' | 'inventory' | 'work-assignment') => {
     setCurrentTab(tab);

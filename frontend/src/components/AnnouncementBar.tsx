@@ -20,6 +20,7 @@ interface MetalRates {
 }
 
 import { API_BASE } from '../config/apiConfig';
+import { translations } from '../utils/translations';
 
 export default function AnnouncementBar({
   message,
@@ -70,7 +71,9 @@ export default function AnnouncementBar({
 
   if (!visible) return null;
 
-  const displayMessage = message || `✦ Gold Buy: ${formatPrice(rates.gold_buy_value)}/g \u00a0|\u00a0 ✦ Gold Sell: ${formatPrice(rates.gold_sell_value)}/g \u00a0|\u00a0 ✦ Silver Buy: ${formatPrice(rates.silver_buy_value)}/g \u00a0|\u00a0 ✦ Silver Sell: ${formatPrice(rates.silver_sell_value)}/g`;
+  const t = translations[lang] || translations.EN;
+  const unit = t.perGramUnit || '/g';
+  const displayMessage = message || `✦ ${t.goldBuyTicker}: ${formatPrice(rates.gold_buy_value)}${unit} \u00a0|\u00a0 ✦ ${t.goldSellTicker}: ${formatPrice(rates.gold_sell_value)}${unit} \u00a0|\u00a0 ✦ ${t.silverBuyTicker}: ${formatPrice(rates.silver_buy_value)}${unit} \u00a0|\u00a0 ✦ ${t.silverSellTicker}: ${formatPrice(rates.silver_sell_value)}${unit}`;
 
   if (mode === 'admin') {
     return (

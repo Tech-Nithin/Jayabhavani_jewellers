@@ -6,6 +6,7 @@ import { EditRatesModal } from './components/EditRatesModal';
 import { InvoiceDetailsView } from './components/InvoiceDetailsView';
 
 import { API_BASE } from '../config/apiConfig';
+import { getTeluguTransliteration } from '../utils/transliterate';
 
 /** Converts any string to Start Case (Title Case) — frontend-only display formatting */
 const toStartCase = (str: string): string =>
@@ -99,7 +100,7 @@ const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
         }}
         style={{
           width: '100%',
-          padding: '0.55rem 0.75rem',
+          padding: '0.55rem 2.2rem 0.55rem 0.75rem',
           borderRadius: '6px',
           border: '1px solid #cbd5e1',
           fontSize: '0.85rem',
@@ -108,6 +109,20 @@ const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
           ...style,
         }}
       />
+      <i
+        className="fa-solid fa-chevron-down"
+        onClick={() => setIsOpen((prev) => !prev)}
+        style={{
+          position: 'absolute',
+          right: '10px',
+          top: '50%',
+          transform: isOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
+          color: '#64748b',
+          fontSize: '0.70rem',
+          pointerEvents: 'none',
+          transition: 'transform 0.2s ease, color 0.2s ease',
+        }}
+      ></i>
       {isOpen && (
         <div
           style={{
@@ -199,6 +214,30 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [teluguCustomerName, setTeluguCustomerName] = useState('');
+  const [teluguCustomerAddress, setTeluguCustomerAddress] = useState('');
+
+  // Auto-translate typed Customer Name and Address to Telugu dynamically for screen & receipt display
+  useEffect(() => {
+    if (!customerName.trim()) {
+      setTeluguCustomerName('');
+      return;
+    }
+    getTeluguTransliteration(customerName).then((translated) => {
+      setTeluguCustomerName(translated);
+    });
+  }, [customerName]);
+
+  useEffect(() => {
+    if (!customerAddress.trim()) {
+      setTeluguCustomerAddress('');
+      return;
+    }
+    getTeluguTransliteration(customerAddress).then((translated) => {
+      setTeluguCustomerAddress(translated);
+    });
+  }, [customerAddress]);
+
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const getInitialItemsForMode = (m: 'SELL' | 'BUY' | 'EXCHANGE'): BillItem[] => {
@@ -285,7 +324,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
       params.delete('to');
       params.set('mode', mode === 'BUY' ? 'buying' : mode.toLowerCase());
     }
-    window.history.replaceState({}, '', `?${params.toString()}`);
+    window.history.pushState({}, '', `?${params.toString()}`);
   };
 
   const handleSetMode = (newMode: 'SELL' | 'BUY' | 'EXCHANGE') => {
@@ -298,8 +337,29 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     params.delete('search');
     params.delete('from');
     params.delete('to');
-    window.history.replaceState({}, '', `?${params.toString()}`);
+    window.history.pushState({}, '', `?${params.toString()}`);
   };
+
+  // Handle Chrome swipe gestures & browser Back/Forward navigation in BillingModule
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const modeParam = params.get('mode')?.toUpperCase();
+      const histParam = params.get('history');
+      const invoiceParam = params.get('invoice');
+
+      if (histParam || invoiceParam) {
+        setActiveView('CUSTOMERS');
+      } else if (modeParam === 'BUY' || modeParam === 'BUYING' || modeParam === 'SELL' || modeParam === 'EXCHANGE' || modeParam === 'TRADE-IN') {
+        setActiveView('POS');
+        const nextMode = (modeParam === 'BUYING' ? 'BUY' : modeParam === 'TRADE-IN' ? 'EXCHANGE' : modeParam) as any;
+        setMode(nextMode);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const [successModal, setSuccessModal] = useState<{ open: boolean; message: string; invId: string } | null>(null);
 
@@ -1555,6 +1615,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
               customerName={customerName}
               customerPhone={customerPhone}
               customerAddress={customerAddress}
+              teluguCustomerName={teluguCustomerName}
+              teluguCustomerAddress={teluguCustomerAddress}
               rates={rates}
               items={items}
               totalSellValue={totalSellValue}

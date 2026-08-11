@@ -9,6 +9,13 @@ export const translations = {
     inventory: 'Inventory',
     workAssignment: 'Work Assignment',
 
+    // Ticker Header
+    goldBuyTicker: 'Gold Buy',
+    goldSellTicker: 'Gold Sell',
+    silverBuyTicker: 'Silver Buy',
+    silverSellTicker: 'Silver Sell',
+    perGramUnit: '/g',
+
     // Billing Header & Subheader
     billingScreenTitle: 'Billing Screen',
     billingScreenSub: 'Gold & Silver Selling, Buying, and Trade-in Exchange Billing',
@@ -89,6 +96,14 @@ export const translations = {
     thWeight: 'WEIGHT',
     thFinalAmount: 'FINAL AMOUNT',
     viewDetailsBtn: 'View Details',
+    rowsPerPage: 'Rows per page:',
+    showingRecords: 'Showing',
+    ofRecords: 'of',
+    recordsLabel: 'records',
+    prevBtn: '‹ Previous',
+    nextBtn: 'Next ›',
+    pageLabel: 'Page',
+    allRows: 'All',
 
     // Edit Rates Modal
     editRatesTitle: 'Edit Today\'s Market Rates',
@@ -106,6 +121,13 @@ export const translations = {
     printThermalReceiptBtn: 'Print Thermal Receipt',
     downloadPngBtn: 'Download PNG',
     editInvoiceBtn: 'Edit Invoice',
+    auditTrailTitle: 'This Bill Update History & Audit Trail Timeline',
+    auditTrailEdits: 'edits',
+    auditTrailOriginalMsg: 'This invoice was generated on',
+    auditTrailNotModifiedMsg: 'and has not been modified since creation.',
+    originalBillCreated: 'Original Bill Created:',
+    revisionLabel: 'Revision',
+    editedAndUpdatedMsg: '(Edited & Updated):',
 
     // Dashboard View
     todaySales: 'Today\'s Sales',
@@ -203,6 +225,13 @@ export const translations = {
     inventory: 'ఇన్వెంటరీ',
     workAssignment: 'వర్క్ అసైన్‌మెంట్',
 
+    // Ticker Header
+    goldBuyTicker: 'బంగారం కొనే ధర',
+    goldSellTicker: 'బంగారం అమ్మే ధర',
+    silverBuyTicker: 'వెండి కొనే ధర',
+    silverSellTicker: 'వెండి అమ్మే ధర',
+    perGramUnit: '/గ్రా',
+
     // Billing Header & Subheader
     billingScreenTitle: 'బిల్లింగ్ స్క్రీన్',
     billingScreenSub: 'బంగారం & వెండి అమ్మకం, కొనుగోలు మరియు ఎక్స్ఛేంజ్ బిల్లింగ్',
@@ -213,22 +242,22 @@ export const translations = {
     sellMode: 'అమ్మకం రకం',
     buyMode: 'కొనుగోలు రకం',
     exchangeMode: 'ఎక్స్ఛేంజ్ రకం',
-    sellingTab: 'అమ్మకం',
-    buyingTab: 'కొనుగోలు',
+    sellingTab: 'అమ్మడం',
+    buyingTab: 'కొనడం',
     tradeInTab: 'ఎక్స్ఛేంజ్',
 
     // Form Field Labels & Placeholders
-    custNameLabel: 'ఖాతాదారు పేరు',
+    custNameLabel: 'కస్టమర్ పేరు',
     custPhoneLabel: 'ఫోన్ నంబరు',
     custAddrLabel: 'చిరునామా',
-    custNamePlaceholder: 'ఖాతాదారు పేరు',
+    custNamePlaceholder: 'కస్టమర్ పేరు',
     custPhonePlaceholder: 'ఫోన్ నంబరు',
     custAddrPlaceholder: 'ఉదా: సిద్ధిపేట',
 
     // Item Card Form Labels & Placeholders
     billProductsTitle: 'బిల్లు వస్తువులు',
-    addSellItemBtn: '+ అమ్మకం వస్తువు జతచేయి',
-    addBuyItemBtn: '+ కొనుగోలు వస్తువు జతచేయి',
+    addSellItemBtn: 'అమ్మే వస్తువు జతచేయి',
+    addBuyItemBtn: 'కొనే వస్తువు జతచేయి',
     metalCategoryLabel: 'లోహం వర్గం',
     goldMetal: 'బంగారం',
     silverMetal: 'వెండి',
@@ -260,8 +289,8 @@ export const translations = {
     lessItemExchange: 'ఎక్స్ఛేంజ్ మినహాయింపు:',
     grossBuyingAmount: 'మొత్తం కొనుగోలు వెల:',
     netPayableAmount: 'నికర చెల్లించవలసిన మొత్తం:',
-    customerPaidTag: '(ఖాతాదారు చెల్లించవలసినది)',
-    needToPayCustomerTag: '(ఖాతాదారుకు ఇవ్వవలసినది)',
+    customerPaidTag: '(కస్టమర్ చెల్లించవలసినది)',
+    needToPayCustomerTag: '(కస్టమర్కు ఇవ్వవలసినది)',
 
     // Purchase History & Customer Directory
     purchaseHistoryTitle: 'కొనుగోలు చరిత్ర',
@@ -271,18 +300,26 @@ export const translations = {
     silverBoughtMetric: 'కొన్న వెండి',
     avgPurityLabel: 'సగటు ప్యూరిటీ:',
     searchPlaceholder: 'పేరు లేదా ఫోన్ నంబరు ద్వారా వెతకండి...',
-    filterDateRange: 'తేదీ పరిధి వడపోత',
+    filterDateRange: 'తేదీ పరిధి ఫిల్టర్',
     allFilter: 'అన్నీ',
-    sellFilter: 'అమ్మకం',
-    buyFilter: 'కొనుగోలు',
+    sellFilter: 'అమ్మినవి',
+    buyFilter: 'కొన్నవి',
     exchangeFilter: 'ఎక్స్ఛేంజ్',
     thMode: '# / రకం',
     thDateTime: 'తేదీ & సమయం',
-    thCustomer: 'ఖాతాదారు',
+    thCustomer: 'కస్టమర్',
     thProduct: 'వస్తువు (అమ్మకం/కొనుగోలు)',
     thWeight: 'బరువు',
     thFinalAmount: 'మొత్తం వెల',
     viewDetailsBtn: 'వివరాలు చూడు',
+    rowsPerPage: 'వరుసల సంఖ్య:',
+    showingRecords: 'చూపిస్తోంది',
+    ofRecords: 'మొత్తం',
+    recordsLabel: 'రికార్డులు',
+    prevBtn: '‹ మునుపటి',
+    nextBtn: 'తరువాతి ›',
+    pageLabel: 'పేజీ',
+    allRows: 'అన్నీ',
 
     // Edit Rates Modal
     editRatesTitle: 'ఈరోజు మార్కెట్ ధరల సవరణ',
@@ -300,12 +337,19 @@ export const translations = {
     printThermalReceiptBtn: 'థర్మల్ రశీదు ప్రింట్ చేయి',
     downloadPngBtn: 'PNG డౌన్‌లోడ్ చేయి',
     editInvoiceBtn: 'బిల్లు సవరించు',
+    auditTrailTitle: 'ఈ బిల్ అప్డేట్ చేసిన చరిత్ర & ఆడిట్ టైమ్‌లైన్',
+    auditTrailEdits: 'సవరణలు',
+    auditTrailOriginalMsg: 'ఈ బిల్లు',
+    auditTrailNotModifiedMsg: 'న తయారు చేయబడింది మరియు తయారు చేసినప్పటి నుండి ఎటువంటి మార్పులు చేయబడలేదు.',
+    originalBillCreated: 'అసలు బిల్లు సృష్టించబడిన సమయం:',
+    revisionLabel: 'సవరణ',
+    editedAndUpdatedMsg: '(సవరించబడింది & తాజాకరించబడింది):',
 
     // Dashboard View
     todaySales: 'ఈరోజు అమ్మకాలు',
     todayPurchases: 'ఈరోజు కొనుగోళ్ళు',
     totalInvoices: 'మొత్తం బిల్లులు',
-    activeCustomers: 'యాక్టివ్ ఖాతాదారులు',
+    activeCustomers: 'యాక్టివ్ కస్టమర్లు',
     recentTransactions: 'ఇటీవలి లావాదేవీలు',
     topSellingItems: 'ఎక్కువగా అమ్ముడైన వస్తువులు',
 
@@ -317,7 +361,7 @@ export const translations = {
     totalInterestEarned: 'మొత్తం వచ్చిన వడ్డీ',
     createLoanBtn: '+ కొత్త లోన్ జతచేయి',
     loanId: 'లోన్ నంబరు',
-    borrowerName: 'ఖాతాదారు పేరు',
+    borrowerName: 'కస్టమర్ పేరు',
     pledgedItem: 'తాకట్టు వస్తువు',
     loanAmount: 'లోన్ మొత్తం',
     interestRate: 'వడ్డీ రేటు (%/నెల)',
@@ -349,10 +393,10 @@ export const translations = {
     dateLabel: 'తేదీ:',
     lastUpdated: 'చివరి అప్‌డేట్:',
     modeLabel: 'రకం:',
-    customerLabel: 'ఖాతాదారు:',
+    customerLabel: 'కస్టమర్:',
     phoneLabel: 'ఫోన్:',
     addressLabel: 'చిరునామా:',
-    walkInCustomer: 'ఖాతాదారుడు',
+    walkInCustomer: 'కస్టమర్',
 
     // Receipt Line Item Breakdown Labels
     custBuyingTag: '[కొనుగోలు]',
@@ -376,8 +420,8 @@ export const translations = {
     grossBuyingItems: 'కొనుగోలు వస్తువులు:',
     lessExchangeCredit: 'ఎక్స్ఛేంజ్ మినహాయింపు:',
     grandTotal: 'మొత్తం చెల్లించవలసినది:',
-    customerShouldPay: '(ఖాతాదారు చెల్లించవలసినది)',
-    needToPayCustomer: '(ఖాతాదారుకు ఇవ్వవలసినది)',
+    customerShouldPay: '(కస్టమర్ చెల్లించవలసినది)',
+    needToPayCustomer: '(కస్టమర్కు ఇవ్వవలసినది)',
     thankYouMessage: 'జయా భవాని జ్యువెలర్స్ ని సందర్శించినందుకు ధన్యవాదాలు!',
 
     // Actions & Buttons
