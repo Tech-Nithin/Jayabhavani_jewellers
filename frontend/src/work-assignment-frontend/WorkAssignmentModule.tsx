@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../config/apiConfig';
-import { translations } from '../utils/translations';
 import type { Language } from '../utils/translations';
 import { SellingDetailsTable } from './SellingDetailsTable';
 import { AssignTaskModal } from './AssignTaskModal';
