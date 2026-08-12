@@ -2445,3 +2445,72 @@ input::placeholder,
 textarea::placeholder {
   font-weight: 400 !important;
 }
+
+/* ========================================================================== */
+/* RESPONSIVE INVENTORY TYPOGRAPHY & TABLET SCALING (@media max-width: 1024px) */
+/* ========================================================================== */
+@media (max-width: 1024px) {
+  .inventory-title-heading {
+    font-size: 1.15rem !important;
+  }
+  .inventory-sub-text {
+    font-size: 0.72rem !important;
+  }
+  .inventory-search-input {
+    font-size: 0.78rem !important;
+    padding: 0.5rem 0.75rem 0.5rem 2rem !important;
+  }
+  .inventory-add-btn {
+    font-size: 0.78rem !important;
+    padding: 8px 14px !important;
+  }
+  .metal-selector-card-title {
+    font-size: 0.9rem !important;
+  }
+  .metal-selector-card-sub {
+    font-size: 0.7rem !important;
+  }
+  .metal-selector-badge {
+    font-size: 0.65rem !important;
+    padding: 3px 8px !important;
+  }
+  .ornament-grid-header-title {
+    font-size: 0.88rem !important;
+  }
+  .ornament-card-label {
+    font-size: 0.72rem !important;
+  }
+  .ornament-card-count {
+    font-size: 0.65rem !important;
+  }
+  .product-grid-header-title {
+    font-size: 0.88rem !important;
+  }
+  .product-card-title {
+    font-size: 0.82rem !important;
+  }
+  .product-card-weight {
+    font-size: 0.72rem !important;
+  }
+  .product-card-badge {
+    font-size: 0.62rem !important;
+    padding: 2px 6px !important;
+  }
+  .product-action-btn {
+    font-size: 0.72rem !important;
+    padding: 5px 10px !important;
+  }
+  .inventory-search-input {
+    font-size: 0.75rem !important;
+    padding: 0.38rem 1.6rem 0.38rem 1.8rem !important;
+  }
+}
+
+/* ── Ornament slider – hide scrollbar across browsers ── */
+.ornament-slider {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.ornament-slider::-webkit-scrollbar {
+  display: none;
+}

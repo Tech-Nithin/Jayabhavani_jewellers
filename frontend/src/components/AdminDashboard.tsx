@@ -75,9 +75,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setCurrentTab(tab);
     setMobileMenuOpen(false);
 
-    const url = new URL(window.location.href);
-    url.searchParams.set('module', tab);
-    window.history.pushState({}, '', url.toString());
+    // Clear previous module params & start URL cleanly with active module & lang
+    const currentParams = new URLSearchParams(window.location.search);
+    const currentLang = currentParams.get('lang') || lang.toLowerCase();
+
+    const newParams = new URLSearchParams();
+    newParams.set('module', tab);
+    if (currentLang) {
+      newParams.set('lang', currentLang);
+    }
+
+    window.history.pushState({}, '', `?${newParams.toString()}`);
   };
 
   const t = translations[lang];

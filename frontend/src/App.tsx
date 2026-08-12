@@ -30,6 +30,22 @@ import { setupReveal } from './utils';
 const STORAGE_KEY_TOKEN = 'jbj_session_token';
 const STORAGE_KEY_TAB = 'jbj_active_tab';
 
+const isAdminRoute = (params: URLSearchParams, pathname: string): boolean => {
+  const viewParam = (params.get('view') || '').toLowerCase();
+  const lowerPath = pathname.toLowerCase();
+  return (
+    params.has('module') ||
+    params.has('history') ||
+    viewParam === 'admin' ||
+    viewParam === 'dashboard' ||
+    viewParam === 'signin' ||
+    viewParam === 'login' ||
+    lowerPath === '/signin' ||
+    lowerPath === '/login' ||
+    lowerPath === '/admin'
+  );
+};
+
 function AppContent() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -37,43 +53,26 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<'store' | 'dashboard' | 'gold' | 'silver'>('store');
   const [verifyingSession, setVerifyingSession] = useState(true);
 
-  // Read URL query params on initial mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const viewParam = (params.get('view') || '').toLowerCase();
-    const pathname = window.location.pathname.toLowerCase();
-
-    if (viewParam === 'gold' || viewParam === 'silver') {
-      setCurrentView(viewParam);
-    } else if (viewParam === 'signin' || viewParam === 'login' || pathname === '/signin' || pathname === '/login') {
-      setAuthOpen(true);
-    }
-  }, []);
-
   // Handle Chrome Swipe Back/Forward Gestures & Browser Back/Forward buttons (popstate)
   useEffect(() => {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
+      const pathname = window.location.pathname;
       const viewParam = (params.get('view') || '').toLowerCase();
-      const pathname = window.location.pathname.toLowerCase();
 
-      if (viewParam === 'admin' || viewParam === 'dashboard' || params.has('module') || params.has('history')) {
-        if (user) {
+      if (isAdminRoute(params, pathname)) {
+        const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN) || sessionStorage.getItem(STORAGE_KEY_TOKEN);
+        if (user || savedToken) {
           setCurrentView('dashboard');
           setAuthOpen(false);
         } else {
+          setCurrentView('store');
+          window.history.replaceState(null, '', '/');
           setAuthOpen(true);
         }
       } else if (viewParam === 'gold' || viewParam === 'silver') {
         setCurrentView(viewParam);
         setAuthOpen(false);
-      } else if (viewParam === 'signin' || viewParam === 'login' || pathname === '/signin' || pathname === '/login') {
-        if (user) {
-          setCurrentView('dashboard');
-          setAuthOpen(false);
-        } else {
-          setAuthOpen(true);
-        }
       } else {
         setCurrentView('store');
         setAuthOpen(false);
@@ -88,14 +87,15 @@ function AppContent() {
   useEffect(() => {
     async function checkSession() {
       const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN) || sessionStorage.getItem(STORAGE_KEY_TOKEN);
+      const params = new URLSearchParams(window.location.search);
+      const pathname = window.location.pathname;
+
       if (savedToken) {
         // Send token to backend for HMAC signature verification
         const res = await verifySessionApi(savedToken);
         if (res.success && res.user) {
           setUser(res.user);
-          const params = new URLSearchParams(window.location.search);
-          const viewParam = (params.get('view') || '').toLowerCase();
-          if (viewParam === 'admin' || viewParam === 'signin' || viewParam === 'login' || params.get('tab') || localStorage.getItem(STORAGE_KEY_TAB)) {
+          if (isAdminRoute(params, pathname)) {
             setCurrentView('dashboard');
             setAuthOpen(false);
           }
@@ -104,11 +104,16 @@ function AppContent() {
           localStorage.removeItem(STORAGE_KEY_TOKEN);
           sessionStorage.removeItem(STORAGE_KEY_TOKEN);
           setUser(null);
+          if (isAdminRoute(params, pathname)) {
+            setCurrentView('store');
+            window.history.replaceState(null, '', '/');
+            setAuthOpen(true);
+          }
         }
       } else {
-        const params = new URLSearchParams(window.location.search);
-        const viewParam = (params.get('view') || '').toLowerCase();
-        if (viewParam === 'signin' || viewParam === 'login') {
+        if (isAdminRoute(params, pathname)) {
+          setCurrentView('store');
+          window.history.replaceState(null, '', '/');
           setAuthOpen(true);
         }
       }
