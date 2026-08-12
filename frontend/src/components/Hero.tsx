@@ -99,7 +99,7 @@ export default function Hero() {
                     'width:100%;height:100%;background:linear-gradient(135deg,#e8d5c0,#c8a888);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
                   ph.innerHTML =
                     '<span style="font-size:5rem;opacity:.35;">✦</span>' +
-                    '<span style="font-family:Cormorant Garamond,serif;font-size:1.2rem;color:rgba(44,36,32,.5);letter-spacing:.1em;">Fine Jewellery</span>';
+                    '<span style="font-family:Cormorant Garamond,serif;font-size:1.2rem;color:rgba(44,36,32,.5);letter-spacing:.1em;"> Jewellery</span>';
                   parent.appendChild(ph);
                 }
               }

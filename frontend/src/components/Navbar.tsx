@@ -48,7 +48,7 @@ export default function Navbar({ onSearchOpen, onAuthOpen, onNavigate, currentVi
           <img src="/JB_logo.png" alt="Jaya Bhavani Logo" className="logo-img" />
           <div className="logo-text">
             <span className="logo-main">JAYA BHAVANI</span>
-            <span className="logo-sub">Fine Jewellery</span>
+            <span className="logo-sub"> Jewellery</span>
           </div>
         </a>
 

@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import { API_BASE } from '../config/apiConfig';
 
+import { translations } from '../utils/translations';
+import type { Language } from '../utils/translations';
+
 interface InventoryProduct {
   id: string;
   name: string;
@@ -15,7 +18,8 @@ interface InventoryProduct {
   stock_quantity?: number;
 }
 
-export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSearch = '' }) => {
+export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language }> = ({ globalSearch = '', lang = 'EN' }) => {
+  const t = translations[lang] || translations.EN;
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(globalSearch);
@@ -380,10 +384,10 @@ export const InventoryModule: React.FC<{ globalSearch?: string }> = ({ globalSea
       <div style={{ marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
         <div>
           <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
-            <i className="fa-solid fa-boxes-stacked" style={{ color: '#d97706', marginRight: '8px' }}></i> Store Inventory &amp; Stock Catalog
+            <i className="fa-solid fa-boxes-stacked" style={{ color: '#d97706', marginRight: '8px' }}></i> {t.inventoryModuleTitle}
           </h2>
           <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.8rem' }}>
-            All available jewelry products with high-resolution photos and weight range metadata
+            {t.inventoryModuleSub}
           </p>
         </div>
 

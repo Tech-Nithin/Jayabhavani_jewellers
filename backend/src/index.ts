@@ -10,6 +10,7 @@ import dashboardRoutes from './dashboard-backend/routes/dashboardRoutes';
 import billingRoutes from './billing-backend/routes/billingRoutes';
 import financeRoutes from './finance-backend/routes/financeRoutes';
 import inventoryRoutes from './inventory-backend/routes/inventoryRoutes';
+import workAssignmentRoutes from './work-assignment-backend/routes/workAssignmentRoutes';
 
 dotenv.config();
 
@@ -73,13 +74,14 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/work-assignment', workAssignmentRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'online',
     service: 'Jaya Bhavani Jewellers Central Backend',
-    modules: ['dashboard-backend', 'billing-backend', 'finance-backend', 'inventory-backend'],
+    modules: ['dashboard-backend', 'billing-backend', 'finance-backend', 'inventory-backend', 'work-assignment-backend'],
     timestamp: new Date().toISOString(),
   });
 });

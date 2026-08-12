@@ -3,14 +3,18 @@ import { DashboardModule } from '../dashboard-frontend/DashboardModule';
 import { BillingModule } from '../billing-frontend/BillingModule';
 import { FinanceModule } from '../finance-frontend/FinanceModule';
 import { InventoryModule } from '../inventory-frontend/InventoryModule';
+import { WorkAssignmentModule } from '../work-assignment-frontend/WorkAssignmentModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
 import AnnouncementBar from './AnnouncementBar';
+
+import { translations } from '../utils/translations';
+import type { Language } from '../utils/translations';
 
 interface AdminDashboardProps {
   user?: { name: string; email: string };
   onLogout: () => void;
   onBackToStore?: () => void;
-  activeModule?: 'dashboard' | 'billing' | 'finance' | 'inventory';
+  activeModule?: 'dashboard' | 'billing' | 'finance' | 'inventory' | 'work-assignment';
 }
 
 
@@ -20,10 +24,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToStore,
   activeModule = 'billing',
 }) => {
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory'>(activeModule);
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'finance' | 'inventory' | 'work-assignment'>(activeModule);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
+  const [lang, setLang] = useState<Language>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlLang = (params.get('lang') || '').toUpperCase();
+    if (urlLang === 'TE' || urlLang === 'EN') return urlLang as Language;
+    const localLang = (localStorage.getItem('jbj_selected_lang') || '').toUpperCase();
+    if (localLang === 'TE' || localLang === 'EN') return localLang as Language;
+    return 'EN';
+  });
 
   // Silence unused state check
   void setGlobalSearch;
@@ -33,16 +45,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const isTabletOrMobile = width < 1024;
   const isMobileScreen = width < 768;
 
-  // Sync tab with URL
+  // Sync tab & language with URL and localStorage & handle popstate swipe gestures
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const mod = params.get('module');
-    if (mod && ['dashboard', 'billing', 'finance', 'inventory'].includes(mod)) {
-      setCurrentTab(mod as any);
-    }
+    const syncFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const mod = params.get('module');
+      if (mod && ['dashboard', 'billing', 'finance', 'inventory', 'work-assignment'].includes(mod)) {
+        setCurrentTab(mod as any);
+      }
+      const urlLang = (params.get('lang') || '').toUpperCase();
+      if (urlLang === 'TE' || urlLang === 'EN') {
+        setLang(urlLang as Language);
+      }
+    };
+
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
   }, []);
 
-  const handleTabChange = (tab: 'dashboard' | 'billing' | 'finance' | 'inventory') => {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('lang', lang.toLowerCase());
+    localStorage.setItem('jbj_selected_lang', lang);
+    window.history.replaceState({}, '', `?${params.toString()}`);
+  }, [lang]);
+
+  const handleTabChange = (tab: 'dashboard' | 'billing' | 'finance' | 'inventory' | 'work-assignment') => {
     setCurrentTab(tab);
     setMobileMenuOpen(false);
 
@@ -51,11 +80,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.history.pushState({}, '', url.toString());
   };
 
+  const t = translations[lang];
+
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-pie' },
-    { id: 'billing', label: 'Billing', icon: 'fa-solid fa-cash-register' },
-    { id: 'finance', label: 'Finance / Girvi', icon: 'fa-solid fa-scale-balanced' },
-    { id: 'inventory', label: 'Inventory', icon: 'fa-solid fa-boxes-stacked' },
+    { id: 'dashboard', label: t.dashboard, icon: 'fa-solid fa-chart-pie' },
+    { id: 'billing', label: t.billing, icon: 'fa-solid fa-cash-register' },
+    { id: 'finance', label: t.finance, icon: 'fa-solid fa-scale-balanced' },
+    { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-boxes-stacked' },
+    { id: 'work-assignment', label: t.workAssignment, icon: 'fa-solid fa-clipboard-list' },
   ];
 
   return (
@@ -479,12 +511,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           isTabletOrMobile={isTabletOrMobile}
           isMobileScreen={isMobileScreen}
           onToggleMobileMenu={() => setMobileMenuOpen(true)}
+          lang={lang}
+          onToggleLang={() => setLang((prev) => (prev === 'EN' ? 'TE' : 'EN'))}
         />
         <main style={{ padding: isMobileScreen ? '0.5rem' : isTabletOrMobile ? '0.5rem 0.65rem' : '0.75rem 1rem', flex: 1 }}>
-          {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} />}
-          {currentTab === 'billing' && <BillingModule />}
-          {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} />}
-          {currentTab === 'inventory' && <InventoryModule globalSearch={globalSearch} />}
+          {currentTab === 'dashboard' && <DashboardModule globalSearch={globalSearch} lang={lang} />}
+          {currentTab === 'billing' && <BillingModule lang={lang} />}
+          {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} lang={lang} />}
+          {currentTab === 'inventory' && <InventoryModule globalSearch={globalSearch} lang={lang} />}
+          {currentTab === 'work-assignment' && <WorkAssignmentModule globalSearch={globalSearch} lang={lang} />}
         </main>
       </div>
     </div>

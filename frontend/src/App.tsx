@@ -40,11 +40,49 @@ function AppContent() {
   // Read URL query params on initial mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const viewParam = params.get('view');
+    const viewParam = (params.get('view') || '').toLowerCase();
+    const pathname = window.location.pathname.toLowerCase();
+
     if (viewParam === 'gold' || viewParam === 'silver') {
       setCurrentView(viewParam);
+    } else if (viewParam === 'signin' || viewParam === 'login' || pathname === '/signin' || pathname === '/login') {
+      setAuthOpen(true);
     }
   }, []);
+
+  // Handle Chrome Swipe Back/Forward Gestures & Browser Back/Forward buttons (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = (params.get('view') || '').toLowerCase();
+      const pathname = window.location.pathname.toLowerCase();
+
+      if (viewParam === 'admin' || viewParam === 'dashboard' || params.has('module') || params.has('history')) {
+        if (user) {
+          setCurrentView('dashboard');
+          setAuthOpen(false);
+        } else {
+          setAuthOpen(true);
+        }
+      } else if (viewParam === 'gold' || viewParam === 'silver') {
+        setCurrentView(viewParam);
+        setAuthOpen(false);
+      } else if (viewParam === 'signin' || viewParam === 'login' || pathname === '/signin' || pathname === '/login') {
+        if (user) {
+          setCurrentView('dashboard');
+          setAuthOpen(false);
+        } else {
+          setAuthOpen(true);
+        }
+      } else {
+        setCurrentView('store');
+        setAuthOpen(false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [user]);
 
   // Secure Backend Token Session Verification on Mount/Refresh
   useEffect(() => {
@@ -56,14 +94,22 @@ function AppContent() {
         if (res.success && res.user) {
           setUser(res.user);
           const params = new URLSearchParams(window.location.search);
-          if (params.get('view') === 'admin' || params.get('tab') || localStorage.getItem(STORAGE_KEY_TAB)) {
+          const viewParam = (params.get('view') || '').toLowerCase();
+          if (viewParam === 'admin' || viewParam === 'signin' || viewParam === 'login' || params.get('tab') || localStorage.getItem(STORAGE_KEY_TAB)) {
             setCurrentView('dashboard');
+            setAuthOpen(false);
           }
         } else {
           // Token tampered, stolen, or expired - clear invalid token immediately
           localStorage.removeItem(STORAGE_KEY_TOKEN);
           sessionStorage.removeItem(STORAGE_KEY_TOKEN);
           setUser(null);
+        }
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        const viewParam = (params.get('view') || '').toLowerCase();
+        if (viewParam === 'signin' || viewParam === 'login') {
+          setAuthOpen(true);
         }
       }
       setVerifyingSession(false);
@@ -159,8 +205,12 @@ function AppContent() {
         onAuthOpen={() => {
           if (user) {
             setCurrentView('dashboard');
+            window.history.replaceState(null, '', '?view=admin');
           } else {
             setAuthOpen(true);
+            const params = new URLSearchParams(window.location.search);
+            params.set('view', 'signin');
+            window.history.replaceState(null, '', `?${params.toString()}`);
           }
         }}
         onNavigate={handleNavigateView}
@@ -170,7 +220,15 @@ function AppContent() {
       <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
       <SignInModal 
         isOpen={authOpen} 
-        onClose={() => setAuthOpen(false)}
+        onClose={() => {
+          setAuthOpen(false);
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('view') === 'signin' || params.get('view') === 'login') {
+            params.delete('view');
+            const newSearch = params.toString();
+            window.history.replaceState(null, '', newSearch ? `?${newSearch}` : window.location.pathname);
+          }
+        }}
         onSuccess={handleLoginSuccess}
       />
 

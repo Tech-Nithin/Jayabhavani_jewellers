@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS public.interests (
   item_pure_weight NUMERIC(10, 3) GENERATED ALWAYS AS (
     ROUND(
       (
-        ((item_weight_grams * item_purity_percent) / (100)::numeric) - COALESCE(item_deduction_weight_grams, 0)
+        (item_weight_grams - COALESCE(item_deduction_weight_grams, 0)) * item_purity_percent / (100)::numeric
       ),
       3
     )
@@ -193,9 +193,7 @@ CREATE TABLE IF NOT EXISTS public.interests (
   item_total_value NUMERIC(12, 2) GENERATED ALWAYS AS (
     ROUND(
       (
-        (
-          ((item_weight_grams * item_purity_percent) / (100)::numeric) - COALESCE(item_deduction_weight_grams, 0)
-        ) * item_metal_rate_per_gram
+        ((item_weight_grams - COALESCE(item_deduction_weight_grams, 0)) * item_purity_percent / (100)::numeric) * item_metal_rate_per_gram
       ),
       2
     )
@@ -231,6 +229,46 @@ ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS considered_type TEXT;
 ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS item_deduction_name TEXT;
 ALTER TABLE public.interests ADD COLUMN IF NOT EXISTS item_deduction_weight_grams NUMERIC(10, 3) DEFAULT 0;
 
+
+
+-- 8. Create Billing Presets Table (billing_presets)
+CREATE TABLE IF NOT EXISTS public.billing_presets (
+  id SERIAL PRIMARY KEY,
+  preset_name VARCHAR(255) NOT NULL,
+  category_name VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unique_preset_category UNIQUE(preset_name, category_name)
+);
+
+ALTER TABLE public.billing_presets DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON TABLE public.billing_presets TO postgres, anon, authenticated, service_role;
+GRANT ALL ON SEQUENCE public.billing_presets_id_seq TO postgres, anon, authenticated, service_role;
+
+-- Seed default presets
+INSERT INTO public.billing_presets (preset_name, category_name) VALUES
+('Ring', 'item_name'),
+('Chain', 'item_name'),
+('Necklace', 'item_name'),
+('Bangle', 'item_name'),
+('Earring', 'item_name'),
+('Anklet', 'item_name'),
+('Bracelet', 'item_name'),
+('Pendant', 'item_name'),
+('Coin', 'item_name'),
+('Bar', 'item_name'),
+('Stones', 'deduction_name'),
+('Wax', 'deduction_name'),
+('Thread', 'deduction_name'),
+('Enamel', 'deduction_name'),
+('Stones', 'additional_charge'),
+('Stone Cost', 'additional_charge'),
+('Making Fee', 'additional_charge'),
+('Hallmark Fee', 'additional_charge'),
+('Polishing', 'additional_charge'),
+('Gold', 'asset_name'),
+('Silver', 'asset_name'),
+('Asset', 'asset_name')
+ON CONFLICT (preset_name, category_name) DO NOTHING;
 
 
 

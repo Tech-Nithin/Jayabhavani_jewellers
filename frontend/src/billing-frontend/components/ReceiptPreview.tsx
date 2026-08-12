@@ -2,12 +2,17 @@ import React from 'react';
 import html2canvas from 'html2canvas';
 import type { BillItem, GlobalRates } from '../types';
 
+import { translations } from '../../utils/translations';
+import type { Language } from '../../utils/translations';
+
 interface ReceiptPreviewProps {
   receiptId: string;
   mode: 'SELL' | 'BUY' | 'EXCHANGE';
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
+  teluguCustomerName?: string;
+  teluguCustomerAddress?: string;
   rates: GlobalRates | null;
   items: BillItem[];
   totalSellValue: number;
@@ -15,6 +20,8 @@ interface ReceiptPreviewProps {
   netPayable: number;
   createdDate?: string;
   updatedDate?: string;
+  billType?: 'SALE_DONE' | 'ESTIMATION';
+  lang?: Language;
   onDownloadPNG?: () => void;
 }
 
@@ -33,6 +40,120 @@ const formatReceiptDateTime = (isoOrStr?: string) => {
     return `${dd}-${mm}-${yyyy} ${hours}:${minutes} ${ampm}`;
   } catch (err) {
     return isoOrStr;
+  }
+};
+
+/** Automatic 80mm Thermal Receipt Direct Printer (Format 80mm, Silent Kiosk Auto-Cut Ready) */
+export const printReceipt80mm = (receiptId: string) => {
+  const element = document.getElementById(receiptId);
+  if (!element) return;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.zIndex = '-9999';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (!doc) return;
+
+  const clone = element.cloneNode(true) as HTMLElement;
+  const buttons = clone.querySelectorAll('button');
+  buttons.forEach((btn) => (btn.style.display = 'none'));
+
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>80mm Thermal Print</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <style>
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+          html, body {
+            width: 80mm;
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          #${receiptId} {
+            width: 80mm !important;
+            min-width: 80mm !important;
+            max-width: 80mm !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 3mm !important;
+            margin: 0 !important;
+            top: 0 !important;
+          }
+        </style>
+      </head>
+      <body>
+        ${clone.outerHTML}
+      </body>
+    </html>
+  `);
+  doc.close();
+
+  const triggerPrint = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (e) {
+      console.error('Thermal print trigger error:', e);
+    }
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 2000);
+  };
+
+  const images = iframe.contentWindow?.document.querySelectorAll('img');
+  const totalImages = images?.length || 0;
+
+  if (totalImages === 0) {
+    setTimeout(triggerPrint, 200);
+  } else {
+    let printed = false;
+    let loadedCount = 0;
+
+    const checkAndPrint = () => {
+      if (!printed) {
+        printed = true;
+        triggerPrint();
+      }
+    };
+
+    const fallbackTimer = setTimeout(checkAndPrint, 600);
+
+    images?.forEach((img) => {
+      if (img.complete) {
+        loadedCount++;
+        if (loadedCount >= totalImages) {
+          clearTimeout(fallbackTimer);
+          setTimeout(checkAndPrint, 100);
+        }
+      } else {
+        img.onload = img.onerror = () => {
+          loadedCount++;
+          if (loadedCount >= totalImages) {
+            clearTimeout(fallbackTimer);
+            setTimeout(checkAndPrint, 100);
+          }
+        };
+      }
+    });
   }
 };
 
@@ -106,14 +227,20 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   customerName,
   customerPhone,
   customerAddress,
+  teluguCustomerName,
+  teluguCustomerAddress,
   rates,
   items,
   totalSellValue,
   totalBuyCredit,
   createdDate,
   updatedDate,
+  billType = 'SALE_DONE',
+  lang = 'EN',
   onDownloadPNG,
 }) => {
+  const t = translations[lang] || translations.EN;
+
   const getItemDetails = (item: any) => {
     const isGold = (item.metal_type || '').toUpperCase() === 'GOLD';
     const isSell = (item.item_type || '').toUpperCase() === 'SELL';
@@ -234,19 +361,19 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           </button>
 
           <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.5px' }}>
-            JAYA BHAVANI JEWELLERS
+            {t.storeName}
           </h4>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.62rem', color: '#0f172a', fontWeight: 700 }}>
-            4-3-4/A, Old bustand to kaman road, Patelpura, Siddipet, Telangana, 502103
+            {t.storeAddress}
           </p>
         </div>
 
         <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#475569', fontWeight: 700, marginBottom: '0.85rem' }}>
-          <div>DATE: {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}</div>
+          <div>{t.dateLabel} {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}</div>
           {updatedDate && (
             <div style={{ color: '#d97706', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-pen-to-square" style={{ fontSize: '0.6rem' }}></i>
-              LAST UPDATED: {formatReceiptDateTime(updatedDate)}
+              {t.lastUpdated} {formatReceiptDateTime(updatedDate)}
             </div>
           )}
         </div>
@@ -254,22 +381,22 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         {/* Transaction Mode & Customer Info */}
         <div style={{ borderBottom: '1px dashed #94a3b8', paddingBottom: '1rem', marginBottom: '1rem', fontSize: '0.7rem', color: '#334155' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ color: '#0f172a', fontWeight: 700 }}>MODE:</span>
-            <strong style={{ color: mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5' }}>
-              [{mode === 'SELL' ? 'JBJ SELLING BILL' : mode === 'BUY' ? 'JBJ BUYING BILL' : 'JBJ TRADE-IN EXCHANGE BILL'}]
+            <span style={{ color: '#0f172a', fontWeight: 700 }}>{t.modeLabel}</span>
+            <strong style={{ color: billType === 'ESTIMATION' ? '#d97706' : (mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5') }}>
+              [{billType === 'ESTIMATION' ? t.estimationBill : (mode === 'SELL' ? t.sellingBill : mode === 'BUY' ? t.buyingBill : t.exchangeBill)}]
             </strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 700 }}>CUSTOMER:</span>
-            <strong style={{ color: '#0f172a' }}>{customerName || 'Walk-in Customer'}</strong>
+            <span style={{ fontWeight: 700 }}>{t.customerLabel}</span>
+            <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerName ? teluguCustomerName : customerName) || t.walkInCustomer}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 700 }}>PHONE:</span>
+            <span style={{ fontWeight: 700 }}>{t.phoneLabel}</span>
             <strong style={{ color: '#0f172a' }}>{customerPhone || 'N/A'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 700 }}>ADDRESS:</span>
-            <strong style={{ color: '#0f172a' }}>{customerAddress || 'Siddipet, Telangana'}</strong>
+            <span style={{ fontWeight: 700 }}>{t.addressLabel}</span>
+            <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerAddress ? teluguCustomerAddress : customerAddress) || (lang === 'TE' ? 'సిద్దిపేట, తెలంగాణ' : 'Siddipet, Telangana')}</strong>
           </div>
         </div>
 
@@ -293,37 +420,36 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             const customRate = Number(it.custom_rate_per_gram || it.customRate || it.appliedRate);
             const isGold = (it.metal_type || '').toUpperCase() === 'GOLD';
             const rate = customRate > 0 ? customRate : (isGold ? (isSell ? rates?.gold_sell_value : rates?.gold_buy_value) : (isSell ? rates?.silver_sell_value : rates?.silver_buy_value)) || 0;
-            const metalName = isGold ? 'Gold' : 'Silver';
 
             return (
               <div key={it.id || idx} style={{ background: 'rgba(248, 250, 252, 0.65)', borderRadius: '8px', padding: '0.65rem 0.75rem', marginBottom: '0.6rem', border: '1px solid #94a3b8', fontSize: '0.68rem', color: '#0f172a' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, borderBottom: '1px dashed #94a3b8', paddingBottom: '3px', marginBottom: '4px' }}>
                   <span>#{idx + 1} {it.product_name || (it.metal_type + ' Item')}</span>
                   <span style={{ color: isSell ? '#b45309' : '#0284c7', fontWeight: 800 }}>
-                    {isSell ? '[CUST BUYING]' : '[CUST SELLING]'}
+                    {isSell ? t.custBuyingTag : t.custSellingTag}
                   </span>
                 </div>
 
                 <div style={{ display: 'grid', gap: '2px', color: '#0f172a' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                    <span style={{ fontWeight: 700 }}>Metal Category:</span>
-                    <strong>{it.metal_type}</strong>
+                    <span style={{ fontWeight: 700 }}>{t.metalCategoryReceipt}</span>
+                    <strong>{isGold ? t.goldMetal : t.silverMetal}</strong>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                    <span style={{ fontWeight: 700 }}>Gross Item Weight:</span>
+                    <span style={{ fontWeight: 700 }}>{t.grossItemWeightReceipt}</span>
                     <strong>{formatMax2Decimals(details.grossWeight)} gm</strong>
                   </div>
 
                   {details.deductionWeight > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                      <span style={{ fontWeight: 700 }}>Deduction ({it.deduction_name || 'Stones/Wax'}):</span>
+                      <span style={{ fontWeight: 700 }}>{t.deductionReceipt} ({it.deduction_name || 'Stones/Wax'}):</span>
                       <strong>- {formatMax2Decimals(details.deductionWeight)} gm</strong>
                     </div>
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                    <span>Net {metalName} Weight:</span>
+                    <span>{isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel}:</span>
                     <strong>{formatMax2Decimals(details.netWeight)} gm</strong>
                   </div>
 
@@ -337,11 +463,11 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                   {!isSell && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
-                        <span>Item Quality:</span>
+                        <span>{t.itemQualityReceipt}</span>
                         <strong>{formatMax2Decimals(details.purityPercent)}%</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                        <span>Pure {metalName} Weight ({formatMax2Decimals(details.purityPercent)}% of {formatMax2Decimals(details.netWeight)}g):</span>
+                        <span>{isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel} ({formatMax2Decimals(details.purityPercent)}%):</span>
                         <strong>{formatMax2Decimals(details.pureWeight)} gm</strong>
                       </div>
                     </>
@@ -349,7 +475,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                     <span style={{ fontWeight: 700 }}>
-                      {metalName} Value (₹{rate}/g):
+                      {isGold ? t.goldValueReceipt : t.silverValueReceipt} (₹{rate}/g):
                     </span>
                     <strong style={{ color: '#0f172a', fontWeight: 700 }}>₹{details.metalVal.toLocaleString('en-IN')}</strong>
                   </div>
@@ -358,12 +484,12 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <>
                       {details.makingVal > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                          <span>Making Charges:</span>
+                          <span>{t.makingChargesReceipt}</span>
                           <strong>+ ₹{details.makingVal.toLocaleString('en-IN')}</strong>
                         </div>
                       )}
                       {details.additionalVal > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
                           <span>{it.additional_charges_name || 'Additional Charges'}:</span>
                           <strong>+ ₹{details.additionalVal.toLocaleString('en-IN')}</strong>
                         </div>
@@ -372,7 +498,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: isSell ? '#15803d' : '#0284c7', borderTop: '1px dashed #94a3b8', paddingTop: '3px', marginTop: '2px' }}>
-                    <span>Item Subtotal:</span>
+                    <span>{t.itemSubtotalReceipt}</span>
                     <strong>₹{details.lineTotal > 0 ? details.lineTotal.toLocaleString('en-IN') : '0'}</strong>
                   </div>
                 </div>
@@ -382,10 +508,34 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         </div>
 
         {/* Clean Summary Breakdown based on Transaction Mode */}
-        <div style={{ borderTop: '1px dashed #94a3b8', paddingTop: '0.65rem', fontSize: '0.72rem', color: '#334155' }}>
+        <div style={{ borderTop: '1px dashed #94a3b8', paddingTop: '0.65rem', fontSize: '0.72rem', color: '#334155', position: 'relative' }}>
+          {/* Official Stamp Graphic Overlay */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '50px',
+              right: '75px',
+              pointerEvents: 'none',
+              zIndex: 10,
+              opacity: 0.88,
+              transform: 'rotate(-10deg)',
+            }}
+          >
+            <img
+              src={billType === 'ESTIMATION' ? '/images/Estimation.png' : '/images/jbj_sale_done_stamp.webp'}
+              alt={billType === 'ESTIMATION' ? 'Estimation Stamp' : 'Sale Done Stamp'}
+              style={{
+                width: billType === 'ESTIMATION' ? '120px' : '110px',
+                height: 'auto',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.15))',
+              }}
+            />
+          </div>
+
           {mode === 'BUY' ? (
             <>
-              <div style={{ fontWeight: 800, color: '#0369a1', marginBottom: '4px' }}>Gross Buying Items:</div>
+              <div style={{ fontWeight: 800, color: '#0369a1', marginBottom: '4px' }}>{t.grossBuyingItems}</div>
               <div style={{ display: 'grid', gap: '3px', paddingLeft: '4px', marginBottom: '6px' }}>
                 {items.filter(i => i.item_type === 'BUY').map((it, idx) => {
                   const details = getItemDetails(it);
@@ -399,9 +549,9 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0369a1', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
-                  <div>GRAND TOTAL:</div>
+                  <div>{t.grandTotal}</div>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#0369a1' }}>
-                    (Customer should pay)
+                    {t.needToPayCustomer}
                   </div>
                 </div>
                 <div>₹{totalBuyCredit.toLocaleString('en-IN')}</div>
@@ -409,7 +559,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             </>
           ) : mode === 'SELL' ? (
             <>
-              <div style={{ fontWeight: 800, color: '#b45309', marginBottom: '4px' }}>Gross Selling Items:</div>
+              <div style={{ fontWeight: 800, color: '#b45309', marginBottom: '4px' }}>{t.grossSellingItems}</div>
               <div style={{ display: 'grid', gap: '3px', paddingLeft: '4px', marginBottom: '6px' }}>
                 {items.filter(i => i.item_type === 'SELL').map((it, idx) => {
                   const details = getItemDetails(it);
@@ -423,9 +573,9 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
-                  <div>GRAND TOTAL:</div>
+                  <div>{t.grandTotal}</div>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#475569' }}>
-                    (Customer should pay)
+                    {t.customerShouldPay}
                   </div>
                 </div>
                 <div>₹{totalSellValue.toLocaleString('en-IN')}</div>
@@ -434,33 +584,40 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontWeight: 700, color: '#b45309' }}>
-                <span>Gross Selling Total:</span>
+                <span>{t.grossSellingTotal}</span>
                 <span>₹{totalSellValue.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 700, color: '#0369a1' }}>
-                <span>Less Item Exchange Credit:</span>
+                <span>{t.lessExchangeCredit}</span>
                 <span>- ₹{totalBuyCredit.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
-                  <div>GRAND TOTAL:</div>
+                  <div>{t.grandTotal}</div>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: totalBuyCredit > totalSellValue ? '#0369a1' : '#475569' }}>
-                    {totalBuyCredit > totalSellValue ? '(Need to pay to customer)' : '(Customer should pay)'}
+                    {totalBuyCredit > totalSellValue ? t.needToPayCustomer : t.customerShouldPay}
                   </div>
                 </div>
-                <div>₹{Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}</div>
+                <div style={{ fontSize: '1rem', fontWeight: 900 }}>₹{Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}</div>
               </div>
             </>
           )}
         </div>
 
         {/* Thermal Barcode Graphic Footer */}
-        <div style={{ textAlign: 'center', marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px dashed #94a3b8' }}>
+        <div style={{ textAlign: 'center', marginTop: '0.2rem', paddingTop: '0.2rem', borderTop: '1px dashed #94a3b8' }}>
           <div style={{ letterSpacing: '4px', fontSize: '1.1rem', fontFamily: 'monospace', color: '#334155', opacity: 0.8 }}>
-            ||||| ||| |||| ||||| ||
+            ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
           </div>
-          <small style={{ fontSize: '0.7rem', color: '#181f30ff', display: 'block', marginTop: '4px' }}>
-            Thank you for visiting Jaya Bhavani Jewellers!
+          <div style={{ margin: '2px 0 2px 0', display: 'flex', justifyContent: 'center' }}>
+            <img
+              src="/Jaya_Bhavani_Jewellers_QR.svg"
+              alt="Jaya Bhavani Jewellers QR Code"
+              style={{ width: '100px', height: '100px', objectFit: 'contain' }}
+            />
+          </div>
+          <small style={{ fontSize: '0.7rem', color: '#181f30ff', display: 'block', marginTop: '2px' }}>
+            {t.thankYouMessage}
           </small>
         </div>
       </div>

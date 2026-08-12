@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { SeeBillModal } from './SeeBillModal';
+import { translations } from '../../utils/translations';
+import type { Language } from '../../utils/translations';
+import { API_BASE } from '../../config/apiConfig';
+import { getTeluguTransliterationSync } from '../../utils/transliterate';
 
 interface CustomerDirectoryViewProps {
   customers: CustomerDirectoryRecord[];
   rates: GlobalRates | null;
   formatDate: (date?: string) => string;
+  lang?: Language;
   onBackToPOS?: () => void;
   onSelectCustomerForBill?: (name: string, phone: string) => void;
   onEditCustomerRecord?: (cust: CustomerDirectoryRecord) => void;
@@ -16,11 +21,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   customers,
   rates,
   formatDate,
+  lang = 'EN',
   onBackToPOS,
   onSelectCustomerForBill,
   onEditCustomerRecord,
   onViewInvoiceDetails,
 }) => {
+  const t = translations[lang] || translations.EN;
   void onSelectCustomerForBill;
   void onEditCustomerRecord;
   const [search, setSearch] = useState(() => {
@@ -54,7 +61,85 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDirectoryRecord | null>(null);
   const [activeKpiFilter, setActiveKpiFilter] = useState<null | 'GOLD_SELL' | 'GOLD_BUY' | 'SILVER_SELL' | 'SILVER_BUY'>(null);
 
-  // Sync state changes to URL query parameters in real-time
+  // Pagination State (persisted in URL query params & localStorage)
+  const [currentPage, setCurrentPage] = useState<number>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('page');
+    if (p && !isNaN(Number(p)) && Number(p) > 0) return Number(p);
+    const localP = localStorage.getItem('jbj_purchase_history_page');
+    if (localP && !isNaN(Number(localP)) && Number(localP) > 0) return Number(localP);
+    return 1;
+  });
+
+  const [pageSize, setPageSize] = useState<number | 'ALL'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const lim = (params.get('limit') || '').toUpperCase();
+    if (lim === 'ALL') return 'ALL';
+    if (lim && !isNaN(Number(lim)) && Number(lim) > 0) return Number(lim);
+    const localLim = (localStorage.getItem('jbj_purchase_history_limit') || '').toUpperCase();
+    if (localLim === 'ALL') return 'ALL';
+    if (localLim && !isNaN(Number(localLim)) && Number(localLim) > 0) return Number(localLim);
+    return 10; // Default 10 records by default
+  });
+
+  const [serverCustomers, setServerCustomers] = useState<CustomerDirectoryRecord[]>(customers);
+  const [serverTotalCount, setServerTotalCount] = useState<number>(customers.length);
+  const [loadingRecords, setLoadingRecords] = useState(false);
+
+  // Fetch on-demand records from backend PostgreSQL database based on limit & page
+  const fetchOnDemand = async () => {
+    setLoadingRecords(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', String(pageSize));
+      params.set('page', String(currentPage));
+      if (search.trim()) params.set('search', search.trim());
+      if (historyTab !== 'ALL') params.set('history', historyTab);
+      if (startDate) params.set('from', startDate);
+      if (endDate) params.set('to', endDate);
+
+      const res = await fetch(`${API_BASE}/billing/customer-directory?${params.toString()}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.customers)) {
+        setServerCustomers(data.customers);
+        setServerTotalCount(data.totalCount ?? data.customers.length);
+      }
+    } catch (err) {
+      console.error('Failed to fetch on-demand customer directory:', err);
+    } finally {
+      setLoadingRecords(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOnDemand();
+  }, [pageSize, currentPage, search, historyTab, startDate, endDate]);
+
+  // Handle Chrome swipe gestures & browser Back/Forward navigation in CustomerDirectoryView
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const histParam = (params.get('history') || 'all').toUpperCase();
+      if (['ALL', 'SELL', 'BUY', 'EXCHANGE'].includes(histParam)) {
+        setHistoryTab(histParam as any);
+      }
+      setSearch(params.get('search') || '');
+      setStartDate(params.get('from') || '');
+      setEndDate(params.get('to') || '');
+
+      const p = params.get('page');
+      if (p && !isNaN(Number(p)) && Number(p) > 0) setCurrentPage(Number(p));
+
+      const lim = (params.get('limit') || '').toUpperCase();
+      if (lim === 'ALL') setPageSize('ALL');
+      else if (lim && !isNaN(Number(lim)) && Number(lim) > 0) setPageSize(Number(lim));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync state changes to URL query parameters & localStorage in real-time
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     params.set('module', 'billing');
@@ -71,8 +156,14 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     if (endDate) params.set('to', endDate);
     else params.delete('to');
 
+    params.set('limit', String(pageSize));
+    params.set('page', String(currentPage));
+
+    localStorage.setItem('jbj_purchase_history_limit', String(pageSize));
+    localStorage.setItem('jbj_purchase_history_page', String(currentPage));
+
     window.history.replaceState({}, '', `?${params.toString()}`);
-  }, [historyTab, search, startDate, endDate]);
+  }, [historyTab, search, startDate, endDate, pageSize, currentPage]);
 
   const handleClearDates = () => {
     setStartDate('');
@@ -240,6 +331,19 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   const fmtAmt = (a: number) => a > 0 ? `₹${a.toLocaleString('en-IN')}` : '₹0';
   const fmtPurity = (p: number) => p > 0 ? `${p.toFixed(1)}%` : '—';
 
+  // Pagination calculations (using server-side on-demand fetched records & count)
+  const displayList = serverCustomers && serverCustomers.length > 0 ? serverCustomers : filtered;
+  const totalRecords = serverTotalCount > 0 ? serverTotalCount : filtered.length;
+  const isAll = pageSize === 'ALL';
+  const numericPageSize = isAll ? totalRecords : Number(pageSize);
+  const totalPages = isAll || numericPageSize >= totalRecords ? 1 : Math.max(1, Math.ceil(totalRecords / numericPageSize));
+
+  const startIndex = isAll ? 0 : (currentPage - 1) * numericPageSize;
+  const paginatedList = displayList;
+
+  const startRecordNum = totalRecords === 0 ? 0 : startIndex + 1;
+  const endRecordNum = totalRecords === 0 ? 0 : startIndex + displayList.length;
+
   return (
     <div className="history-main-card" style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', marginBottom: '0.85rem' }}>
       {/* Top Header Row */}
@@ -259,11 +363,11 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                 transition: 'all 0.15s ease',
               }}
             >
-              <i className="fa-solid fa-arrow-left"></i> Billing
+              <i className="fa-solid fa-arrow-left"></i> {t.billing}
             </button>
           )}
           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className="fa-solid fa-address-book" style={{ color: '#0284c7' }}></i>Purchase History ({filtered.length})
+            <i className="fa-solid fa-address-book" style={{ color: '#0284c7' }}></i>{t.purchaseHistoryTitle} ({filtered.length})
           </h3>
         </div>
       </div>
@@ -371,7 +475,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥇</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Sold</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.goldSoldMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.goldSoldWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#78350f', marginTop: '2px' }}>{fmtAmt(kpi.goldSoldAmount)}</div>
@@ -401,13 +505,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥇</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gold Bought</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#78350f', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.goldBoughtMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.goldBoughtWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#78350f', marginTop: '2px' }}>{fmtAmt(kpi.goldBoughtAmount)}</div>
             <div style={{ fontSize: '0.65rem', fontWeight: 400, color: '#78350f', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-flask" style={{ fontSize: '0.6rem' }}></i>
-              Avg Purity: {fmtPurity(goldBoughtAvgPurity)}
+              {t.avgPurityLabel} {fmtPurity(goldBoughtAvgPurity)}
             </div>
           </div>
         </div>
@@ -435,7 +539,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥈</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Sold</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.silverSoldMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.silverSoldWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.silverSoldAmount)}</div>
@@ -465,13 +569,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           <div style={{ position: 'relative', zIndex: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.85rem' }}>🥈</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Silver Bought</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 500, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.silverBoughtMetric}</span>
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.1 }}>{fmtW(kpi.silverBoughtWeight)}</div>
             <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#64748b', marginTop: '2px' }}>{fmtAmt(kpi.silverBoughtAmount)}</div>
             <div style={{ fontSize: '0.65rem', fontWeight: 400, color: '#334155', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-flask" style={{ fontSize: '0.6rem' }}></i>
-              Avg Purity: {fmtPurity(silverBoughtAvgPurity)}
+              {t.avgPurityLabel} {fmtPurity(silverBoughtAvgPurity)}
             </div>
           </div>
         </div>
@@ -552,7 +656,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             <i className="fa-solid fa-magnifying-glass" style={{ color: '#94a3b8', fontSize: '0.78rem' }}></i>
             <input
               type="text"
-              placeholder="Search name or phone..."
+              placeholder={t.searchPlaceholder}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.80rem', color: '#0f172a' }}
@@ -585,7 +689,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               {startDate || endDate ? (
                 <span>{startDate || 'Start'} → {endDate || 'End'}</span>
               ) : (
-                <span>Filter Date Range</span>
+                <span>{t.filterDateRange}</span>
               )}
               <i className={`fa-solid fa-chevron-${showDateDropdown ? 'up' : 'down'}`} style={{ fontSize: '0.68rem', marginLeft: '4px' }}></i>
             </button>
@@ -608,7 +712,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                 }}
               >
                 <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Select Date Range</span>
+                  <span>{t.filterDateRange}</span>
                   <i className="fa-solid fa-xmark" style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => setShowDateDropdown(false)}></i>
                 </div>
 
@@ -660,7 +764,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       cursor: 'pointer',
                     }}
                   >
-                    Clear
+                    {t.cancelBtn}
                   </button>
 
                   <button
@@ -713,7 +817,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-layer-group" style={{ fontSize: '0.74rem' }}></i>
-            All ({totalBillsCount})
+            {t.allFilter} ({totalBillsCount})
           </button>
 
           <button
@@ -736,7 +840,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-cart-shopping" style={{ fontSize: '0.74rem' }}></i>
-            Sell ({sellBillsCount})
+            {t.sellFilter} ({sellBillsCount})
           </button>
 
           <button
@@ -759,7 +863,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-hand-holding-dollar" style={{ fontSize: '0.74rem' }}></i>
-            Buy ({buyBillsCount})
+            {t.buyFilter} ({buyBillsCount})
           </button>
 
           <button
@@ -782,7 +886,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             }}
           >
             <i className="fa-solid fa-rotate" style={{ fontSize: '0.74rem' }}></i>
-            Exchange ({exchangeBillsCount})
+            {t.exchangeFilter} ({exchangeBillsCount})
           </button>
         </div>
       </div>
@@ -825,20 +929,130 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
         }
       `}</style>
 
-      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e6decb' }}>
+      {/* ── TOP PAGINATION CONTROL BAR ── */}
+      {totalRecords > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.65rem',
+            padding: '0.55rem 0.85rem',
+            background: '#f8fafc',
+            borderRadius: '10px 10px 0 0',
+            border: '1px solid #cbd5e1',
+            borderBottom: 'none',
+            fontSize: '0.78rem',
+            color: '#334155',
+            marginBottom: 0,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontWeight: 600, color: '#475569', fontSize: '0.76rem' }}>{t.rowsPerPage}</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPageSize(val === 'ALL' ? 'ALL' : Number(val));
+                }}
+                style={{
+                  padding: '0.3rem 0.55rem',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {[10, 20, 50, 100, 200, 500, 1000, 'ALL'].map((option) => (
+                  <option key={option} value={option}>
+                    {option === 'ALL' ? t.allRows : option}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ color: '#64748b', fontWeight: 500, fontSize: '0.76rem' }}>
+              {t.showingRecords} <strong style={{ color: '#0f172a' }}>{startRecordNum}–{endRecordNum}</strong> {t.ofRecords} <strong style={{ color: '#0f172a' }}>{totalRecords}</strong> {t.recordsLabel}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              type="button"
+              disabled={currentPage <= 1 || isAll}
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              style={{
+                padding: '0.3rem 0.65rem',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                background: currentPage <= 1 || isAll ? '#f1f5f9' : '#ffffff',
+                color: currentPage <= 1 || isAll ? '#94a3b8' : '#1e293b',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: currentPage <= 1 || isAll ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {t.prevBtn}
+            </button>
+
+            <span style={{ padding: '0.3rem 0.55rem', borderRadius: '6px', background: '#eef2ff', color: '#4338ca', fontWeight: 800, fontSize: '0.75rem', border: '1px solid #c7d2fe' }}>
+              {t.pageLabel} {currentPage} / {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages || isAll}
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              style={{
+                padding: '0.3rem 0.65rem',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                background: currentPage >= totalPages || isAll ? '#f1f5f9' : '#ffffff',
+                color: currentPage >= totalPages || isAll ? '#94a3b8' : '#1e293b',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: currentPage >= totalPages || isAll ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {t.nextBtn}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ overflowX: 'auto', borderRadius: totalRecords > 0 ? '0 0 12px 12px' : '12px', border: '1px solid #e6decb' }}>
         <table className="customer-history-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f4ede4', borderBottom: '1px solid #e6decb', color: '#4a3e35', fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
-              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}># / MODE</th>
-              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '14%' }}>DATE &amp; TIME</th>
-              <th className="col-customer" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '24%' }}>CUSTOMER</th>
-              <th className="col-product" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '28%' }}>PRODUCT (JBJ Sell/BUY)</th>
-              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '11%' }}>WEIGHT</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '13%' }}>FINAL AMOUNT</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}>{t.thMode}</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '14%' }}>{t.thDateTime}</th>
+              <th className="col-customer" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '24%' }}>{t.thCustomer}</th>
+              <th className="col-product" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '28%' }}>{t.thProduct}</th>
+              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '11%' }}>{t.thWeight}</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '13%' }}>{t.thFinalAmount}</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loadingRecords ? (
+              <tr>
+                <td colSpan={6} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#6366f1' }}>
+                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', marginBottom: '8px', display: 'block', color: '#6366f1' }}></i>
+                  <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>Fetching records from database...</span>
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
                   <i className="fa-solid fa-user-slash" style={{ fontSize: '1.3rem', marginBottom: '6px', display: 'block', color: '#cbd5e1' }}></i>
@@ -846,9 +1060,10 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                 </td>
               </tr>
             ) : (
-              filtered.map((cust, idx) => {
+              paginatedList.map((cust, idx) => {
                 const mode = getCustomerMode(cust);
                 const addressStr = cust.address || cust.latestInvoice?.customer_address || cust.latestInvoice?.receipt_json_data?.customer_address || 'Patelpura, Siddipet';
+                const actualIndex = startIndex + idx + 1;
 
                 return (
                   <tr
@@ -865,7 +1080,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                   >
                     {/* 1. Index & MODE Badge */}
                     <td style={{ padding: '0.65rem 0.5rem', textAlign: 'center', verticalAlign: 'middle' }}>
-                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 400, marginBottom: '2px' }}>#{idx + 1}</div>
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 400, marginBottom: '2px' }}>#{actualIndex}</div>
                       <span
                         style={{
                           padding: '2px 6px',
@@ -905,11 +1120,11 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                     {/* 2. Customer Details (ONLY Customer Name is BOLD) */}
                     <td className="col-customer" style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
                       <div className="customer-history-name" style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.84rem', letterSpacing: '-0.2px' }}>
-                        {cust.name}
+                        {lang === 'TE' ? getTeluguTransliterationSync(cust.name) : cust.name}
                       </div>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginTop: '2px', fontSize: '0.68rem', color: '#64748b', fontWeight: 400 }}>
                         <span><i className="fa-solid fa-phone" style={{ color: '#0284c7', fontSize: '0.62rem', marginRight: '2px' }}></i>{cust.phone}</span>
-                        <span style={{ color: '#64748b' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', fontSize: '0.62rem', marginRight: '2px' }}></i>{addressStr}</span>
+                        <span style={{ color: '#64748b' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', fontSize: '0.62rem', marginRight: '2px' }}></i>{lang === 'TE' ? getTeluguTransliterationSync(addressStr) : addressStr}</span>
                       </div>
                     </td>
 
@@ -1046,7 +1261,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                             ₹{displayAmt.toLocaleString('en-IN')}
                           </div>
                           <div style={{ fontSize: '0.60rem', color: isJbjPaid ? '#0284c7' : '#64748b', fontWeight: 400, marginTop: '1px' }}>
-                            {isJbjPaid ? '(JBJ paid)' : '(Customer paid)'}
+                            {isJbjPaid ? t.needToPayCustomerTag : t.customerPaidTag}
                           </div>
                         </td>
                       );
@@ -1062,6 +1277,109 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* ── BOTTOM PAGINATION CONTROL BAR ── */}
+      {totalRecords > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.65rem',
+            padding: '0.55rem 0.85rem',
+            background: '#f8fafc',
+            borderRadius: '0 0 12px 12px',
+            border: '1px solid #cbd5e1',
+            borderTop: 'none',
+            fontSize: '0.78rem',
+            color: '#334155',
+            marginTop: 0,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontWeight: 600, color: '#475569', fontSize: '0.76rem' }}>{t.rowsPerPage}</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPageSize(val === 'ALL' ? 'ALL' : Number(val));
+                }}
+                style={{
+                  padding: '0.3rem 0.55rem',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {[10, 20, 50, 100, 200, 500, 1000, 'ALL'].map((option) => (
+                  <option key={option} value={option}>
+                    {option === 'ALL' ? t.allRows : option}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ color: '#64748b', fontWeight: 500, fontSize: '0.76rem' }}>
+              {t.showingRecords} <strong style={{ color: '#0f172a' }}>{startRecordNum}–{endRecordNum}</strong> {t.ofRecords} <strong style={{ color: '#0f172a' }}>{totalRecords}</strong> {t.recordsLabel}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              type="button"
+              disabled={currentPage <= 1 || isAll}
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              style={{
+                padding: '0.3rem 0.65rem',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                background: currentPage <= 1 || isAll ? '#f1f5f9' : '#ffffff',
+                color: currentPage <= 1 || isAll ? '#94a3b8' : '#1e293b',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: currentPage <= 1 || isAll ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {t.prevBtn}
+            </button>
+
+            <span style={{ padding: '0.3rem 0.55rem', borderRadius: '6px', background: '#eef2ff', color: '#4338ca', fontWeight: 800, fontSize: '0.75rem', border: '1px solid #c7d2fe' }}>
+              {t.pageLabel} {currentPage} / {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages || isAll}
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              style={{
+                padding: '0.3rem 0.65rem',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                background: currentPage >= totalPages || isAll ? '#f1f5f9' : '#ffffff',
+                color: currentPage >= totalPages || isAll ? '#94a3b8' : '#1e293b',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: currentPage >= totalPages || isAll ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {t.nextBtn}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* SEE BILL POPUP MODAL */}
       {selectedCustomer && (

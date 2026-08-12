@@ -8,6 +8,8 @@ interface AnnouncementBarProps {
   isTabletOrMobile?: boolean;
   isMobileScreen?: boolean;
   onToggleMobileMenu?: () => void;
+  lang?: 'EN' | 'TE';
+  onToggleLang?: () => void;
 }
 
 interface MetalRates {
@@ -18,6 +20,7 @@ interface MetalRates {
 }
 
 import { API_BASE } from '../config/apiConfig';
+import { translations } from '../utils/translations';
 
 export default function AnnouncementBar({
   message,
@@ -26,6 +29,8 @@ export default function AnnouncementBar({
   isTabletOrMobile: _isTabletOrMobile = false,
   isMobileScreen = false,
   onToggleMobileMenu: _onToggleMobileMenu,
+  lang = 'EN',
+  onToggleLang,
 }: AnnouncementBarProps) {
   const [visible, setVisible] = useState(
     mode === 'admin' ? true : !sessionStorage.getItem('jaya_bhavani_ann_closed')
@@ -66,7 +71,9 @@ export default function AnnouncementBar({
 
   if (!visible) return null;
 
-  const displayMessage = message || `✦ Gold Buy: ${formatPrice(rates.gold_buy_value)}/g \u00a0|\u00a0 ✦ Gold Sell: ${formatPrice(rates.gold_sell_value)}/g \u00a0|\u00a0 ✦ Silver Buy: ${formatPrice(rates.silver_buy_value)}/g \u00a0|\u00a0 ✦ Silver Sell: ${formatPrice(rates.silver_sell_value)}/g`;
+  const t = translations[lang] || translations.EN;
+  const unit = t.perGramUnit || '/g';
+  const displayMessage = message || `✦ ${t.goldBuyTicker}: ${formatPrice(rates.gold_buy_value)}${unit} \u00a0|\u00a0 ✦ ${t.goldSellTicker}: ${formatPrice(rates.gold_sell_value)}${unit} \u00a0|\u00a0 ✦ ${t.silverBuyTicker}: ${formatPrice(rates.silver_buy_value)}${unit} \u00a0|\u00a0 ✦ ${t.silverSellTicker}: ${formatPrice(rates.silver_sell_value)}${unit}`;
 
   if (mode === 'admin') {
     return (
@@ -105,7 +112,7 @@ export default function AnnouncementBar({
             gap: '0.75rem',
             position: 'sticky',
             top: 0,
-            zIndex: 40,
+            zIndex: 1000,
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
             border: 'none',
             borderRadius: '0px',
@@ -131,8 +138,34 @@ export default function AnnouncementBar({
             {displayMessage}
           </div>
 
-          {/* Right: User Profile Avatar - JBAdmin */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {/* Right: Language Toggle & User Profile Avatar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            {onToggleLang && (
+              <button
+                type="button"
+                onClick={onToggleLang}
+                title="Switch Language (English / తెలుగు)"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.25)',
+                  border: '1.5px solid rgba(255, 255, 255, 0.6)',
+                  borderRadius: '20px',
+                  padding: '3px 12px',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <i className="fa-solid fa-globe"></i>
+                <span>{lang === 'TE' ? 'తెలుగు' : 'English'}</span>
+              </button>
+            )}
+
             <div className="announcement-bar-avatar" style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.22)', border: '1.5px solid #ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#ffffff', fontSize: '0.75rem' }}>
               JB
             </div>

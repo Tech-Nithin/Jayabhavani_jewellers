@@ -1,7 +1,25 @@
 /* =====================================================
-   JAYA BHAVANI Fine Jewellery — style.css
+   JAYA BHAVANI  Jewellery — style.css
    Light & Elegant: White / Rose Gold / Cream Palette
    ===================================================== */
+
+/* Enable native Chrome swipe-left / swipe-right back/forward gestures */
+html, body {
+  overscroll-behavior-x: auto;
+}
+
+/* Custom Bottom Chevron Icon for all Select Dropdowns across Billing & Tables */
+select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.65rem center !important;
+  background-size: 0.75rem !important;
+  padding-right: 2rem !important;
+  cursor: pointer !important;
+}
 
 /* Hide number input spinner arrows (up/down icons) */
 input[type="number"]::-webkit-inner-spin-button,
