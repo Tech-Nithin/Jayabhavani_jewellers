@@ -125,6 +125,10 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
           totalSellValue={totalSellValue}
           totalBuyCredit={totalBuyCredit}
           netPayable={netPayable}
+          paymentType={(storedPayload?.paymentType || ((inv?.due_amount || 0) === 0 ? 'FULL' : 'PARTIAL')) as any}
+          advancePaidAmount={storedPayload?.advancePaidAmount ?? inv?.paid_amount ?? (inv?.transaction_type === 'BUY' ? 0 : netPayable)}
+          balanceDueAmount={storedPayload?.balanceDueAmount ?? inv?.due_amount ?? 0}
+          paymentHistory={storedPayload?.payment_history || []}
           createdDate={inv?.created_at}
           updatedDate={inv?.updated_at || storedPayload?.updated_at}
           onDownloadPNG={() => downloadReceiptAsPNG('see-bill-modal-receipt', customer.name)}

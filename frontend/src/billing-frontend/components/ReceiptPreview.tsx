@@ -7,7 +7,7 @@ import type { Language } from '../../utils/translations';
 
 interface ReceiptPreviewProps {
   receiptId: string;
-  mode: 'SELL' | 'BUY' | 'EXCHANGE';
+  mode: 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER';
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
@@ -21,6 +21,10 @@ interface ReceiptPreviewProps {
   createdDate?: string;
   updatedDate?: string;
   billType?: 'SALE_DONE' | 'ESTIMATION';
+  paymentType?: 'FULL' | 'PARTIAL';
+  advancePaidAmount?: number;
+  balanceDueAmount?: number;
+  paymentHistory?: any[];
   lang?: Language;
   onDownloadPNG?: () => void;
 }
@@ -236,6 +240,10 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   createdDate,
   updatedDate,
   billType = 'SALE_DONE',
+  paymentType = 'FULL',
+  advancePaidAmount,
+  balanceDueAmount,
+  paymentHistory,
   lang = 'EN',
   onDownloadPNG,
 }) => {
@@ -298,6 +306,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
       downloadReceiptAsPNG(receiptId, customerName);
     }
   };
+
+  const isPartialOrDue = (balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL';
 
   return (
     <div
@@ -437,6 +447,14 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
+                    <span style={{ fontWeight: 700 }}>Quantity & Unit:</span>
+                    <strong>
+                      {it.quantity_value || 1} {it.quantity_unit === 'PAIRS' ? 'Pairs' : it.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}
+                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + '"'})` : ''}
+                    </strong>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                     <span style={{ fontWeight: 700 }}>{t.grossItemWeightReceipt}</span>
                     <strong>{formatMax2Decimals(details.grossWeight)} gm</strong>
                   </div>
@@ -513,8 +531,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           <div
             style={{
               position: 'absolute',
-              bottom: '50px',
-              right: '75px',
+              bottom: isPartialOrDue ? '110px' : '85px',
+              right: '85px',
               pointerEvents: 'none',
               zIndex: 10,
               opacity: 0.88,
@@ -522,10 +540,22 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             }}
           >
             <img
-              src={billType === 'ESTIMATION' ? '/images/Estimation.png' : '/images/jbj_sale_done_stamp.webp'}
-              alt={billType === 'ESTIMATION' ? 'Estimation Stamp' : 'Sale Done Stamp'}
+              src={
+                billType === 'ESTIMATION'
+                  ? '/stamps/Estimation_stamp.png'
+                  : isPartialOrDue
+                    ? '/stamps/payment_due_stamp.webp'
+                    : '/stamps/sale_done_stamp.webp'
+              }
+              alt={
+                billType === 'ESTIMATION'
+                  ? 'Estimation Stamp'
+                  : (balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL'
+                    ? 'Payment Due Stamp'
+                    : 'Sale Done Stamp'
+              }
               style={{
-                width: billType === 'ESTIMATION' ? '120px' : '110px',
+                width: (balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL' ? '110px' : billType === 'ESTIMATION' ? '120px' : '110px',
                 height: 'auto',
                 objectFit: 'contain',
                 filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.15))',
@@ -601,6 +631,37 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                 <div style={{ fontSize: '1rem', fontWeight: 900 }}>₹{Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}</div>
               </div>
             </>
+          )}
+
+          {/* Payment Breakdown (Paid vs Balance Due) */}
+          {(advancePaidAmount !== undefined || balanceDueAmount !== undefined) && (
+            <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #cbd5e1', fontSize: '0.72rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a', fontWeight: 700 }}>
+                <span>{lang === 'TE' ? 'చెల్లించిన మొత్తం' : 'Amount Paid'}:</span>
+                <strong>₹{(advancePaidAmount || 0).toLocaleString('en-IN')}</strong>
+              </div>
+              {(balanceDueAmount || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#dc2626', fontWeight: 800, marginTop: '2px' }}>
+                  <span>{lang === 'TE' ? 'బాకీ బకాయి (Due)' : 'Balance Due'}:</span>
+                  <strong>₹{(balanceDueAmount || 0).toLocaleString('en-IN')}</strong>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Payment History List (Installments) */}
+          {paymentHistory && paymentHistory.length > 0 && (
+            <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #cbd5e1', fontSize: '0.68rem' }}>
+              <div style={{ fontWeight: 800, color: '#334155', marginBottom: '3px' }}>
+                Payment History (Installments):
+              </div>
+              {paymentHistory.map((ph: any, pIdx: number) => (
+                <div key={pIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', padding: '1px 0' }}>
+                  <span>#{pIdx + 1} {formatReceiptDateTime(ph.date)} ({ph.type || 'Payment'}):</span>
+                  <strong style={{ color: '#16a34a' }}>+ ₹{(Number(ph.amount) || 0).toLocaleString('en-IN')}</strong>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

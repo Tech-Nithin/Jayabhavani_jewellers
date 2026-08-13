@@ -2513,4 +2513,93 @@ textarea::placeholder {
 }
 .ornament-slider::-webkit-scrollbar {
   display: none;
+}
+
+/* =====================================================
+   MY ORDERS & CRAFTING MANAGEMENT — TABLET RESPONSIVE STYLES
+   ===================================================== */
+@media (max-width: 1024px) {
+  .orders-module-root {
+    padding: 0.25rem !important;
+  }
+  .orders-kpi-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.5rem !important;
+    margin-bottom: 1rem !important;
+  }
+  .orders-kpi-grid > div {
+    padding: 0.65rem 0.75rem !important;
+  }
+  .orders-module-root h2 {
+    font-size: 1.12rem !important;
+  }
+  .orders-module-root p {
+    font-size: 0.72rem !important;
+  }
+  .orders-module-root button {
+    font-size: 0.76rem !important;
+    padding: 6px 12px !important;
+  }
+  .orders-module-root input,
+  .orders-module-root select,
+  .orders-module-root textarea {
+    font-size: 0.75rem !important;
+    padding: 0.45rem 0.65rem !important;
+  }
+  .orders-module-root table {
+    font-size: 0.74rem !important;
+  }
+  .orders-module-root th {
+    font-size: 0.72rem !important;
+    padding: 0.6rem 0.65rem !important;
+  }
+  .orders-module-root td {
+    font-size: 0.74rem !important;
+    padding: 0.6rem 0.65rem !important;
+  }
+  .orders-module-root .orders-stat-title {
+    font-size: 0.68rem !important;
+  }
+  .orders-module-root .orders-stat-value {
+    font-size: 1.05rem !important;
+  }
+}
+
+/* =====================================================
+   TABLET DENSE VIEW RESPONSIVE TYPOGRAPHY (≤ 1024px)
+   ===================================================== */
+@media (max-width: 1024px) {
+  .tablet-dense-view {
+    font-size: 0.76rem !important;
+  }
+  .tablet-dense-view h1,
+  .tablet-dense-view h2 {
+    font-size: 1.05rem !important;
+  }
+  .tablet-dense-view h3,
+  .tablet-dense-view h4 {
+    font-size: 0.90rem !important;
+  }
+  .tablet-dense-view p,
+  .tablet-dense-view span,
+  .tablet-dense-view label {
+    font-size: 0.72rem !important;
+  }
+  .tablet-dense-view input,
+  .tablet-dense-view select,
+  .tablet-dense-view textarea,
+  .tablet-dense-view button {
+    font-size: 0.74rem !important;
+  }
+  .tablet-dense-view table {
+    font-size: 0.70rem !important;
+  }
+  .tablet-dense-view th {
+    font-size: 0.65rem !important;
+    padding: 5px 6px !important;
+  }
+  .tablet-dense-view td {
+    font-size: 0.70rem !important;
+    padding: 5px 6px !important;
+  }
 }

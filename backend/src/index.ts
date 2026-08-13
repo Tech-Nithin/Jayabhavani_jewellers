@@ -11,6 +11,7 @@ import billingRoutes from './billing-backend/routes/billingRoutes';
 import financeRoutes from './finance-backend/routes/financeRoutes';
 import inventoryRoutes from './inventory-backend/routes/inventoryRoutes';
 import workAssignmentRoutes from './work-assignment-backend/routes/workAssignmentRoutes';
+import ordersAndWorkerRoutes from './work-assignment-backend/routes/ordersAndWorkerRoutes';
 
 dotenv.config();
 
@@ -75,6 +76,8 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/work-assignment', workAssignmentRoutes);
+app.use('/api/work-assignment', ordersAndWorkerRoutes);
+app.use('/api/billing', ordersAndWorkerRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {

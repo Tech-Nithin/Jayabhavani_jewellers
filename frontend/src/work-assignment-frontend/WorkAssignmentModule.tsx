@@ -1,251 +1,366 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../config/apiConfig';
-import type { Language } from '../utils/translations';
-import { SellingDetailsTable } from './SellingDetailsTable';
-import { AssignTaskModal } from './AssignTaskModal';
-
-const LOCAL_TRANSLATIONS = {
-  EN: {
-    title: 'Work Assignment & Crafting Management',
-    subtitle: 'Assign gold/silver crafting, repairs, and custom jewelry orders to artisans',
-    searchPlaceholder: 'Search customer name, product, or metal category...',
-    kpiTotal: 'Total Sales',
-    kpiGold: 'Gold Sold Weight',
-    kpiSilver: 'Silver Sold Weight',
-    kpiRevenue: 'Total Revenue',
-  },
-  TE: {
-    title: 'పని కేటాయింపు & తయారీ నిర్వహణ',
-    subtitle: 'బంగారం/వెండి తయారీ, మరమ్మతులు మరియు అనుకూల ఆభరణాల ఆర్డర్లను కళాకారులకు కేటాయించండి',
-    searchPlaceholder: 'కస్టమర్ పేరు, ఉత్పత్తి లేదా మెటల్ కేటగిరీ కోసం వెతకండి...',
-    kpiTotal: 'మొత్తం అమ్మకాలు',
-    kpiGold: 'బంగారం బరువు',
-    kpiSilver: 'వెండి బరువు',
-    kpiRevenue: 'మొత్తం ఆదాయం',
-  }
-};
+import { translations, type Language } from '../utils/translations';
+import { AddWorkerView } from './AddWorkerView';
+import { WorkerTransactionsView } from './WorkerTransactionsView';
+import { WorkerWorkHistoryView } from './WorkerWorkHistoryView';
 
 export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Language }> = ({
-  globalSearch = '',
-  lang = 'EN'
+  lang = 'EN',
 }) => {
-  const t = LOCAL_TRANSLATIONS[lang] || LOCAL_TRANSLATIONS.EN;
-  const [searchTerm, setSearchTerm] = useState(globalSearch);
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'LIST' | 'ADD_WORKER' | 'WORK_HISTORY' | 'TRANSACTIONS'>('LIST');
+  const [selectedWorker, setSelectedWorker] = useState<any | null>(null);
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [previewWorkerPhoto, setPreviewWorkerPhoto] = useState<{ url?: string; name: string; id: string } | null>(null);
 
-  const handleAssignClick = (inv: any) => {
-    setSelectedInvoice(inv);
-    setModalOpen(true);
-  };
+  // 1. Sync from URL query parameters
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get('view')?.toUpperCase();
+      const wId = params.get('workerId');
 
-  const handleAssignSubmit = async (formData: {
-    workerName: string;
-    itemWeight: number;
-    itemPurity: number;
-    mode: 'METAL' | 'CASH';
-    invoiceId?: string | number;
-  }) => {
-    try {
-      const res = await fetch(`${API_BASE}/work-assignment/assign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      const resData = await res.json();
-      if (resData.success) {
-        alert(`Successfully assigned task to ${formData.workerName} in ${formData.mode} mode!`);
+      if (v === 'ADD_WORKER' || v === 'ADD-WORKER') {
+        setViewMode('ADD_WORKER');
+      } else if (v === 'WORK_HISTORY' || v === 'WORK-HISTORY') {
+        setViewMode('WORK_HISTORY');
+      } else if (v === 'TRANSACTIONS' || v === 'TRANSACTION-HISTORY') {
+        setViewMode('TRANSACTIONS');
       } else {
-        alert('Failed to assign task: ' + resData.message);
+        setViewMode('LIST');
       }
-    } catch (err) {
-      console.error('Error assigning task:', err);
-      alert('Network or server error assigning task.');
-    }
-  };
 
-  useEffect(() => {
-    setSearchTerm(globalSearch);
-  }, [globalSearch]);
-
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/billing/invoices`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.invoices)) {
-          setInvoices(data.invoices);
-        }
-      } catch (err) {
-        console.error('Failed to fetch invoices for Work Assignment Module:', err);
-      } finally {
-        setLoading(false);
+      if (wId && workers.length > 0) {
+        const found = workers.find((w) => w.id === wId);
+        if (found) setSelectedWorker(found);
       }
     };
-    fetchInvoices();
+
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
+  }, [workers]);
+
+  useEffect(() => {
+    fetchData();
   }, []);
 
-  // Filter invoices to only include transaction_type === 'SELL'
-  const sellInvoices = invoices.filter(
-    (inv) => (inv.transaction_type || inv.receipt_json_data?.transaction_type || 'SELL').toUpperCase() === 'SELL'
-  );
+  const fetchData = async () => {
+    try {
+      const resWorkers = await fetch(`${API_BASE}/work-assignment/workers`);
+      const dataWorkers = await resWorkers.json();
 
-  // Compute dynamic stats
-  const totalSalesCount = sellInvoices.length;
-  
-  let goldWeight = 0;
-  let silverWeight = 0;
-  let totalRevenue = 0;
-
-  sellInvoices.forEach((inv) => {
-    totalRevenue += Number(inv.final_amount) || 0;
-
-    const items: any[] = inv.receipt_json_data?.items || [];
-    const sellItems = items.filter((i) => (i.item_type || 'SELL').toUpperCase() === 'SELL');
-
-    if (sellItems.length > 0) {
-      sellItems.forEach((item) => {
-        const w = Number(item.weight_grams) || 0;
-        const metal = (item.metal_type || 'GOLD').toUpperCase();
-        if (metal === 'GOLD') {
-          goldWeight += w;
-        } else if (metal === 'SILVER') {
-          silverWeight += w;
-        }
-      });
-    } else {
-      const w = Number(inv.weight_grams) || 0;
-      const metal = (inv.metal_type || 'GOLD').toUpperCase();
-      if (metal === 'GOLD') {
-        goldWeight += w;
-      } else if (metal === 'SILVER') {
-        silverWeight += w;
+      if (dataWorkers.success && Array.isArray(dataWorkers.workers)) {
+        setWorkers(dataWorkers.workers);
       }
+    } catch (err) {
+      console.error('Failed to fetch work assignment data:', err);
     }
-  });
+  };
+
+  const updateUrlView = (_tab: 'workers', mode: 'LIST' | 'ADD_WORKER' | 'WORK_HISTORY' | 'TRANSACTIONS', workerId?: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('module', 'work-assignment');
+    if (mode === 'ADD_WORKER') url.searchParams.set('view', 'add-worker');
+    else if (mode === 'WORK_HISTORY') url.searchParams.set('view', 'work-history');
+    else if (mode === 'TRANSACTIONS') url.searchParams.set('view', 'transaction-history');
+    else url.searchParams.set('view', 'workers');
+
+    if (workerId) url.searchParams.set('workerId', workerId);
+    else url.searchParams.delete('workerId');
+
+    window.history.pushState({}, '', url.toString());
+  };
 
   return (
     <div style={{ color: '#181310', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
-      {/* Header section */}
-      <div style={{ marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+      {/* ── SUB-SCREEN 1: ADD WORKER FORM ── */}
+      {viewMode === 'ADD_WORKER' ? (
+        <AddWorkerView
+          onClose={() => {
+            setViewMode('LIST');
+            updateUrlView('workers', 'LIST');
+          }}
+          onWorkerAdded={() => fetchData()}
+          lang={lang}
+        />
+      ) : viewMode === 'WORK_HISTORY' && selectedWorker ? (
+        /* ── SUB-SCREEN 2: WORKER WORK HISTORY ── */
+        <WorkerWorkHistoryView
+          worker={selectedWorker}
+          onBack={() => {
+            setViewMode('LIST');
+            setSelectedWorker(null);
+            updateUrlView('workers', 'LIST');
+          }}
+          lang={lang}
+        />
+      ) : viewMode === 'TRANSACTIONS' && selectedWorker ? (
+        /* ── SUB-SCREEN 3: WORKER TRANSACTIONS (WhatsApp Chat UI) ── */
+        <WorkerTransactionsView
+          worker={selectedWorker}
+          onBack={() => {
+            setViewMode('LIST');
+            setSelectedWorker(null);
+            updateUrlView('workers', 'LIST');
+          }}
+          lang={lang}
+        />
+      ) : (
+        /* ── SUB-SCREEN 4: WORKERS LIST & LEDGERS TAB ── */
         <div>
-          <h2 style={{ fontSize: '1.5rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
-            <i className="fa-solid fa-clipboard-list" style={{ color: '#d97706', marginRight: '8px' }}></i>
-            {t.title}
-          </h2>
-          <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.8rem' }}>
-            {t.subtitle}
-          </p>
-        </div>
+          {/* ── MAIN WORKER MANAGEMENT HEADER ── */}
+          <div style={{ marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>
+                <i className="fa-solid fa-users-gears" style={{ color: '#d97706', marginRight: '10px' }}></i>
+                {translations[lang]?.workAssignmentTitle || 'Worker Management'}
+              </h2>
+              <p style={{ margin: '3px 0 0 0', color: '#64748b', fontSize: '0.78rem' }}>
+                {translations[lang]?.workAssignmentSub || 'Manage registered artisans, crafting work histories, and metal/cash payment ledgers'}
+              </p>
+            </div>
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
-          {/* Search bar */}
-          <div style={{ position: 'relative', minWidth: '240px', flex: '1', maxWidth: '380px' }}>
-            <i className="fa-solid fa-magnifying-glass" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.85rem' }}></i>
-            <input
-              type="text"
-              placeholder={t.searchPlaceholder}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.6rem 0.85rem 0.6rem 2.2rem',
-                borderRadius: '12px',
-                border: '1px solid #cbd5e1',
-                fontSize: '0.85rem',
-                background: '#ffffff',
-                color: '#1e293b',
-                outline: 'none',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-              }}
-            />
-            {searchTerm && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.0rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              {translations[lang]?.workersList || 'Workers List'} ({workers.length})
+            </h3>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <button
-                onClick={() => setSearchTerm('')}
-                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.85rem' }}
+                onClick={() => {
+                  setSelectedWorker({ id: 'ALL', name: 'All Workers', specialization: 'All Artisans & Craftsmen' });
+                  setViewMode('WORK_HISTORY');
+                  updateUrlView('workers', 'WORK_HISTORY', 'ALL');
+                }}
+                style={{
+                  padding: '7px 14px',
+                  background: '#f8fafc',
+                  color: '#c79902ff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
               >
-                <i className="fa-solid fa-xmark"></i>
+                <i className="fa-solid fa-clipboard-list" style={{ color: '#c78202ff' }}></i>
+                {translations[lang]?.seeWorkHistory || 'See Work History'}
               </button>
+
+              <button
+                onClick={() => {
+                  setViewMode('ADD_WORKER');
+                  updateUrlView('workers', 'ADD_WORKER');
+                }}
+                style={{
+                  padding: '7px 14px',
+                  background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(180, 83, 9, 0.25)',
+                }}
+              >
+                <i className="fa-solid fa-user-plus"></i> {translations[lang]?.addNewWorker || 'Add New Worker'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
+            {workers.map((w) => {
+              const startCaseName = w.name ? w.name.toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase()) : '';
+              const startCaseAddr = w.address ? w.address.toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase()) : '';
+              const startCaseSpec = w.specialization ? w.specialization.toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase()) : '';
+              const createdDateStr = w.created_at
+                ? new Date(w.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                : '—';
+
+              return (
+                <div key={w.id} style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 14px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    {/* Header: Photo / Avatar + Name + Status Badge */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                        {w.photo_url ? (
+                          <img
+                            src={w.photo_url}
+                            alt={startCaseName}
+                            onClick={() => setPreviewWorkerPhoto({ url: w.photo_url, name: startCaseName, id: w.id })}
+                            title="Click to view enlarged photo"
+                            style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d97706', boxShadow: '0 3px 10px rgba(180, 83, 9, 0.2)', cursor: 'pointer' }}
+                          />
+                        ) : (
+                          <div
+                            onClick={() => setPreviewWorkerPhoto({ url: '', name: startCaseName, id: w.id })}
+                            title="Click to view enlarged avatar"
+                            style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.1rem', boxShadow: '0 3px 10px rgba(180, 83, 9, 0.3)', cursor: 'pointer' }}
+                          >
+                            {startCaseName.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{startCaseName}</h4>
+                          <span style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 700, background: '#e0f2fe', padding: '2px 8px', borderRadius: '8px', display: 'inline-block', marginTop: '2px' }}>
+                            ID: {w.id}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Status Badge */}
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', background: '#dcfce7', border: '1px solid #86efac', borderRadius: '12px', padding: '3px 9px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        ● {w.status || 'ACTIVE'}
+                      </span>
+                    </div>
+
+                    {/* Detailed Metadata Fields */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '0.85rem', fontSize: '0.78rem', color: '#475569' }}>
+                      {/* Phone */}
+                      {w.phone && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="fa-solid fa-phone" style={{ color: '#0284c7', fontSize: '0.72rem', width: '16px' }}></i>
+                          <span style={{ fontWeight: 600, color: '#0f172a' }}>{w.phone}</span>
+                        </div>
+                      )}
+
+                      {/* Address */}
+                      {startCaseAddr && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="fa-solid fa-location-dot" style={{ color: '#dc2626', fontSize: '0.72rem', width: '16px' }}></i>
+                          <span>{startCaseAddr}</span>
+                        </div>
+                      )}
+
+                      {/* Specialization */}
+                      {startCaseSpec && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="fa-solid fa-screwdriver-wrench" style={{ color: '#d97706', fontSize: '0.72rem', width: '16px' }}></i>
+                          <span>{startCaseSpec}</span>
+                        </div>
+                      )}
+
+                      {/* Registered Date */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="fa-solid fa-calendar-check" style={{ color: '#16a34a', fontSize: '0.72rem', width: '16px' }}></i>
+                        <span style={{ color: '#64748b' }}>Registered: <strong style={{ color: '#334155' }}>{createdDateStr}</strong></span>
+                      </div>
+
+                      {/* Notes */}
+                      {w.notes && (
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginTop: '2px', background: '#f8fafc', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                          <i className="fa-solid fa-note-sticky" style={{ color: '#8b5cf6', fontSize: '0.72rem', width: '16px', marginTop: '2px' }}></i>
+                          <span style={{ fontSize: '0.72rem', color: '#475569', fontStyle: 'italic' }}>{w.notes}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Order Stats Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', background: '#f8fafc', padding: '0.65rem', borderRadius: '10px', textAlign: 'center', marginBottom: '1rem', border: '1px solid #f1f5f9' }}>
+                      <div>
+                        <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700, display: 'block' }}>ASSIGNED</span>
+                        <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{w.assigned_orders_count || 0}</strong>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 700, display: 'block' }}>PENDING</span>
+                        <strong style={{ fontSize: '0.95rem', color: '#d97706' }}>{w.pending_orders_count || 0}</strong>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.65rem', color: '#15803d', fontWeight: 700, display: 'block' }}>COMPLETED</span>
+                        <strong style={{ fontSize: '0.95rem', color: '#16a34a' }}>{w.completed_orders_count || 0}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons: Work History & Transactions */}
+                  <div style={{ display: 'flex', gap: '0.5rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9' }}>
+                    <button
+                      onClick={() => {
+                        setSelectedWorker(w);
+                        setViewMode('WORK_HISTORY');
+                        updateUrlView('workers', 'WORK_HISTORY', w.id);
+                      }}
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#334155', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                    >
+                      <i className="fa-solid fa-clipboard-list" style={{ color: '#0284c7' }}></i>
+                      {translations[lang]?.workHistoryTab || 'Work History'}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setSelectedWorker(w);
+                        setViewMode('TRANSACTIONS');
+                        updateUrlView('workers', 'TRANSACTIONS', w.id);
+                      }}
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #075e54 0%, #128c7e 100%)', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', boxShadow: '0 2px 8px rgba(7, 94, 84, 0.25)' }}
+                    >
+                      <i className="fa-solid fa-comments"></i>
+                      {translations[lang]?.seeTransactions || 'See Transactions'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── ENLARGED PHOTO PREVIEW LIGHTBOX MODAL ── */}
+      {previewWorkerPhoto && (
+        <div
+          onClick={() => setPreviewWorkerPhoto(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)',
+            zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', cursor: 'zoom-out'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff', borderRadius: '24px', padding: '1.75rem', maxWidth: '420px', width: '100%',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', textAlign: 'center', position: 'relative'
+            }}
+          >
+            <button
+              onClick={() => setPreviewWorkerPhoto(null)}
+              style={{
+                position: 'absolute', top: '14px', right: '14px', background: '#f1f5f9', border: 'none',
+                borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', fontSize: '1rem', color: '#64748b'
+              }}
+            >
+              <i className="fa-solid fa-xmark" />
+            </button>
+
+            {previewWorkerPhoto.url ? (
+              <img
+                src={previewWorkerPhoto.url}
+                alt={previewWorkerPhoto.name}
+                style={{ width: '220px', height: '220px', borderRadius: '50%', objectFit: 'cover', margin: '0 auto 1rem auto', border: '4px solid #d97706', boxShadow: '0 8px 24px rgba(180,83,9,0.3)' }}
+              />
+            ) : (
+              <div style={{ width: '160px', height: '160px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '4rem', margin: '0 auto 1rem auto', boxShadow: '0 8px 24px rgba(180,83,9,0.3)' }}>
+                {previewWorkerPhoto.name.charAt(0)}
+              </div>
             )}
+
+            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{previewWorkerPhoto.name}</h3>
+            <span style={{ fontSize: '0.8rem', color: '#0284c7', fontWeight: 700, background: '#e0f2fe', padding: '3px 12px', borderRadius: '12px', display: 'inline-block' }}>
+              Worker ID: {previewWorkerPhoto.id}
+            </span>
           </div>
         </div>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-        {/* Card 1: Total Sales */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1rem 1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.kpiTotal}</span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#eff6ff', color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>
-              <i className="fa-solid fa-basket-shopping"></i>
-            </div>
-          </div>
-          <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>
-            {loading ? '...' : totalSalesCount}
-          </h3>
-        </div>
-
-        {/* Card 2: Gold Weight */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1rem 1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.kpiGold}</span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#fffbeb', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>
-              <i className="fa-solid fa-weight-hanging" style={{ color: '#d97706' }}></i>
-            </div>
-          </div>
-          <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>
-            {loading ? '...' : `${goldWeight.toFixed(1)} g`}
-          </h3>
-        </div>
-
-        {/* Card 3: Silver Weight */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1rem 1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.kpiSilver}</span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>
-              <i className="fa-solid fa-scale-balanced"></i>
-            </div>
-          </div>
-          <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>
-            {loading ? '...' : `${silverWeight.toFixed(1)} g`}
-          </h3>
-        </div>
-
-        {/* Card 4: Total Revenue */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1rem 1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t.kpiRevenue}</span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#d1fae5', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>
-              <i className="fa-solid fa-indian-rupee-sign"></i>
-            </div>
-          </div>
-          <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>
-            {loading ? '...' : `₹${totalRevenue.toLocaleString('en-IN')}`}
-          </h3>
-        </div>
-      </div>
-
-      {/* Selling Details Table Component */}
-      <SellingDetailsTable invoices={sellInvoices} loading={loading} searchTerm={searchTerm} onAssignClick={handleAssignClick} />
-
-      {/* Assign Work Crafting Modal Dialog */}
-      <AssignTaskModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        initialData={
-          selectedInvoice
-            ? {
-                weight: Number(selectedInvoice.weight_grams) || 0,
-                purity: Number(selectedInvoice.purity_percentage) || 91.6,
-                invoiceId: selectedInvoice.id,
-              }
-            : null
-        }
-        onSubmit={handleAssignSubmit}
-      />
+      )}
     </div>
   );
 };
+
+export default WorkAssignmentModule;

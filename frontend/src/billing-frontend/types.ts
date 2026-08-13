@@ -28,6 +28,11 @@ export interface BillItem {
   appliedRate?: number;
   purity_percentage?: number | string;
   gst_percent?: number | string;
+  quantity_unit?: 'PIECES' | 'PAIRS' | 'GRAMS';
+  quantity_value?: number | string;
+  item_length_inches?: string | number;
+  return_purity_percentage?: number | string;
+  return_pure_gold?: number | string;
 }
 
 export interface InvoiceRecord {
@@ -51,10 +56,14 @@ export interface InvoiceRecord {
   pure_metal_weight?: number;
   gst_percent?: number;
   final_amount: number;
+  paid_amount?: number;
+  due_amount?: number;
   gold_buy_rate_snapshot?: number;
   gold_sell_rate_snapshot?: number;
   silver_buy_rate_snapshot?: number;
   silver_sell_rate_snapshot?: number;
+  return_purity_percentage?: number;
+  return_pure_gold?: number;
   receipt_json_data?: any;
   created_at: string;
   updated_at?: string;
