@@ -576,6 +576,8 @@ router.post('/create', async (req: Request, res: Response) => {
     gold_sell_rate_snapshot: Number(activeMetalValues.gold_sell_value) || 0,
     silver_buy_rate_snapshot: Number(activeMetalValues.silver_buy_value) || 0,
     silver_sell_rate_snapshot: Number(activeMetalValues.silver_sell_value) || 0,
+    return_purity_percentage: Number(receipt_json_data?.items?.[0]?.return_purity_percentage) || 0,
+    return_pure_gold: Number(receipt_json_data?.items?.[0]?.return_pure_gold) || 0,
     receipt_json_data,
     created_at: new Date().toISOString(),
   };

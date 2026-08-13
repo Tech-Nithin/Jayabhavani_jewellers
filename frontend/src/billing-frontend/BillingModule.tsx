@@ -20,6 +20,23 @@ const formatMax2Decimals = (val: number | string | undefined | null): string => 
   return String(rounded);
 };
 
+/** Formats text input dynamically into Indian currency format (e.g., 1,00,000) while typing */
+const formatIndianCurrencyInput = (val: string): string => {
+  const clean = val.replace(/[^0-9.]/g, '');
+  if (!clean) return '';
+  const parts = clean.split('.');
+  const intStr = parts[0];
+  const decimalStr = parts.length > 1 ? '.' + parts[1] : '';
+  if (!intStr) return '0' + decimalStr;
+  const formattedInt = Number(intStr).toLocaleString('en-IN');
+  return formattedInt + decimalStr;
+};
+
+const parseIndianCurrencyNumber = (val: string | number | undefined | null): number => {
+  const clean = String(val ?? '').replace(/,/g, '');
+  return Number(clean) || 0;
+};
+
 interface CreatablePresetSelectProps {
   value: string;
   onChange: (val: string) => void;
@@ -210,10 +227,20 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [activeBillType, setActiveBillType] = useState<'SALE_DONE' | 'ESTIMATION'>('SALE_DONE');
 
-  // Customer & Mode
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
+  // Customer & Mode with Session Persistence
+  const getInitialDraft = () => {
+    try {
+      const saved = sessionStorage.getItem('jbj_billing_draft_v1');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { }
+    return null;
+  };
+
+  const initialDraft = getInitialDraft();
+
+  const [customerName, setCustomerName] = useState(initialDraft?.customerName || '');
+  const [customerPhone, setCustomerPhone] = useState(initialDraft?.customerPhone || '');
+  const [customerAddress, setCustomerAddress] = useState(initialDraft?.customerAddress || '');
   const [teluguCustomerName, setTeluguCustomerName] = useState('');
   const [teluguCustomerAddress, setTeluguCustomerAddress] = useState('');
 
@@ -240,13 +267,20 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
-  const getInitialItemsForMode = (m: 'SELL' | 'BUY' | 'EXCHANGE'): BillItem[] => {
+  const [successModal, setSuccessModal] = useState<{ open: boolean; message: string; invId: string } | null>(null);
+
+  // Payment Breakdown State (Full vs Partial Payment)
+  const [paymentType, setPaymentType] = useState<'FULL' | 'PARTIAL'>(initialDraft?.paymentType || 'FULL');
+  const [advancePaidAmount, setAdvancePaidAmount] = useState<string>(initialDraft?.advancePaidAmount || '');
+  const getInitialItemsForMode = (m: 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER'): BillItem[] => {
     if (m === 'BUY') {
       return [
         {
           id: 'item-1',
           metal_type: 'GOLD',
           product_name: '',
+          quantity_unit: 'PIECES',
+          quantity_value: '1',
           weight_grams: '',
           purity_percentage: '',
           making_charges_per_gram: '',
@@ -255,12 +289,14 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         },
       ];
     }
-    if (m === 'EXCHANGE') {
+    if (m === 'EXCHANGE' || m === 'ORDER') {
       return [
         {
           id: 'item-1',
           metal_type: 'GOLD',
           product_name: '',
+          quantity_unit: 'PIECES',
+          quantity_value: '1',
           weight_grams: '',
           purity_percentage: '',
           making_charges_per_gram: '',
@@ -271,6 +307,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           id: 'item-2',
           metal_type: 'GOLD',
           product_name: '',
+          quantity_unit: 'PIECES',
+          quantity_value: '1',
           weight_grams: '',
           purity_percentage: '',
           making_charges_per_gram: '',
@@ -284,6 +322,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         id: 'item-1',
         metal_type: 'GOLD',
         product_name: '',
+        quantity_unit: 'PIECES',
+        quantity_value: '1',
         weight_grams: '',
         purity_percentage: '',
         making_charges_per_gram: '',
@@ -293,13 +333,54 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     ];
   };
 
-  const [mode, setMode] = useState<'SELL' | 'BUY' | 'EXCHANGE'>(() => {
+  const [mode, setMode] = useState<'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER'>(() => {
     const params = new URLSearchParams(window.location.search);
     const m = (params.get('mode') || '').toUpperCase();
     if (m === 'BUYING' || m === 'BUY') return 'BUY';
     if (m === 'EXCHANGE' || m === 'TRADE-IN' || m === 'TRADEIN') return 'EXCHANGE';
-    return 'SELL';
+    if (m === 'ORDER' || m === 'ORDERS') return 'ORDER';
+    return initialDraft?.mode || 'SELL';
   });
+
+  // Per-mode items storage cache map - single source of truth for tab item persistence
+  const [modeItemsMap, setModeItemsMap] = useState<Record<'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER', BillItem[]>>(() => {
+    if (initialDraft?.modeItemsMap) {
+      return initialDraft.modeItemsMap;
+    }
+    return {
+      SELL: getInitialItemsForMode('SELL'),
+      BUY: getInitialItemsForMode('BUY'),
+      EXCHANGE: getInitialItemsForMode('EXCHANGE'),
+      ORDER: getInitialItemsForMode('ORDER'),
+    };
+  });
+
+  // Items for currently active mode derived directly from modeItemsMap
+  const items = modeItemsMap[mode] || getInitialItemsForMode(mode);
+
+  // Helper to update active mode items in modeItemsMap
+  const updateActiveModeItems = (updater: (currentItems: BillItem[]) => BillItem[]) => {
+    setModeItemsMap((prev) => ({
+      ...prev,
+      [mode]: updater(prev[mode] || getInitialItemsForMode(mode)),
+    }));
+  };
+
+  // Sync state changes to sessionStorage for complete cross-module navigation persistence
+  useEffect(() => {
+    try {
+      const payload = {
+        customerName,
+        customerPhone,
+        customerAddress,
+        paymentType,
+        advancePaidAmount,
+        mode,
+        modeItemsMap,
+      };
+      sessionStorage.setItem('jbj_billing_draft_v1', JSON.stringify(payload));
+    } catch (e) { }
+  }, [customerName, customerPhone, customerAddress, paymentType, advancePaidAmount, mode, modeItemsMap]);
 
   // View state: 'POS' | 'CUSTOMERS' | 'DETAILS' - synced with URL params
   const [selectedCustomerDetailsRecord, setSelectedCustomerDetailsRecord] = useState<CustomerDirectoryRecord | null>(null);
@@ -327,9 +408,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     window.history.pushState({}, '', `?${params.toString()}`);
   };
 
-  const handleSetMode = (newMode: 'SELL' | 'BUY' | 'EXCHANGE') => {
+  const handleSetMode = (newMode: 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER') => {
     setMode(newMode);
-    setItems(getInitialItemsForMode(newMode));
     const params = new URLSearchParams(window.location.search);
     params.set('module', 'billing');
     params.set('mode', newMode === 'BUY' ? 'buying' : newMode.toLowerCase());
@@ -340,31 +420,26 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     window.history.pushState({}, '', `?${params.toString()}`);
   };
 
-  // Handle Chrome swipe gestures & browser Back/Forward navigation in BillingModule
-  useEffect(() => {
-    const handlePopState = () => {
-      const params = new URLSearchParams(window.location.search);
-      const modeParam = params.get('mode')?.toUpperCase();
-      const histParam = params.get('history');
-      const invoiceParam = params.get('invoice');
+  const handleStartFresh = () => {
+    try {
+      sessionStorage.removeItem('jbj_billing_draft_v1');
+    } catch (e) { }
 
-      if (histParam || invoiceParam) {
-        setActiveView('CUSTOMERS');
-      } else if (modeParam === 'BUY' || modeParam === 'BUYING' || modeParam === 'SELL' || modeParam === 'EXCHANGE' || modeParam === 'TRADE-IN') {
-        setActiveView('POS');
-        const nextMode = (modeParam === 'BUYING' ? 'BUY' : modeParam === 'TRADE-IN' ? 'EXCHANGE' : modeParam) as any;
-        setMode(nextMode);
-      }
-    };
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerAddress('');
+    setTeluguCustomerName('');
+    setTeluguCustomerAddress('');
+    setShowValidationErrors(false);
+    setPaymentType('FULL');
+    setAdvancePaidAmount('');
+    setEditingInvoiceId(null);
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const [successModal, setSuccessModal] = useState<{ open: boolean; message: string; invId: string } | null>(null);
-
-  // Multi-item list initialized per mode
-  const [items, setItems] = useState<BillItem[]>(() => getInitialItemsForMode(mode));
+    setModeItemsMap((prev) => ({
+      ...prev,
+      [mode]: getInitialItemsForMode(mode),
+    }));
+  };
 
   const [customerDirectory, setCustomerDirectory] = useState<CustomerDirectoryRecord[]>([]);
   const [calcResults, setCalcResults] = useState<{
@@ -530,12 +605,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
       additional_charges_amount: '',
       item_type: itemType,
     };
-    setItems([...items, newItem]);
+    updateActiveModeItems((curr) => [...curr, newItem]);
   };
 
   const handleRemoveItem = (id: string) => {
     if (items.length <= 1) return;
-    setItems(items.filter((i) => i.id !== id));
+    updateActiveModeItems((curr) => curr.filter((i) => i.id !== id));
   };
 
   const NUMERIC_FIELDS = new Set<keyof BillItem>([
@@ -567,7 +642,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     if (NUMERIC_FIELDS.has(field) && typeof value === 'string') {
       finalVal = sanitizeNumericInput(value);
     }
-    setItems((prevItems) =>
+    updateActiveModeItems((prevItems) =>
       prevItems.map((it) => {
         if (it.id === id) {
           const updated = { ...it, [field]: finalVal };
@@ -583,7 +658,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   };
 
   const handleUpdateItemMultiple = (id: string, updates: Partial<BillItem>) => {
-    setItems((prevItems) =>
+    updateActiveModeItems((prevItems) =>
       prevItems.map((it) => {
         if (it.id === id) {
           const updated = { ...it, ...updates };
@@ -600,15 +675,58 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
   const { totalSellValue, totalBuyCredit, netPayable } = calcResults;
 
+  const handlePreSubmitCheck = () => {
+    const isNameMissing = !customerName.trim();
+    const isPhoneMissing = !customerPhone.trim() || customerPhone.trim().length < 10;
+    const isAddressMissing = !customerAddress.trim();
+
+    const invalidItem = items.find((it) => !it.product_name || !it.product_name.trim() || !it.weight_grams || Number(it.weight_grams) <= 0);
+
+    if (isNameMissing || isPhoneMissing || isAddressMissing || invalidItem || items.length === 0) {
+      setShowValidationErrors(true);
+      const missingList = [];
+      if (isNameMissing) missingList.push('• Customer Name (*)');
+      if (isPhoneMissing) missingList.push('• Customer Phone (* 10-digit number)');
+      if (isAddressMissing) missingList.push('• Customer Address (*)');
+      if (invalidItem) {
+        if (!invalidItem.product_name || !invalidItem.product_name.trim()) missingList.push('• Item Name (*)');
+        if (!invalidItem.weight_grams || Number(invalidItem.weight_grams) <= 0) missingList.push('• Item Weight (* > 0g)');
+      }
+
+      alert(`⚠️ Mandatory Details Missing!\n\nPlease fill in all required fields highlighted in red before completing the sale:\n\n${missingList.join('\n')}`);
+      return;
+    }
+
+    // Validate deduction weights vs gross weights
+    const invalidDeductionItem = items.find((it) => {
+      const gW = Number(it.weight_grams) || 0;
+      const dW = Number(it.deduction_weight_grams) || 0;
+      return dW > gW;
+    });
+
+    if (invalidDeductionItem) {
+      alert(`⚠️ Cannot generate invoice: Deduction weight (${invalidDeductionItem.deduction_weight_grams} g) cannot be greater than Item Weight (${invalidDeductionItem.weight_grams} g) for item "${invalidDeductionItem.product_name || 'Item'}".`);
+      return;
+    }
+
+    setShowConfirmModal(true);
+  };
+
   // Submit invoice
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     const isNameMissing = !customerName.trim();
     const isPhoneMissing = !customerPhone.trim() || customerPhone.trim().length < 10;
+    const isAddressMissing = !customerAddress.trim();
 
-    if (isNameMissing || isPhoneMissing || items.length === 0) {
+    if (isNameMissing || isPhoneMissing || isAddressMissing || items.length === 0) {
       setShowValidationErrors(true);
-      alert(`⚠️ Missing Customer Information:\n\nPlease fill in Customer Name and a valid 10-digit Phone Number before saving the bill.`);
+      const missingList = [];
+      if (isNameMissing) missingList.push('• Customer Name (*)');
+      if (isPhoneMissing) missingList.push('• Customer Phone (* 10-digit number)');
+      if (isAddressMissing) missingList.push('• Customer Address (*)');
+
+      alert(`⚠️ Mandatory Customer Details Missing!\n\nPlease fill in all required fields before saving the bill:\n\n${missingList.join('\n')}`);
       return;
     }
 
@@ -671,6 +789,86 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         netPayable,
       };
 
+      // If mode === 'ORDER', save directly to orders table ONLY with submitted: 'no'
+      if (mode === 'ORDER') {
+        const orderItemsList = items.filter((i) => i.item_type === 'SELL');
+        const primaryItem = orderItemsList[0] || firstItem;
+
+        const combinedItemNames = orderItemsList.length > 0
+          ? orderItemsList.map((i) => toStartCase(i.product_name || 'Custom Ornament')).join(', ')
+          : toStartCase(primaryItem?.product_name || 'Custom Jewelry Order');
+
+        const totalGrossW = orderItemsList.reduce((acc, i) => acc + (Number(i.weight_grams) || 0), 0);
+        const totalDedW = orderItemsList.reduce((acc, i) => acc + (Number(i.deduction_weight_grams) || 0), 0);
+        const totalNetW = Math.max(0, totalGrossW - totalDedW);
+
+        const grandTotalVal = Math.abs(totalSellValue - totalBuyCredit);
+        const effPaid = paymentType === 'FULL' ? grandTotalVal : Math.min(grandTotalVal, parseIndianCurrencyNumber(advancePaidAmount));
+        const effDue = Math.max(0, grandTotalVal - effPaid);
+
+        const orderReceiptPayload = {
+          ...receiptPayload,
+          paymentType,
+          advancePaidAmount: effPaid,
+          balanceDueAmount: effDue,
+        };
+
+        const resOrder = await fetch(`${API_BASE}/work-assignment/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_name: customerName.trim(),
+            customer_phone: customerPhone.trim(),
+            customer_address: customerAddress.trim(),
+            metal_type: primaryItem?.metal_type || 'GOLD',
+            item_name: combinedItemNames,
+            quantity_unit: primaryItem?.quantity_unit || 'PIECES',
+            quantity_value: Number(primaryItem?.quantity_value) || 1,
+            item_length_inches: primaryItem?.item_length_inches || '',
+            gross_weight_grams: totalGrossW,
+            net_weight_grams: totalNetW,
+            touch_percentage: Number(primaryItem?.purity_percentage) || 91.6,
+            making_charges: Number(primaryItem?.making_charges_per_gram) || 0,
+            estimated_delivery_date: new Date().toISOString().split('T')[0],
+            paid_amount: effPaid,
+            due_amount: effDue,
+            applied_rate_per_gram: Number(rates?.gold_sell_value) || 0,
+            pure_metal_weight: Number((totalNetW * ((Number(primaryItem?.purity_percentage) || 91.6) / 100)).toFixed(3)),
+            metal_value: totalSellValue,
+            gst_amount: 0,
+            final_amount: grandTotalVal,
+            receipt_json_data: orderReceiptPayload,
+            submitted: 'no',
+            hmw_percentage: Number(primaryItem?.wastage_percent) || 0,
+            hmw_weight: Number((totalNetW + (totalNetW * ((Number(primaryItem?.wastage_percent) || 0) / 100))).toFixed(3)),
+            additional_charge_name: primaryItem?.additional_charges_name || '',
+            additional_charge_value: Number(primaryItem?.additional_charges_amount) || 0,
+            return_purity_percentage: Number(primaryItem?.return_purity_percentage) || 0,
+            return_pure_gold: Number(primaryItem?.return_pure_gold) || (primaryItem?.return_purity_percentage ? Number((totalNetW * (Number(primaryItem.return_purity_percentage) / 100)).toFixed(3)) : 0),
+            notes: `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
+          }),
+        });
+
+        const dataOrder = await resOrder.json();
+        if (resOrder.ok && dataOrder.success) {
+          fetchCustomerDirectory();
+          printReceipt80mm('pos-realtime-receipt-card');
+          downloadReceiptAsPNG('pos-realtime-receipt-card', customerName);
+          setSuccessModal({
+            open: true,
+            message: 'Custom Order Registered & Saved to Orders Database!',
+            invId: dataOrder.order?.id || 'ORD-SAVED',
+          });
+        } else {
+          const errorMsg = dataOrder?.message || dataOrder?.error || 'Unknown server error creating order.';
+          const detailMsg = dataOrder?.details ? `\nDetails: ${dataOrder.details}` : '';
+          const hintMsg = dataOrder?.hint ? `\nHint: ${dataOrder.hint}` : '';
+          alert(`⚠️ Database / Server Error:\n\n${errorMsg}${detailMsg}${hintMsg}`);
+        }
+        return;
+      }
+
+      // Direct sales (SELL, BUY, EXCHANGE) save directly to billing_invoices
       const url = editingInvoiceId ? `${API_BASE}/billing/update/${editingInvoiceId}` : `${API_BASE}/billing/create`;
       const method = editingInvoiceId ? 'PUT' : 'POST';
 
@@ -704,7 +902,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         setSuccessModal({
           open: true,
           message: editingInvoiceId ? 'Invoice Record Updated & Stored Successfully!' : 'Sale Completed & Stored Successfully!',
-          invId: data.invoice?.id || editingInvoiceId || 'INV-SUCCESS',
+          invId: data.invoice?.id || editingInvoiceId || 'ORD-SUCCESS',
         });
         setEditingInvoiceId(null);
       } else {
@@ -719,22 +917,21 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   };
 
   const handleResetForm = () => {
+    try {
+      sessionStorage.removeItem('jbj_billing_draft_v1');
+    } catch (e) { }
     setCustomerName('');
     setCustomerPhone('');
     setCustomerAddress('');
+    setAdvancePaidAmount('');
+    setPaymentType('FULL');
     setEditingInvoiceId(null);
-    setItems([
-      {
-        id: 'item-1',
-        metal_type: 'GOLD',
-        product_name: '',
-        weight_grams: 0,
-        purity_percentage: 91.6,
-        making_charges_per_gram: 0,
-        gst_percent: mode === 'SELL' || mode === 'EXCHANGE' ? 3 : 0,
-        item_type: mode === 'BUY' ? 'BUY' : 'SELL',
-      },
-    ]);
+    setModeItemsMap({
+      SELL: getInitialItemsForMode('SELL'),
+      BUY: getInitialItemsForMode('BUY'),
+      EXCHANGE: getInitialItemsForMode('EXCHANGE'),
+      ORDER: getInitialItemsForMode('ORDER'),
+    });
     setSuccessModal(null);
   };
 
@@ -753,13 +950,13 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     setCustomerPhone(custPhone || inv?.customer_phone || '');
     setCustomerAddress(custAddress || inv?.customer_address || inv?.receipt_json_data?.customer_address || '');
 
-    const invMode = ((inv?.receipt_json_data?.transaction_type || inv?.transaction_type || 'SELL').toUpperCase()) as 'SELL' | 'BUY' | 'EXCHANGE';
+    const invMode = ((inv?.receipt_json_data?.transaction_type || inv?.transaction_type || 'SELL').toUpperCase()) as 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER';
     setMode(invMode);
 
     if (inv?.receipt_json_data?.items && Array.isArray(inv.receipt_json_data.items) && inv.receipt_json_data.items.length > 0) {
-      setItems(inv.receipt_json_data.items);
+      updateActiveModeItems(() => inv.receipt_json_data.items);
     } else if (inv) {
-      setItems([
+      updateActiveModeItems(() => [
         {
           id: 'item-1',
           metal_type: (inv.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
@@ -901,7 +1098,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           <div className="pos-grid-container">
 
             {/* LEFT GRID (70%): Multi-Item POS Terminal Form */}
-            <form onSubmit={handleCreateInvoice} style={{ background: '#ffffff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)' }}>
+            <div style={{ background: '#ffffff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaecf0', boxShadow: '0 6px 20px rgba(0,0,0,0.02)' }}>
               {editingInvoiceId && (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '8px 12px', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1d4ed8' }}>
@@ -923,27 +1120,33 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
               )}
               {/* Mode Pill Selector */}
               <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.15rem', background: '#f8fafc', padding: '6px', borderRadius: '14px', border: '1px solid #cbd5e1' }}>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    handleSetMode('SELL');
-                    if (!editingInvoiceId) {
-                      setItems([
-                        {
-                          id: 'item-1',
-                          metal_type: 'GOLD',
-                          product_name: '',
-                          weight_grams: 0,
-                          purity_percentage: 91.6,
-                          making_charges_per_gram: 0,
-                          gst_percent: 3,
-                          item_type: 'SELL',
-                        },
-                      ]);
-                    } else {
-                      setItems(items.map((i) => ({ ...i, item_type: 'SELL' })));
-                    }
+                  onClick={() => handleSetMode('ORDER')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: mode === 'ORDER' ? '#059669' : 'transparent',
+                    color: mode === 'ORDER' ? '#fff' : '#64748b',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '5px',
+                    boxShadow: mode === 'ORDER' ? '0 3px 10px rgba(5, 150, 105, 0.25)' : 'none',
                   }}
+                >
+                  <i className="fa-solid fa-cart-flatbed"></i> {lang === 'TE' ? 'ఆర్డర్లు' : 'Orders'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSetMode('SELL')}
                   style={{
                     flex: 1,
                     padding: '8px 12px',
@@ -966,25 +1169,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
                 <button
                   type="button"
-                  onClick={() => {
-                    handleSetMode('BUY');
-                    if (!editingInvoiceId) {
-                      setItems([
-                        {
-                          id: 'item-1',
-                          metal_type: 'GOLD',
-                          product_name: '',
-                          weight_grams: 0,
-                          purity_percentage: 91.6,
-                          making_charges_per_gram: 0,
-                          gst_percent: 0,
-                          item_type: 'BUY',
-                        },
-                      ]);
-                    } else {
-                      setItems(items.map((i) => ({ ...i, item_type: 'BUY' })));
-                    }
-                  }}
+                  onClick={() => handleSetMode('BUY')}
                   style={{
                     flex: 1,
                     padding: '8px 12px',
@@ -1007,35 +1192,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
                 <button
                   type="button"
-                  onClick={() => {
-                    handleSetMode('EXCHANGE');
-                    if (!editingInvoiceId) {
-                      setItems([
-                        {
-                          id: 'item-1',
-                          metal_type: 'GOLD',
-                          product_name: '',
-                          weight_grams: '',
-                          purity_percentage: '',
-                          making_charges_per_gram: '',
-                          gst_percent: 3,
-                          item_type: 'SELL',
-                        },
-                        {
-                          id: 'item-2',
-                          metal_type: 'GOLD',
-                          product_name: '',
-                          weight_grams: '',
-                          purity_percentage: '',
-                          making_charges_per_gram: '',
-                          gst_percent: 0,
-                          item_type: 'BUY',
-                        },
-                      ]);
-                    } else {
-                      setItems(items.map((i) => ({ ...i, item_type: 'SELL' })));
-                    }
-                  }}
+                  onClick={() => handleSetMode('EXCHANGE')}
                   style={{
                     flex: 1,
                     padding: '8px 12px',
@@ -1055,576 +1212,927 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                 >
                   <i className="fa-solid fa-rotate"></i> {t.tradeInTab}
                 </button>
+
+
               </div>
 
-              {/* Customer info */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: showValidationErrors && !customerName.trim() ? '#dc2626' : '#475569' }}>
-                      {t.custNameLabel}
-                    </label>
-                    {showValidationErrors && !customerName.trim() && (
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#dc2626' }}>* Required</span>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    placeholder={t.custNamePlaceholder}
-                    value={customerName}
-                    onChange={(e) => {
-                      setCustomerName(toStartCase(e.target.value));
-                      if (showValidationErrors) setShowValidationErrors(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '0.55rem 0.75rem',
-                      borderRadius: '6px',
-                      border: showValidationErrors && !customerName.trim() ? '2px solid #ef4444' : '1px solid #cbd5e1',
-                      background: showValidationErrors && !customerName.trim() ? '#fef2f2' : '#ffffff',
-                      marginTop: '0.2rem',
-                      boxShadow: showValidationErrors && !customerName.trim() ? '0 0 0 3px rgba(239, 68, 68, 0.2)' : 'none',
-                    }}
-                    required
-                  />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#dc2626' : '#475569' }}>
-                      {t.custPhoneLabel}
-                    </label>
-                    {showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) && (
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#dc2626' }}>* 10 Digits Req</span>
-                    )}
-                  </div>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={10}
-                    placeholder={t.custPhonePlaceholder}
-                    value={customerPhone}
-                    onChange={(e) => {
-                      setCustomerPhone(e.target.value.replace(/\D/g, ''));
-                      if (showValidationErrors) setShowValidationErrors(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '0.55rem 0.75rem',
-                      borderRadius: '6px',
-                      border: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '2px solid #ef4444' : '1px solid #cbd5e1',
-                      background: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#fef2f2' : '#ffffff',
-                      marginTop: '0.2rem',
-                      boxShadow: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '0 0 0 3px rgba(239, 68, 68, 0.2)' : 'none',
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>{t.custAddrLabel}</label>
-                  <input
-                    type="text"
-                    placeholder={t.custAddrPlaceholder}
-                    value={customerAddress}
-                    onChange={(e) => setCustomerAddress(toStartCase(e.target.value))}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.2rem' }}
-                  />
-                </div>
-              </div>
-
-              {/* Items List Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.4rem' }}>
-                <h4 style={{ margin: 0, fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <i className="fa-solid fa-list-check" style={{ color: '#6366f1' }}></i> {t.billProductsTitle} ({items.length})
-                </h4>
-
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
-                  {(mode === 'SELL' || mode === 'EXCHANGE') && (
-                    <button
-                      type="button"
-                      onClick={() => handleAddItem('SELL')}
-                      style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '5px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <i className="fa-solid fa-plus"></i> {t.addSellItemBtn}
-                    </button>
-                  )}
-
-                  {(mode === 'BUY' || mode === 'EXCHANGE') && (
-                    <button
-                      type="button"
-                      onClick={() => handleAddItem('BUY')}
-                      style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '5px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <i className="fa-solid fa-plus"></i> {t.addBuyItemBtn}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Item Rows */}
-              <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.15rem' }}>
-                {items.map((it) => (
-                  <div key={it.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem', position: 'relative' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <span style={{
-                        fontSize: '0.65rem',
-                        fontWeight: 700,
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        background: it.item_type === 'SELL' ? '#fef3c7' : '#e0f2fe',
-                        color: it.item_type === 'SELL' ? '#b45309' : '#0369a1',
-                      }}>
-                        JBJ - {it.item_type}ING ITEM
-                      </span>
-
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(it.id)}
-                          style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          <i className="fa-solid fa-trash-can"></i> Remove
-                        </button>
+              <form onSubmit={handleCreateInvoice}>
+                {/* Customer info (Shared by ALL modes: SELL, BUY, EXCHANGE, ORDER) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && !customerName.trim() ? '#dc2626' : '#475569' }}>
+                        {t.custNameLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                      </label>
+                      {showValidationErrors && !customerName.trim() && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#dc2626' }}>* Required</span>
                       )}
                     </div>
+                    <input
+                      type="text"
+                      placeholder={t.custNamePlaceholder}
+                      value={customerName}
+                      onChange={(e) => {
+                        setCustomerName(toStartCase(e.target.value));
+                        if (showValidationErrors) setShowValidationErrors(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '6px',
+                        border: showValidationErrors && !customerName.trim() ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                        background: showValidationErrors && !customerName.trim() ? '#fef2f2' : '#ffffff',
+                        marginTop: '0.2rem',
+                        boxShadow: showValidationErrors && !customerName.trim() ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
+                      }}
+                      required
+                    />
+                    {showValidationErrors && !customerName.trim() && (
+                      <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <i className="fa-solid fa-triangle-exclamation"></i> Please enter Customer Name
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#dc2626' : '#475569' }}>
+                        {t.custPhoneLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                      </label>
+                      {showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#dc2626' }}>* 10 Digits Req</span>
+                      )}
+                    </div>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={10}
+                      placeholder={t.custPhonePlaceholder}
+                      value={customerPhone}
+                      onChange={(e) => {
+                        setCustomerPhone(e.target.value.replace(/\D/g, ''));
+                        if (showValidationErrors) setShowValidationErrors(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '6px',
+                        border: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                        background: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#fef2f2' : '#ffffff',
+                        marginTop: '0.2rem',
+                        boxShadow: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
+                      }}
+                    />
+                    {showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) && (
+                      <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <i className="fa-solid fa-triangle-exclamation"></i> Please enter 10-digit Phone Number
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && !customerAddress.trim() ? '#dc2626' : '#475569' }}>
+                        {t.custAddrLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                      </label>
+                      {showValidationErrors && !customerAddress.trim() && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#dc2626' }}>* Required</span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder={t.custAddrPlaceholder}
+                      value={customerAddress}
+                      onChange={(e) => {
+                        setCustomerAddress(toStartCase(e.target.value));
+                        if (showValidationErrors) setShowValidationErrors(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '6px',
+                        border: showValidationErrors && !customerAddress.trim() ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                        background: showValidationErrors && !customerAddress.trim() ? '#fef2f2' : '#ffffff',
+                        marginTop: '0.2rem',
+                        boxShadow: showValidationErrors && !customerAddress.trim() ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
+                      }}
+                      required
+                    />
+                    {showValidationErrors && !customerAddress.trim() && (
+                      <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <i className="fa-solid fa-triangle-exclamation"></i> Please enter Customer Address
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                    {/* Helper calculations for live row rendering */}
-                    {(() => {
-                      const grossW = Number(it.weight_grams) || 0;
-                      const dedW = Number(it.deduction_weight_grams) || 0;
-                      const netW = Math.max(0, grossW - dedW);
+                {/* Items List Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h4 style={{ margin: 0, fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <i className="fa-solid fa-list-check" style={{ color: '#6366f1' }}></i> {t.billProductsTitle} ({items.length})
+                    </h4>
 
-                      const isGold = it.metal_type === 'GOLD';
-                      const netWeightLabel = isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel;
+                    <button
+                      type="button"
+                      onClick={handleStartFresh}
+                      style={{
+                        background: '#fff1f2',
+                        color: '#e11d48',
+                        border: '1px solid #fecdd3',
+                        padding: '3px 9px',
+                        borderRadius: '6px',
+                        fontSize: '0.70rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title={lang === 'TE' ? 'ప్రస్తుత మోడ్ ఫారమ్‌ను రీసెట్ చేయండి' : 'Reset current mode and clear all entered form data'}
+                    >
+                      <i className="fa-solid fa-rotate-left"></i> {lang === 'TE' ? 'కొత్తగా ప్రారంభించు' : 'Start Fresh'}
+                    </button>
+                  </div>
 
-                      const wastagePct = Number(it.wastage_percent) || 0;
-                      const totalWWithHmw = Number((netW + (netW * (wastagePct / 100))).toFixed(3));
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {(mode === 'SELL' || mode === 'EXCHANGE' || mode === 'ORDER') && (
+                      <button
+                        type="button"
+                        onClick={() => handleAddItem('SELL')}
+                        style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '5px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <i className="fa-solid fa-plus"></i> {mode === 'ORDER' ? (lang === 'TE' ? 'ఆర్డర్ ఐటెమ్ జత చేయి' : 'Add Order Item') : t.addSellItemBtn}
+                      </button>
+                    )}
 
-                      const itemLineTotal = calcResults.itemDetails[it.id]?.lineTotal || 0;
+                    {(mode === 'BUY' || mode === 'EXCHANGE' || mode === 'ORDER') && (
+                      <button
+                        type="button"
+                        onClick={() => handleAddItem('BUY')}
+                        style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '5px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <i className="fa-solid fa-plus"></i> {t.addBuyItemBtn}
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-                      return (
-                        <>
-                          {/* Row 1 (2 fields): Metal Category & Rate */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                            <div>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.metalCategoryLabel}</label>
-                              <select
-                                value={it.metal_type}
-                                onChange={(e) => {
-                                  const newMetal = e.target.value as 'GOLD' | 'SILVER';
-                                  const defaultR = newMetal === 'GOLD'
-                                    ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
-                                    : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value);
-                                  handleUpdateItemMultiple(it.id, {
-                                    metal_type: newMetal,
-                                    custom_rate_per_gram: defaultR || 0,
-                                  });
-                                }}
-                                style={{ width: '100%', padding: '0.55rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
-                              >
-                                <option value="GOLD">🥇 {t.goldMetal}</option>
-                                <option value="SILVER">🥈 {t.silverMetal}</option>
-                              </select>
-                            </div>
+                {/* Item Rows */}
+                <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.15rem' }}>
+                  {items.map((it) => (
+                    <div key={it.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem', position: 'relative' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: it.item_type === 'SELL' ? '#fef3c7' : '#e0f2fe',
+                          color: it.item_type === 'SELL' ? '#b45309' : '#0369a1',
+                        }}>
+                          {it.item_type === 'SELL'
+                            ? (mode === 'ORDER' ? 'JBJ - ORDER ITEM' : 'JBJ - SELLING ITEM')
+                            : 'JBJ - BUYING ITEM'}
+                        </span>
 
-                            <div>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px', whiteSpace: 'nowrap' }}>
-                                {t.rateLabel}
-                              </label>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="Rate"
-                                onFocus={(e) => e.target.select()}
-                                value={it.custom_rate_per_gram !== undefined && it.custom_rate_per_gram !== '' ? it.custom_rate_per_gram : (
-                                  it.metal_type === 'GOLD'
-                                    ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
-                                    : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value)
-                                ) || ''}
-                                onChange={(e) => handleUpdateItem(it.id, 'custom_rate_per_gram', e.target.value)}
-                                style={{ width: '100%', padding: '0.55rem 0.6rem', borderRadius: '6px', border: '1px solid #6366f1', background: '#eef2ff', fontWeight: 700, color: '#4338ca', fontSize: '0.85rem' }}
-                                required
-                              />
-                            </div>
-                          </div>
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(it.id)}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}
+                          >
+                            <i className="fa-solid fa-trash-can"></i> Remove
+                          </button>
+                        )}
+                      </div>
 
-                          {/* Row 2 (2 fields): Item Name & Item Weight */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                            <div>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.itemNameLabel}</label>
-                              <CreatablePresetSelect
-                                value={it.product_name}
-                                onChange={(val) => handleUpdateItem(it.id, 'product_name', toStartCase(val))}
-                                options={presets.item_name || []}
-                                placeholder={t.itemNamePlaceholder}
-                                categoryName="item_name"
-                                onAddNewPreset={handleAddNewPreset}
-                              />
-                            </div>
+                      {/* Helper calculations for live row rendering */}
+                      {(() => {
+                        const grossW = Number(it.weight_grams) || 0;
+                        const dedW = Number(it.deduction_weight_grams) || 0;
+                        const netW = Math.max(0, grossW - dedW);
 
-                            <div>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.itemWeightLabel}</label>
-                              <div style={{ position: 'relative' }}>
+                        const isGold = it.metal_type === 'GOLD';
+                        const netWeightLabel = isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel;
+
+                        const wastagePct = Number(it.wastage_percent) || 0;
+                        const totalWWithHmw = Number((netW + (netW * (wastagePct / 100))).toFixed(3));
+
+                        const itemLineTotal = calcResults.itemDetails[it.id]?.lineTotal || 0;
+
+                        return (
+                          <>
+                            {/* Row 1 (2 fields): Metal Category & Rate */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.metalCategoryLabel}</label>
+                                <select
+                                  value={it.metal_type}
+                                  onChange={(e) => {
+                                    const newMetal = e.target.value as 'GOLD' | 'SILVER';
+                                    const defaultR = newMetal === 'GOLD'
+                                      ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
+                                      : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value);
+                                    handleUpdateItemMultiple(it.id, {
+                                      metal_type: newMetal,
+                                      custom_rate_per_gram: defaultR || 0,
+                                    });
+                                  }}
+                                  style={{ width: '100%', padding: '0.55rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
+                                >
+                                  <option value="GOLD">🥇 {t.goldMetal}</option>
+                                  <option value="SILVER">🥈 {t.silverMetal}</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px', whiteSpace: 'nowrap' }}>
+                                  {t.rateLabel}
+                                </label>
                                 <input
                                   type="text"
                                   inputMode="decimal"
-                                  placeholder="e.g. 10.000"
+                                  placeholder="Rate"
                                   onFocus={(e) => e.target.select()}
-                                  value={it.weight_grams ?? ''}
-                                  onChange={(e) => handleUpdateItem(it.id, 'weight_grams', e.target.value)}
-                                  style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}
+                                  value={it.custom_rate_per_gram !== undefined && it.custom_rate_per_gram !== '' ? it.custom_rate_per_gram : (
+                                    it.metal_type === 'GOLD'
+                                      ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
+                                      : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value)
+                                  ) || ''}
+                                  onChange={(e) => handleUpdateItem(it.id, 'custom_rate_per_gram', e.target.value)}
+                                  style={{ width: '100%', padding: '0.55rem 0.6rem', borderRadius: '6px', border: '1px solid #6366f1', background: '#eef2ff', fontWeight: 700, color: '#4338ca', fontSize: '0.85rem' }}
                                   required
                                 />
-                                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>
-                                  g
-                                </span>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Row 3: Deduction Name on left, Deduction Weight & Net Metal Weight on right */}
-                          {(() => {
-                            const isDeductionTooHigh = dedW > grossW && grossW > 0;
-                            return (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                {/* Left Side: Deduction Name */}
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.deductionNameLabel}</label>
-                                  <CreatablePresetSelect
-                                    value={it.deduction_name ?? ''}
-                                    onChange={(val) => handleUpdateItem(it.id, 'deduction_name', toStartCase(val))}
-                                    options={presets.deduction_name || []}
-                                    placeholder={t.deductionNamePlaceholder}
-                                    categoryName="deduction_name"
-                                    onAddNewPreset={handleAddNewPreset}
-                                  />
-                                </div>
-
-                                {/* Right Side Sub-Grid: Deduction Weight & Net Metal Weight */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                                  <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: isDeductionTooHigh ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
-                                      {t.deductionWeightLabel}
-                                    </label>
-                                    <div style={{ position: 'relative' }}>
-                                      <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        placeholder="e.g. 2.000"
-                                        onFocus={(e) => e.target.select()}
-                                        value={it.deduction_weight_grams ? it.deduction_weight_grams : ''}
-                                        onChange={(e) => handleUpdateItem(it.id, 'deduction_weight_grams', e.target.value)}
-                                        style={{
-                                          width: '100%',
-                                          padding: '0.55rem 2rem 0.55rem 0.65rem',
-                                          borderRadius: '6px',
-                                          border: isDeductionTooHigh ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
-                                          background: isDeductionTooHigh ? '#fef2f2' : '#ffffff',
-                                          color: isDeductionTooHigh ? '#dc2626' : '#1e293b',
-                                          fontSize: '0.85rem',
-                                          fontWeight: 600
-                                        }}
-                                      />
-                                      <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: isDeductionTooHigh ? '#dc2626' : '#64748b', pointerEvents: 'none' }}>
-                                        g
-                                      </span>
-                                    </div>
-                                    {isDeductionTooHigh && (
-                                      <div style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 600, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                        <i className="fa-solid fa-circle-exclamation"></i>
-                                        Exceeds Gross Weight ({grossW} g)
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#15803d', display: 'block', marginBottom: '3px' }}>
-                                      {netWeightLabel}
-                                    </label>
-                                    <div style={{ position: 'relative' }}>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        placeholder="0.000"
-                                        value={grossW > 0 ? formatMax2Decimals(netW) : ''}
-                                        style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.65rem', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', fontWeight: 700, color: '#15803d', fontSize: '0.85rem' }}
-                                      />
-                                      <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#15803d', pointerEvents: 'none' }}>
-                                        g
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* Row 4 (2 fields for SELL): HMW (%) & Total Weight after HMW */}
-                          {it.item_type === 'SELL' && (
+                            {/* Row 2 (2 fields): Item Name & Item Weight */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.hmwLabel}</label>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="e.g. 3"
-                                  onFocus={(e) => e.target.select()}
-                                  value={it.wastage_percent ? it.wastage_percent : ''}
-                                  onChange={(e) => handleUpdateItem(it.id, 'wastage_percent', e.target.value)}
-                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && (!it.product_name || !it.product_name.trim()) ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
+                                    {t.itemNameLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                                  </label>
+                                  {showValidationErrors && (!it.product_name || !it.product_name.trim()) && (
+                                    <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#dc2626' }}>* Required</span>
+                                  )}
+                                </div>
+                                <CreatablePresetSelect
+                                  value={it.product_name}
+                                  onChange={(val) => {
+                                    handleUpdateItem(it.id, 'product_name', toStartCase(val));
+                                    if (showValidationErrors) setShowValidationErrors(false);
+                                  }}
+                                  options={presets.item_name || []}
+                                  placeholder={t.itemNamePlaceholder}
+                                  categoryName="item_name"
+                                  onAddNewPreset={handleAddNewPreset}
+                                  style={showValidationErrors && (!it.product_name || !it.product_name.trim()) ? { border: '2px solid #dc2626', background: '#fef2f2', boxShadow: '0 0 0 4px rgba(220, 38, 38, 0.25)' } : {}}
                                 />
+                                {showValidationErrors && (!it.product_name || !it.product_name.trim()) && (
+                                  <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <i className="fa-solid fa-triangle-exclamation"></i> Please select or enter Item Name
+                                  </div>
+                                )}
                               </div>
 
                               <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b45309', display: 'block', marginBottom: '3px' }}>{t.totalWeightAfterHmwLabel}</label>
-                                <div style={{ position: 'relative' }}>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    placeholder="0.000"
-                                    value={grossW > 0 ? formatMax2Decimals(totalWWithHmw) : ''}
-                                    style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fef3c7', fontWeight: 700, color: '#b45309', fontSize: '0.85rem' }}
-                                  />
-                                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#b45309', pointerEvents: 'none' }}>
-                                    g
-                                  </span>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
+                                    {t.itemWeightLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                                  </label>
+                                  {showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) && (
+                                    <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#dc2626' }}>* &gt; 0g Req</span>
+                                  )}
                                 </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Row 4 (2 fields for BUY): Item Quality (%) & Pure Metal Weight */}
-                          {it.item_type === 'BUY' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
-                                  {t.itemQualityLabel}
-                                </label>
                                 <div style={{ position: 'relative' }}>
                                   <input
                                     type="text"
                                     inputMode="decimal"
-                                    placeholder="e.g. 90"
+                                    placeholder="e.g. 10.000"
                                     onFocus={(e) => e.target.select()}
-                                    value={it.purity_percentage ? it.purity_percentage : ''}
-                                    onChange={(e) => handleUpdateItem(it.id, 'purity_percentage', e.target.value)}
-                                    style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}
+                                    value={it.weight_grams ?? ''}
+                                    onChange={(e) => {
+                                      handleUpdateItem(it.id, 'weight_grams', e.target.value);
+                                      if (showValidationErrors) setShowValidationErrors(false);
+                                    }}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.55rem 2.2rem 0.55rem 0.75rem',
+                                      borderRadius: '6px',
+                                      border: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                                      background: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '#fef2f2' : '#ffffff',
+                                      boxShadow: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
+                                      fontSize: '0.85rem',
+                                      fontWeight: 600
+                                    }}
+                                    required
                                   />
-                                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>
-                                    %
+                                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '#dc2626' : '#64748b', pointerEvents: 'none' }}>
+                                    g
                                   </span>
                                 </div>
+                                {showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) && (
+                                  <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <i className="fa-solid fa-triangle-exclamation"></i> Please enter Item Weight (&gt; 0g)
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Row 2.5 (2 main columns): Left Unit Type | Right Sub-Grid (Quantity Count & Length in inches) */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                              {/* Left Side: Unit Type */}
+                              <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                                  Unit Type (Pairs / Pcs)
+                                </label>
+                                <select
+                                  value={it.quantity_unit || 'PIECES'}
+                                  onChange={(e) => handleUpdateItem(it.id, 'quantity_unit', e.target.value)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.55rem 0.6rem',
+                                    borderRadius: '6px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.85rem',
+                                    background: '#ffffff',
+                                    fontWeight: 700,
+                                    color: '#0f172a',
+                                  }}
+                                >
+                                  <option value="PIECES">🧩 Pieces (Pcs)</option>
+                                  <option value="PAIRS">👥 Pairs (Prs)</option>
+                                </select>
                               </div>
 
-                              <div>
-                                {(() => {
-                                  const purityPct = Number(it.purity_percentage) || 0;
-                                  const pureW = purityPct > 0 ? Number((netW * (purityPct / 100)).toFixed(3)) : 0;
-                                  const pureLabel = isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel;
-                                  return (
-                                    <>
-                                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#d97706', display: 'block', marginBottom: '3px' }}>
-                                        {pureLabel}
+                              {/* Right Side Sub-Grid: Quantity Count & Length in Inches */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                <div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0))) ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
+                                      Quantity <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                                    </label>
+                                    {(showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0))) && (
+                                      <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#dc2626' }}>* Req</span>
+                                    )}
+                                  </div>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    placeholder="e.g. 1"
+                                    onFocus={(e) => e.target.select()}
+                                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                    value={it.quantity_value !== undefined ? it.quantity_value : ''}
+                                    onChange={(e) => {
+                                      handleUpdateItem(it.id, 'quantity_value', e.target.value);
+                                      if (showValidationErrors) setShowValidationErrors(false);
+                                    }}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.55rem 0.5rem',
+                                      borderRadius: '6px',
+                                      border: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0)))
+                                        ? '2px solid #dc2626'
+                                        : '1px solid #cbd5e1',
+                                      background: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0)))
+                                        ? '#fef2f2'
+                                        : '#ffffff',
+                                      boxShadow: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0)))
+                                        ? '0 0 0 4px rgba(220, 38, 38, 0.25)'
+                                        : 'none',
+                                      fontSize: '0.85rem',
+                                      fontWeight: 700,
+                                      color: '#0f172a',
+                                    }}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                                    Length (inches)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder='e.g. 18", 22"'
+                                    onFocus={(e) => e.target.select()}
+                                    value={it.item_length_inches ?? ''}
+                                    onChange={(e) => handleUpdateItem(it.id, 'item_length_inches', e.target.value)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.55rem 0.5rem',
+                                      borderRadius: '6px',
+                                      border: '1px solid #cbd5e1',
+                                      fontSize: '0.85rem',
+                                      fontWeight: 700,
+                                      color: '#0f172a',
+                                      background: '#ffffff',
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Row 3: Deduction Name on left, Deduction Weight & Net Metal Weight on right */}
+                            {(() => {
+                              const isDeductionTooHigh = dedW > grossW && grossW > 0;
+                              return (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                                  {/* Left Side: Deduction Name */}
+                                  <div>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.deductionNameLabel}</label>
+                                    <CreatablePresetSelect
+                                      value={it.deduction_name ?? ''}
+                                      onChange={(val) => handleUpdateItem(it.id, 'deduction_name', toStartCase(val))}
+                                      options={presets.deduction_name || []}
+                                      placeholder={t.deductionNamePlaceholder}
+                                      categoryName="deduction_name"
+                                      onAddNewPreset={handleAddNewPreset}
+                                    />
+                                  </div>
+
+                                  {/* Right Side Sub-Grid: Deduction Weight & Net Metal Weight */}
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                    <div>
+                                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: isDeductionTooHigh ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
+                                        {t.deductionWeightLabel}
+                                      </label>
+                                      <div style={{ position: 'relative' }}>
+                                        <input
+                                          type="text"
+                                          inputMode="decimal"
+                                          placeholder="e.g. 2.000"
+                                          onFocus={(e) => e.target.select()}
+                                          value={it.deduction_weight_grams ? it.deduction_weight_grams : ''}
+                                          onChange={(e) => handleUpdateItem(it.id, 'deduction_weight_grams', e.target.value)}
+                                          style={{
+                                            width: '100%',
+                                            padding: '0.55rem 2rem 0.55rem 0.65rem',
+                                            borderRadius: '6px',
+                                            border: isDeductionTooHigh ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
+                                            background: isDeductionTooHigh ? '#fef2f2' : '#ffffff',
+                                            color: isDeductionTooHigh ? '#dc2626' : '#1e293b',
+                                            fontSize: '0.85rem',
+                                            fontWeight: 600
+                                          }}
+                                        />
+                                        <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: isDeductionTooHigh ? '#dc2626' : '#64748b', pointerEvents: 'none' }}>
+                                          g
+                                        </span>
+                                      </div>
+                                      {isDeductionTooHigh && (
+                                        <div style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 600, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                          <i className="fa-solid fa-circle-exclamation"></i>
+                                          Exceeds Gross Weight ({grossW} g)
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div>
+                                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#15803d', display: 'block', marginBottom: '3px' }}>
+                                        {netWeightLabel}
                                       </label>
                                       <div style={{ position: 'relative' }}>
                                         <input
                                           type="text"
                                           readOnly
                                           placeholder="0.000"
-                                          value={grossW > 0 && purityPct > 0 ? formatMax2Decimals(pureW) : ''}
-                                          style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fffbeb', fontWeight: 700, color: '#d97706', fontSize: '0.85rem' }}
+                                          value={grossW > 0 ? formatMax2Decimals(netW) : ''}
+                                          style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.65rem', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', fontWeight: 700, color: '#15803d', fontSize: '0.85rem' }}
                                         />
-                                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#d97706', pointerEvents: 'none' }}>
+                                        <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#15803d', pointerEvents: 'none' }}>
                                           g
                                         </span>
                                       </div>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
-                          {/* Row 5 (2 fields for SELL): Additional Charge Name & Additional Charges Value */}
-                          {it.item_type === 'SELL' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.additionalChargesNameLabel}</label>
-                                <CreatablePresetSelect
-                                  value={it.additional_charges_name ?? ''}
-                                  onChange={(val) => handleUpdateItem(it.id, 'additional_charges_name', toStartCase(val))}
-                                  options={presets.additional_charge || []}
-                                  placeholder={t.additionalChargesNamePlaceholder}
-                                  categoryName="additional_charge"
-                                  onAddNewPreset={handleAddNewPreset}
-                                />
-                              </div>
+                            {/* Row 4 (2 fields for SELL): HMW (%) & Total Weight after HMW */}
+                            {it.item_type === 'SELL' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.hmwLabel}</label>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="e.g. 3"
+                                    onFocus={(e) => e.target.select()}
+                                    value={it.wastage_percent ? it.wastage_percent : ''}
+                                    onChange={(e) => handleUpdateItem(it.id, 'wastage_percent', e.target.value)}
+                                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                  />
+                                </div>
 
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.additionalChargesValLabel}</label>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder={t.additionalChargesValPlaceholder}
-                                  onFocus={(e) => e.target.select()}
-                                  value={it.additional_charges_amount ? it.additional_charges_amount : ''}
-                                  onChange={(e) => handleUpdateItem(it.id, 'additional_charges_amount', e.target.value)}
-                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                                />
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b45309', display: 'block', marginBottom: '3px' }}>{t.totalWeightAfterHmwLabel}</label>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="text"
+                                      readOnly
+                                      placeholder="0.000"
+                                      value={grossW > 0 ? formatMax2Decimals(totalWWithHmw) : ''}
+                                      style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fef3c7', fontWeight: 700, color: '#b45309', fontSize: '0.85rem' }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#b45309', pointerEvents: 'none' }}>
+                                      g
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
 
-                          {/* Row 6 (2 fields for SELL): Making Charges & Total Item Value */}
-                          {it.item_type === 'SELL' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.makingChargesLabel}</label>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="e.g. 200"
-                                  onFocus={(e) => e.target.select()}
-                                  value={it.making_charges_per_gram ? it.making_charges_per_gram : ''}
-                                  onChange={(e) => handleUpdateItem(it.id, 'making_charges_per_gram', e.target.value)}
-                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                                />
+                            {/* Row 4 (2 fields for BUY): Item Quality (%) & Pure Metal Weight */}
+                            {it.item_type === 'BUY' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                                    {t.itemQualityLabel}
+                                  </label>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      placeholder="e.g. 90"
+                                      onFocus={(e) => e.target.select()}
+                                      value={it.purity_percentage ? it.purity_percentage : ''}
+                                      onChange={(e) => handleUpdateItem(it.id, 'purity_percentage', e.target.value)}
+                                      style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>
+                                      %
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  {(() => {
+                                    const purityPct = Number(it.purity_percentage) || 0;
+                                    const pureW = purityPct > 0 ? Number((netW * (purityPct / 100)).toFixed(3)) : 0;
+                                    const pureLabel = isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel;
+                                    return (
+                                      <>
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#d97706', display: 'block', marginBottom: '3px' }}>
+                                          {pureLabel}
+                                        </label>
+                                        <div style={{ position: 'relative' }}>
+                                          <input
+                                            type="text"
+                                            readOnly
+                                            placeholder="0.000"
+                                            value={grossW > 0 && purityPct > 0 ? formatMax2Decimals(pureW) : ''}
+                                            style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fffbeb', fontWeight: 700, color: '#d97706', fontSize: '0.85rem' }}
+                                          />
+                                          <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#d97706', pointerEvents: 'none' }}>
+                                            g
+                                          </span>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </div>
+                            )}
 
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', display: 'block', marginBottom: '3px' }}>{t.itemTotalLabel}</label>
-                                <input
-                                  type="text"
-                                  readOnly
-                                  placeholder="₹0"
-                                  value={grossW > 0 && itemLineTotal > 0 ? `₹${itemLineTotal.toLocaleString('en-IN')}` : ''}
-                                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #86efac', background: '#f0fdf4', fontWeight: 800, color: '#15803d', fontSize: '0.88rem' }}
-                                />
+                            {/* Row 6 (2 fields for SELL): Making Charges & Total Item Value */}
+                            {it.item_type === 'SELL' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.makingChargesLabel}</label>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="e.g. 200"
+                                    onFocus={(e) => e.target.select()}
+                                    value={it.making_charges_per_gram ? it.making_charges_per_gram : ''}
+                                    onChange={(e) => handleUpdateItem(it.id, 'making_charges_per_gram', e.target.value)}
+                                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', display: 'block', marginBottom: '3px' }}>{t.itemTotalLabel}</label>
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    placeholder="₹0"
+                                    value={grossW > 0 && itemLineTotal > 0 ? `₹${itemLineTotal.toLocaleString('en-IN')}` : ''}
+                                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #86efac', background: '#f0fdf4', fontWeight: 800, color: '#15803d', fontSize: '0.88rem' }}
+                                  />
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
+                            )}
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0' }}>
-                      <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                        {t.calculatedSubtotal} <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>₹{(calcResults.itemDetails[it.id]?.lineTotal || 0).toLocaleString('en-IN')}</strong>
-                      </span>
+                            {/* Row 7 (SELL only): Return Purity (%) & Return Pure Gold — not shown for BUY items */}
+                            {it.item_type === 'SELL' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6d28d9', margin: 0 }}>
+                                      {t.returnPurityLabel}
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => alert('ℹ️ Return Purity (%) — How It Is Calculated:\n\nThis % is applied on the "Only Gold Weight" (Net Weight) — i.e., after removing all stone/bead/wax deductions from the Gross Weight.\n\n📌 Example:\n  Gross Weight       = 52.000 g\n  Deduction (Stones) = 3.000 g\n  Net Gold Weight    = 49.000 g\n  Return Purity %    = 91.6%\n\n  Return Pure Gold   = 49 × 91.6 ÷ 100 = 44.884 g')}
+                                      title="Click to see how Return Purity is calculated"
+                                      style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', padding: 0, fontSize: '0.75rem' }}
+                                    >
+                                      <i className="fa-solid fa-circle-info"></i>
+                                    </button>
+                                  </div>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      placeholder="e.g. 91.6"
+                                      onFocus={(e) => e.target.select()}
+                                      value={it.return_purity_percentage ?? ''}
+                                      onChange={(e) => {
+                                        const retPurityVal = e.target.value;
+                                        const retPurityNum = Number(retPurityVal) || 0;
+                                        const retPureG = retPurityNum > 0 ? Number((netW * (retPurityNum / 100)).toFixed(3)) : '';
+                                        handleUpdateItemMultiple(it.id, {
+                                          return_purity_percentage: retPurityVal,
+                                          return_pure_gold: retPureG,
+                                        });
+                                      }}
+                                      style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #c4b5fd', background: '#f5f3ff', fontSize: '0.85rem', fontWeight: 600, color: '#6d28d9' }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', pointerEvents: 'none' }}>
+                                      %
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  {(() => {
+                                    const retPurityPct = Number(it.return_purity_percentage) || 0;
+                                    const calculatedRetPureG = retPurityPct > 0 ? Number((netW * (retPurityPct / 100)).toFixed(3)) : 0;
+                                    const pureRetLabel = isGold ? t.returnPureGoldLabel : t.returnPureSilverLabel;
+                                    return (
+                                      <>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
+                                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6d28d9', margin: 0 }}>
+                                            {pureRetLabel}
+                                          </label>
+                                          <button
+                                            type="button"
+                                            onClick={() => alert('ℹ️ Return Pure Gold Weight — How It Is Calculated:\n\nFormula: Return Pure Gold = Net Weight × (Return Purity % ÷ 100)\n\nNet Weight = Gross Weight − All Deductions (stones, beads, wax, etc.)\n\n📌 Example:\n  Gross Weight       = 52.000 g\n  Deduction (Stones) = 3.000 g\n  Net Gold Weight    = 49.000 g\n  Return Purity %    = 91.6%\n\n  Return Pure Gold   = 49 × 91.6 ÷ 100 = 44.884 g')}
+                                            title="Click to see how Return Pure Weight is calculated"
+                                            style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', padding: 0, fontSize: '0.75rem' }}
+                                          >
+                                            <i className="fa-solid fa-circle-info"></i>
+                                          </button>
+                                        </div>
+                                        <div style={{ position: 'relative' }}>
+                                          <input
+                                            type="text"
+                                            readOnly
+                                            placeholder="0.000"
+                                            value={grossW > 0 && retPurityPct > 0 ? formatMax2Decimals(calculatedRetPureG) : (it.return_pure_gold || '')}
+                                            style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #ddd6fe', background: '#f5f3ff', fontWeight: 700, color: '#6d28d9', fontSize: '0.85rem' }}
+                                          />
+                                          <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', pointerEvents: 'none' }}>
+                                            g
+                                          </span>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0' }}>
+                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                          {t.calculatedSubtotal} <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>₹{(calcResults.itemDetails[it.id]?.lineTotal || 0).toLocaleString('en-IN')}</strong>
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              {/* Sleek Bottom Horizontal Net Calculation & Submit Bar */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                  {mode === 'BUY' ? (
-                    <div>
-                      <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossBuyingAmount}</span>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>₹{totalBuyCredit.toLocaleString('en-IN')}</div>
+                {/* Payment Breakdown Box: Full Payment vs Partial Payment (Only shown when customer owes money) */}
+                {(() => {
+                  const isCustomerPaying = (mode as string) !== 'BUY' && totalSellValue >= totalBuyCredit;
+                  if (!isCustomerPaying) return null;
+
+                  const grandTotalAmount = mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+                  const calculatedPaidAmount = paymentType === 'FULL' ? grandTotalAmount : Math.min(grandTotalAmount, parseIndianCurrencyNumber(advancePaidAmount));
+                  const calculatedDueAmount = Math.max(0, grandTotalAmount - calculatedPaidAmount);
+
+                  return (
+                    <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '0.85rem 1.1rem', marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: paymentType === 'PARTIAL' ? '0.75rem' : '0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i className="fa-solid fa-credit-card" style={{ color: '#d97706', fontSize: '0.9rem' }}></i>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a' }}>
+                            {lang === 'TE' ? 'కస్టమర్ చెల్లింపు రకం' : 'Customer Payment Type'}:
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentType('FULL')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '8px',
+                              border: paymentType === 'FULL' ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                              background: paymentType === 'FULL' ? '#dcfce7' : '#ffffff',
+                              color: paymentType === 'FULL' ? '#15803d' : '#475569',
+                              fontWeight: 800,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            <i className="fa-solid fa-circle-check"></i>
+                            {lang === 'TE' ? 'పూర్తి చెల్లింపు (Full Payment Done)' : 'Full Payment Done'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPaymentType('PARTIAL')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '8px',
+                              border: paymentType === 'PARTIAL' ? '2px solid #d97706' : '1px solid #cbd5e1',
+                              background: paymentType === 'PARTIAL' ? '#fef3c7' : '#ffffff',
+                              color: paymentType === 'PARTIAL' ? '#b45309' : '#475569',
+                              fontWeight: 800,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            <i className="fa-solid fa-clock-rotate-left"></i>
+                            {lang === 'TE' ? 'పాక్షిక చెల్లింపు (Advance / Partial)' : 'Partial Payment'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {paymentType === 'PARTIAL' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', paddingTop: '0.65rem', borderTop: '1px dashed #cbd5e1' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                              {lang === 'TE' ? 'ఇప్పుడు ఎంత చెల్లిస్తున్నారు? (ఆడ్వాన్స్ ₹)' : 'How much are they paying? (Advance ₹)'}
+                            </label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="e.g. 1,00,000"
+                              onFocus={(e) => e.target.select()}
+                              value={advancePaidAmount}
+                              onChange={(e) => setAdvancePaidAmount(formatIndianCurrencyInput(e.target.value))}
+                              style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1.5px solid #d97706', fontSize: '0.88rem', fontWeight: 800, color: '#b45309', background: '#fffbeb' }}
+                            />
+                          </div>
+
+                          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#991b1b', textTransform: 'uppercase' }}>
+                              {lang === 'TE' ? 'ఇంకా బాకీ బకాయి (Balance Due)' : 'Balance Still Due'}
+                            </span>
+                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#dc2626', marginTop: '1px' }}>
+                              ₹{calculatedDueAmount.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ) : mode === 'SELL' ? (
-                    <div>
-                      <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossSellingTotal}</span>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>₹{totalSellValue.toLocaleString('en-IN')}</div>
-                    </div>
-                  ) : (
-                    <>
+                  );
+                })()}
+
+                {/* Sleek Bottom Horizontal Net Calculation & Submit Bar */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    {mode === 'BUY' ? (
+                      <div>
+                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossBuyingAmount}</span>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>₹{totalBuyCredit.toLocaleString('en-IN')}</div>
+                      </div>
+                    ) : mode === 'SELL' ? (
                       <div>
                         <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossSellingTotal}</span>
                         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>₹{totalSellValue.toLocaleString('en-IN')}</div>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.lessItemExchange}</span>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>- ₹{totalBuyCredit.toLocaleString('en-IN')}</div>
-                      </div>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <div>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossSellingTotal}</span>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>₹{totalSellValue.toLocaleString('en-IN')}</div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.lessItemExchange}</span>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>- ₹{totalBuyCredit.toLocaleString('en-IN')}</div>
+                        </div>
+                      </>
+                    )}
 
-                  <div style={{ paddingLeft: '1rem', borderLeft: '2px solid #e2e8f0' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>{t.grandTotal}</span>
-                    <span style={{ fontSize: '0.68rem', color: mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? '#0369a1' : '#64748b', fontWeight: 600, display: 'block', marginTop: '-2px' }}>
-                      {mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? t.needToPayCustomerTag : t.customerPaidTag}
-                    </span>
-                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
-                      ₹{mode === 'BUY' ? totalBuyCredit.toLocaleString('en-IN') : mode === 'SELL' ? totalSellValue.toLocaleString('en-IN') : Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}
+                    <div style={{ paddingLeft: '1rem', borderLeft: '2px solid #e2e8f0' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>{t.grandTotal}</span>
+                      <span style={{ fontSize: '0.68rem', color: mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? '#0369a1' : '#64748b', fontWeight: 600, display: 'block', marginTop: '-2px' }}>
+                        {mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? t.needToPayCustomerTag : t.customerPaidTag}
+                      </span>
+                      <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                        ₹{mode === 'BUY' ? totalBuyCredit.toLocaleString('en-IN') : mode === 'SELL' ? totalSellValue.toLocaleString('en-IN') : Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveBillType('ESTIMATION');
-                      setTimeout(() => {
-                        printReceipt80mm('pos-realtime-receipt-card');
-                        downloadReceiptAsPNG('pos-realtime-receipt-card', customerName || 'Estimation_Bill');
-                      }, 100);
-                    }}
-                    style={{
-                      padding: '0.8rem 1.4rem',
-                      borderRadius: '8px',
-                      border: '1px solid #d97706',
-                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                      color: '#ffffff',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      fontSize: '0.88rem',
-                      boxShadow: '0 4px 14px rgba(217, 119, 6, 0.3)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <i className="fa-solid fa-calculator"></i> {t.estimationBtn}
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveBillType('ESTIMATION');
+                        setTimeout(() => {
+                          printReceipt80mm('pos-realtime-receipt-card');
+                          downloadReceiptAsPNG('pos-realtime-receipt-card', customerName || 'Estimation_Bill');
+                        }, 100);
+                      }}
+                      style={{
+                        padding: '0.8rem 1.4rem',
+                        borderRadius: '8px',
+                        border: '1px solid #d97706',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        color: '#ffffff',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        fontSize: '0.88rem',
+                        boxShadow: '0 4px 14px rgba(217, 119, 6, 0.3)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <i className="fa-solid fa-calculator"></i> {t.estimationBtn}
+                    </button>
 
-                  <button
-                    type="button"
-                    disabled={creating}
-                    onClick={() => {
-                      if (!customerName || items.length === 0) return;
-                      setShowConfirmModal(true);
-                    }}
-                    style={{
-                      padding: '0.8rem 1.75rem',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #228B22 0%, #33B249 100%)',
-                      color: '#ffffff',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      fontSize: '0.88rem',
-                      boxShadow: '0 4px 14px rgba(51, 178, 73, 0.3)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <i className="fa-solid fa-circle-check"></i> {creating ? t.savingSaleBtn : t.saleDoneBtn}
-                  </button>
+                    <button
+                      type="button"
+                      disabled={creating}
+                      onClick={handlePreSubmitCheck}
+                      style={{
+                        padding: '0.8rem 1.75rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #228B22 0%, #33B249 100%)',
+                        color: '#ffffff',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        fontSize: '0.88rem',
+                        boxShadow: '0 4px 14px rgba(51, 178, 73, 0.3)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <i className="fa-solid fa-circle-check"></i> {creating ? t.savingSaleBtn : t.saleDoneBtn}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </form>
+              </form>
+            </div>
 
             {/* RIGHT GRID (30%): Real-Time Retail Thermal Receipt Preview */}
-            <ReceiptPreview
-              receiptId="pos-realtime-receipt-card"
-              mode={mode}
-              customerName={customerName}
-              customerPhone={customerPhone}
-              customerAddress={customerAddress}
-              teluguCustomerName={teluguCustomerName}
-              teluguCustomerAddress={teluguCustomerAddress}
-              rates={rates}
-              items={items}
-              totalSellValue={totalSellValue}
-              totalBuyCredit={totalBuyCredit}
-              netPayable={netPayable}
-              billType={activeBillType}
-              lang={lang}
-            />
+            {(() => {
+              const grandTot = mode === 'BUY' ? totalBuyCredit : mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+              const paidVal = paymentType === 'FULL' ? grandTot : Math.min(grandTot, parseIndianCurrencyNumber(advancePaidAmount));
+              const dueVal = Math.max(0, grandTot - paidVal);
+
+              return (
+                <ReceiptPreview
+                  receiptId="pos-realtime-receipt-card"
+                  mode={mode}
+                  customerName={customerName}
+                  customerPhone={customerPhone}
+                  customerAddress={customerAddress}
+                  teluguCustomerName={teluguCustomerName}
+                  teluguCustomerAddress={teluguCustomerAddress}
+                  rates={rates}
+                  items={items}
+                  totalSellValue={totalSellValue}
+                  totalBuyCredit={totalBuyCredit}
+                  netPayable={netPayable}
+                  billType={activeBillType}
+                  paymentType={paymentType}
+                  advancePaidAmount={paidVal}
+                  balanceDueAmount={dueVal}
+                  lang={lang}
+                />
+              );
+            })()}
           </div>
 
           {/* Sale Done Confirmation Modal */}
