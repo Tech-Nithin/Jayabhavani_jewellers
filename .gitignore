@@ -35,4 +35,7 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Runtime data & backups
+data/
+backend/data/
+

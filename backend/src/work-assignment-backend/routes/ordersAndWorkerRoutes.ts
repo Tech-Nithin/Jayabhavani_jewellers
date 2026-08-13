@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { supabase } from '../../config/supabase';
 
 const router = Router();
@@ -553,25 +555,93 @@ router.post('/workers', async (req: Request, res: Response) => {
   }
 });
 
-// ── WORKER TRANSACTIONS ENDPOINTS (WhatsApp Chat Timeline) ──
+// ── WORKER TRANSACTIONS ENDPOINTS (WhatsApp Chat Ledger) ──
+
+const txFilePath = path.join(__dirname, '../../../../data/worker_transactions.json');
+
+const ensureTxFileExists = () => {
+  try {
+    const dir = path.dirname(txFilePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(txFilePath)) fs.writeFileSync(txFilePath, JSON.stringify([], null, 2));
+  } catch (e) {
+    console.error('Failed to create tx data directory:', e);
+  }
+};
+
+const getLocalTransactions = (): WorkerTransactionItem[] => {
+  try {
+    ensureTxFileExists();
+    const raw = fs.readFileSync(txFilePath, 'utf8');
+    return JSON.parse(raw) || [];
+  } catch (e) {
+    return [];
+  }
+};
+
+const saveLocalTransaction = (txn: WorkerTransactionItem) => {
+  try {
+    ensureTxFileExists();
+    const local = getLocalTransactions();
+    local.push(txn);
+    fs.writeFileSync(txFilePath, JSON.stringify(local, null, 2));
+  } catch (e) {
+    console.error('Failed to save transaction to local JSON disk file:', e);
+  }
+};
 
 // GET /api/worker-transactions?workerId=WRK-101
-router.get('/worker-transactions', (req: Request, res: Response) => {
+router.get('/worker-transactions', async (req: Request, res: Response) => {
   const { workerId } = req.query;
-  let txns = mockTransactions;
+
+  try {
+    // 1. Try querying Supabase database first
+    const { data: dbTxns, error: dbErr } = await supabase
+      .from('worker_transactions')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (!dbErr && dbTxns) {
+      let filtered = dbTxns;
+      if (workerId) {
+        filtered = filtered.filter((t: any) => t.worker_id === String(workerId));
+      }
+      return res.json({
+        success: true,
+        transactions: filtered,
+        source: 'supabase_database',
+      });
+    }
+
+    if (dbErr) {
+      console.warn('⚠️ Supabase GET worker_transactions error (using persistent fallback):', dbErr.message);
+    }
+  } catch (err: any) {
+    console.warn('⚠️ Supabase worker_transactions fetch exception:', err);
+  }
+
+  // 2. Persistent Disk Fallback + Mock
+  let combined = [...getLocalTransactions(), ...mockTransactions];
+  const seen = new Set();
+  combined = combined.filter((t) => {
+    if (seen.has(t.id)) return false;
+    seen.add(t.id);
+    return true;
+  });
 
   if (workerId) {
-    txns = txns.filter((t) => t.worker_id === String(workerId));
+    combined = combined.filter((t) => t.worker_id === String(workerId));
   }
 
   res.json({
     success: true,
-    transactions: txns,
+    transactions: combined,
+    source: 'local_disk_fallback',
   });
 });
 
 // POST /api/worker-transactions
-router.post('/worker-transactions', (req: Request, res: Response) => {
+router.post('/worker-transactions', async (req: Request, res: Response) => {
   try {
     const {
       worker_id,
@@ -587,7 +657,10 @@ router.post('/worker-transactions', (req: Request, res: Response) => {
     } = req.body;
 
     if (!worker_id) {
-      return res.status(400).json({ success: false, message: 'Worker ID is required' });
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error: Worker ID is required to record transaction',
+      });
     }
 
     const wt = Number(weight_grams) || 0;
@@ -610,15 +683,119 @@ router.post('/worker-transactions', (req: Request, res: Response) => {
       created_at: new Date().toISOString(),
     };
 
+    // 1. ALWAYS persist to local disk file so chat is NEVER lost regardless of database status
+    saveLocalTransaction(newTxn);
     mockTransactions.push(newTxn);
+
+    // 2. Try inserting into Supabase Database
+    const { data: insertedDb, error: dbErr } = await supabase
+      .from('worker_transactions')
+      .insert([newTxn])
+      .select()
+      .single();
+
+    if (dbErr) {
+      console.error('❌ Supabase Insert Error (worker_transactions):', dbErr);
+      return res.json({
+        success: true,
+        message: `Saved to local persistent file! (Database note: ${dbErr.message})`,
+        transaction: newTxn,
+        warning: `Database Notice [Code ${dbErr.code}]: ${dbErr.message}`,
+        db_details: dbErr,
+      });
+    }
 
     res.json({
       success: true,
-      message: 'Transaction recorded successfully!',
-      transaction: newTxn,
+      message: 'Transaction recorded and saved to database successfully!',
+      transaction: insertedDb || newTxn,
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message || 'Failed to record transaction' });
+    console.error('❌ POST /api/worker-transactions Exception:', err);
+    res.status(500).json({
+      success: false,
+      message: `Backend Execution Error: ${err.message || 'Failed to record transaction'}`,
+      error_details: err.stack,
+    });
+  }
+});
+
+// ── USER SETTINGS ENDPOINTS (Message Preview Toggle Preference) ──
+
+const settingsFilePath = path.join(__dirname, '../../../../data/user_settings.json');
+
+const getLocalSettings = () => {
+  try {
+    const dir = path.dirname(settingsFilePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(settingsFilePath)) {
+      const defaultSettings = { message_preview_enabled: true, image_preview_enabled: true };
+      fs.writeFileSync(settingsFilePath, JSON.stringify(defaultSettings, null, 2));
+      return defaultSettings;
+    }
+    const raw = fs.readFileSync(settingsFilePath, 'utf8');
+    return JSON.parse(raw) || { message_preview_enabled: true, image_preview_enabled: true };
+  } catch (e) {
+    return { message_preview_enabled: true, image_preview_enabled: true };
+  }
+};
+
+const saveLocalSettings = (settings: Record<string, any>) => {
+  try {
+    const dir = path.dirname(settingsFilePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const current = getLocalSettings();
+    const updated = { ...current, ...settings };
+    fs.writeFileSync(settingsFilePath, JSON.stringify(updated, null, 2));
+    return updated;
+  } catch (e) {
+    console.error('Failed to save user settings to disk:', e);
+    return settings;
+  }
+};
+
+// GET /api/user-settings
+router.get('/user-settings', async (_req: Request, res: Response) => {
+  try {
+    const { data: dbSettings, error } = await supabase.from('user_settings').select('*').limit(1);
+    if (!error && dbSettings && dbSettings.length > 0) {
+      return res.json({
+        success: true,
+        settings: dbSettings[0],
+        source: 'supabase_database',
+      });
+    }
+  } catch (err) {
+    console.warn('⚠️ Supabase user_settings fetch warning:', err);
+  }
+
+  const local = getLocalSettings();
+  res.json({
+    success: true,
+    settings: local,
+    source: 'local_disk_fallback',
+  });
+});
+
+// POST /api/user-settings
+router.post('/user-settings', async (req: Request, res: Response) => {
+  try {
+    const updatedSettings = saveLocalSettings(req.body);
+
+    // Try persisting to Supabase if table exists
+    try {
+      await supabase.from('user_settings').upsert({ id: 'DEFAULT_USER', ...updatedSettings });
+    } catch (e) {
+      console.warn('Supabase user_settings upsert fallback:', e);
+    }
+
+    res.json({
+      success: true,
+      message: 'User settings updated successfully!',
+      settings: updatedSettings,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to update user settings' });
   }
 });
 

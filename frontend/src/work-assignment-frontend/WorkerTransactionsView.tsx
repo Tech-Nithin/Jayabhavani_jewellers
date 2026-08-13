@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
+import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
 
 interface WorkerTransactionItem {
   id: string;
@@ -60,13 +61,58 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
 
+  // Full-Screen Image Lightbox Preview & WhatsApp Share State
+  const [previewImageData, setPreviewImageData] = useState<{ url: string; title: string } | null>(null);
+
+  // Message Preview Panel Preference State (Persisted Locally & Database)
+  const [isMessagePreviewEnabled, setIsMessagePreviewEnabled] = useState<boolean>(() => {
+    const stored = localStorage.getItem('jbj_message_preview_enabled');
+    return stored !== null ? stored === 'true' : true;
+  });
+
+  // Error Diagnostics State (100% Error Visibility)
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetchTransactions();
+    fetchUserSettings();
   }, [worker?.id]);
+
+  const fetchUserSettings = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/work-assignment/user-settings`);
+      const data = await res.json();
+      if (data.success && data.settings && typeof data.settings.message_preview_enabled === 'boolean') {
+        if (localStorage.getItem('jbj_message_preview_enabled') === null) {
+          setIsMessagePreviewEnabled(data.settings.message_preview_enabled);
+          localStorage.setItem('jbj_message_preview_enabled', String(data.settings.message_preview_enabled));
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch user settings:', err);
+    }
+  };
+
+  const toggleMessagePreview = async () => {
+    const newValue = !isMessagePreviewEnabled;
+    setIsMessagePreviewEnabled(newValue);
+    localStorage.setItem('jbj_message_preview_enabled', String(newValue));
+
+    try {
+      await fetch(`${API_BASE}/work-assignment/user-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_preview_enabled: newValue }),
+      });
+    } catch (err) {
+      console.warn('Failed to sync user settings to database:', err);
+    }
+  };
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,13 +122,21 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     if (!worker?.id) return;
     try {
       setLoading(true);
+      setFetchError(null);
       const res = await fetch(`${API_BASE}/work-assignment/worker-transactions?workerId=${worker.id}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.transactions)) {
         setTransactions(data.transactions);
+        if (data.warning) {
+          console.warn('⚠️ Server notice:', data.warning);
+        }
+      } else {
+        const errStr = data.message || data.warning || 'Failed to load transaction history from backend';
+        setFetchError(errStr);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch transactions:', err);
+      setFetchError(`Network Error: ${err.message || 'Could not connect to backend server'}`);
     } finally {
       setLoading(false);
     }
@@ -106,15 +160,17 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const handleSendTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (category === 'CASH' && !amountCash) {
-      alert('Please enter cash amount.');
+      alert('⚠️ Validation Error: Please enter cash amount.');
       return;
     }
     if (category !== 'CASH' && !weightGrams) {
-      alert('Please enter gold/ornament/silver weight.');
+      alert('⚠️ Validation Error: Please enter gold/ornament/silver weight.');
       return;
     }
 
     setIsSending(true);
+    setSendError(null);
+
     try {
       const defaultName = category === 'CASH' ? 'Cash Payment' : category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item';
       const formattedItemName = toStartCase(itemName.trim()) || defaultName;
@@ -147,12 +203,20 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         setItemName('');
         setNotes('');
         setPhotos([]);
+
+        if (data.warning) {
+          console.warn('⚡ Transaction Notice:', data.warning);
+        }
       } else {
-        alert('Failed to send transaction: ' + (data.message || 'Error'));
+        const errDetail = data.message || data.warning || JSON.stringify(data);
+        setSendError(errDetail);
+        alert(`❌ FAILED TO RECORD TRANSACTION:\n\n100% Error Reason: ${errDetail}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error sending transaction:', err);
-      alert('Network error sending transaction.');
+      const connErr = `Connection Error: ${err.message || 'Server did not respond'}`;
+      setSendError(connErr);
+      alert(`❌ NETWORK ERROR RECORDING TRANSACTION:\n\n${connErr}`);
     } finally {
       setIsSending(false);
     }
@@ -214,7 +278,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   }, [searchQuery, activeMatchIdx]);
 
   return (
-    <div className="tablet-dense-view" style={{ background: '#f0f2f5', borderRadius: '18px', border: '1px solid #cbd5e1', boxShadow: '0 8px 30px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
+    <div className="tablet-dense-view" style={{ background: '#f0f2f5', borderRadius: '18px', border: '1px solid #cbd5e1', boxShadow: '0 8px 30px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 45px)', overflow: 'hidden' }}>
 
       {/* ── CHAT HEADER ── */}
       <div style={{ background: '#ffffff', padding: '0.6rem 1rem', borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
@@ -229,15 +293,29 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
             <i className="fa-solid fa-arrow-left"></i>
           </button>
 
-          {/* Clickable Worker Profile Header */}
-          <div
-            onClick={() => setShowWorkerModal(true)}
-            title="Click to view worker profile information"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', overflow: 'hidden' }}
-          >
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.95rem', boxShadow: '0 2px 6px rgba(180, 83, 9, 0.3)', flexShrink: 0 }}>
-              {worker.name.charAt(0)}
-            </div>
+            {/* Clickable Worker Profile Header */}
+            <div
+              onClick={() => {
+                if (worker.photo_url) {
+                  setPreviewImageData({ url: worker.photo_url, title: `${worker.name} Profile Picture` });
+                } else {
+                  setShowWorkerModal(true);
+                }
+              }}
+              title="Click to view worker profile picture & information"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', overflow: 'hidden' }}
+            >
+              {worker.photo_url ? (
+                <img
+                  src={worker.photo_url}
+                  alt={worker.name}
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d97706', boxShadow: '0 2px 6px rgba(180, 83, 9, 0.3)', flexShrink: 0 }}
+                />
+              ) : (
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.95rem', boxShadow: '0 2px 6px rgba(180, 83, 9, 0.3)', flexShrink: 0 }}>
+                  {worker.name.charAt(0)}
+                </div>
+              )}
 
             <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
               <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -321,6 +399,22 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                 >
                   <i className="fa-solid fa-user-gear" style={{ color: '#d97706' }}></i> Worker Information
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIs3DotsOpen(false);
+                    toggleMessagePreview();
+                  }}
+                  style={{ width: '100%', padding: '10px 14px', border: 'none', background: 'none', borderTop: '1px solid #f1f5f9', textAlign: 'left', cursor: 'pointer', fontSize: '0.80rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <i className="fa-solid fa-eye" style={{ color: isMessagePreviewEnabled ? '#15803d' : '#64748b' }}></i> Message Preview
+                  </span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '6px', background: isMessagePreviewEnabled ? '#dcfce7' : '#f1f5f9', color: isMessagePreviewEnabled ? '#15803d' : '#64748b' }}>
+                    {isMessagePreviewEnabled ? 'ON' : 'OFF'}
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -381,6 +475,29 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
       {/* ── CHAT MESSAGES TIMELINE (SEAMLESS FIT HEIGHT) ── */}
       <div style={{ flex: 1, minHeight: 0, padding: '1rem 1.25rem', overflowY: 'auto', background: '#efeae2', backgroundImage: 'radial-gradient(#cbd5e1 0.75px, transparent 0.75px)', backgroundSize: '16px 16px' }}>
+
+        {/* ── 100% ERROR DIAGNOSTIC WARNING BANNER ── */}
+        {(fetchError || sendError) && (
+          <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1rem', color: '#991b1b', fontSize: '0.80rem', boxShadow: '0 4px 12px rgba(220, 38, 38, 0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <strong style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+                <i className="fa-solid fa-triangle-exclamation"></i> 100% Diagnostic Error Details
+              </strong>
+              <button
+                type="button"
+                onClick={() => { setFetchError(null); setSendError(null); }}
+                style={{ background: 'none', border: 'none', color: '#991b1b', cursor: 'pointer', fontSize: '0.9rem' }}
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <p style={{ margin: 0, fontWeight: 600 }}>{sendError || fetchError}</p>
+            <div style={{ marginTop: '6px', fontSize: '0.72rem', color: '#7f1d1d' }}>
+              💡 All transactions are automatically backed up to local persistent disk storage so no chat history is ever lost.
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
             <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.5rem', color: '#d97706', marginBottom: '0.5rem' }}></i>
@@ -489,17 +606,25 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     </p>
                   )}
 
-                  {/* Photo Thumbnails */}
+                  {/* Photo Thumbnails with Full-Screen Expand & Share */}
                   {t.photos && t.photos.length > 0 && (
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
                       {t.photos.map((url, idx) => (
-                        <img
-                          key={idx}
-                          src={url}
-                          alt="Transaction Photo"
-                          style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #cbd5e1', cursor: 'pointer' }}
-                          onClick={() => window.open(url, '_blank')}
-                        />
+                        <div key={idx} style={{ position: 'relative', display: 'inline-block' }}>
+                          <img
+                            src={url}
+                            alt="Transaction Photo"
+                            style={{ width: '64px', height: '64px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #cbd5e1', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}
+                            onClick={() => setPreviewImageData({ url, title: `${t.item_name || 'Transaction Photo'} (${t.category})` })}
+                            title="Click to view full screen & share"
+                          />
+                          <span
+                            onClick={() => setPreviewImageData({ url, title: `${t.item_name || 'Transaction Photo'} (${t.category})` })}
+                            style={{ position: 'absolute', bottom: '3px', right: '3px', background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontSize: '0.62rem', padding: '1px 4px', borderRadius: '4px', cursor: 'pointer' }}
+                          >
+                            <i className="fa-solid fa-expand"></i>
+                          </span>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -544,64 +669,73 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         {isAccordionExpanded && (
           <form onSubmit={handleSendTransaction} style={{ padding: '0.85rem 1.25rem' }}>
 
-            {/* Live Message Preview Banner */}
-            <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '12px', border: '1px dashed #0284c7', marginBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <i className="fa-solid fa-eye"></i> Live Message Preview ({direction === 'OUTGOING' ? 'Sending to Worker' : 'Receiving from Worker'})
-                </span>
-                <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>Real-time draft</span>
-              </div>
+            {/* Live Message Preview Banner (Toggleable ON/OFF) */}
+            {isMessagePreviewEnabled && (
+              <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '12px', border: '1px dashed #0284c7', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <i className="fa-solid fa-eye"></i> Live Message Preview ({direction === 'OUTGOING' ? 'Sending to Worker' : 'Receiving from Worker'})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleMessagePreview}
+                    style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700 }}
+                    title="Click to hide message preview"
+                  >
+                    <i className="fa-solid fa-eye-slash"></i> Disable Preview
+                  </button>
+                </div>
 
-              <div style={{ display: 'flex', justifyContent: direction === 'OUTGOING' ? 'flex-end' : 'flex-start' }}>
-                <div style={{ width: '85%', maxWidth: '420px', background: '#ffffff', borderRadius: '12px', padding: '10px', border: '1px solid #cbd5e1', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '8px', background: direction === 'OUTGOING' ? '#075e54' : '#0284c7', color: '#fff', textTransform: 'uppercase' }}>
-                      {direction === 'OUTGOING' ? 'OUTGOING (STORE → WORKER)' : 'INCOMING (WORKER → STORE)'}
-                    </span>
-                    <span style={{ fontSize: '0.62rem', color: '#64748b' }}>Now</span>
+                <div style={{ display: 'flex', justifyContent: direction === 'OUTGOING' ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ width: '85%', maxWidth: '420px', background: '#ffffff', borderRadius: '12px', padding: '10px', border: '1px solid #cbd5e1', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '8px', background: direction === 'OUTGOING' ? '#075e54' : '#0284c7', color: '#fff', textTransform: 'uppercase' }}>
+                        {direction === 'OUTGOING' ? 'OUTGOING (STORE → WORKER)' : 'INCOMING (WORKER → STORE)'}
+                      </span>
+                      <span style={{ fontSize: '0.62rem', color: '#64748b' }}>Now</span>
+                    </div>
+
+                    {category === 'CASH' ? (
+                      <div style={{ margin: '4px 0', padding: '6px 10px', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                        <div style={{ fontSize: '0.65rem', color: '#166534', fontWeight: 700 }}>CASH PAYMENT</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#15803d' }}>
+                          💵 ₹{amountCash ? Number(amountCash).toLocaleString('en-IN') : '0'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ margin: '4px 0', padding: '6px 10px', background: category === 'GOLD' ? '#fffbe8' : category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '8px', border: category === 'GOLD' ? '1px solid #fde68a' : category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
+                          {category === 'GOLD' ? '🥇' : category === 'SILVER' ? '🥈' : '👑'}{' '}
+                          {toStartCase(itemName.trim()) || (category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item')}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '4px', fontSize: '0.72rem', background: '#ffffff', padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                          <div>
+                            <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>GROSS WT</span>
+                            <strong>{weightGrams ? Number(weightGrams).toFixed(3) : '0.000'} g</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>TOUCH %</span>
+                            <strong>{touchPercentage || (category === 'SILVER' ? '80.0' : '91.6')}%</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>100% PURE FINE</span>
+                            <strong style={{ color: '#15803d' }}>
+                              {Number((Number(weightGrams) || 0) * (Number(touchPercentage) || (category === 'SILVER' ? 80.0 : 91.6)) / 100).toFixed(3)} g
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {notes && (
+                      <div style={{ fontSize: '0.72rem', color: '#475569', fontStyle: 'italic', marginTop: '4px', background: '#f1f5f9', padding: '3px 6px', borderRadius: '4px' }}>
+                        "{toStartCase(notes)}"
+                      </div>
+                    )}
                   </div>
-
-                  {category === 'CASH' ? (
-                    <div style={{ margin: '4px 0', padding: '6px 10px', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                      <div style={{ fontSize: '0.65rem', color: '#166534', fontWeight: 700 }}>CASH PAYMENT</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#15803d' }}>
-                        💵 ₹{amountCash ? Number(amountCash).toLocaleString('en-IN') : '0'}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ margin: '4px 0', padding: '6px 10px', background: category === 'GOLD' ? '#fffbe8' : category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '8px', border: category === 'GOLD' ? '1px solid #fde68a' : category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
-                        {category === 'GOLD' ? '🥇' : category === 'SILVER' ? '🥈' : '👑'}{' '}
-                        {toStartCase(itemName.trim()) || (category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item')}
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '4px', fontSize: '0.72rem', background: '#ffffff', padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                        <div>
-                          <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>GROSS WT</span>
-                          <strong>{weightGrams ? Number(weightGrams).toFixed(3) : '0.000'} g</strong>
-                        </div>
-                        <div>
-                          <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>TOUCH %</span>
-                          <strong>{touchPercentage || (category === 'SILVER' ? '80.0' : '91.6')}%</strong>
-                        </div>
-                        <div>
-                          <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>100% PURE FINE</span>
-                          <strong style={{ color: '#15803d' }}>
-                            {Number((Number(weightGrams) || 0) * (Number(touchPercentage) || (category === 'SILVER' ? 80.0 : 91.6)) / 100).toFixed(3)} g
-                          </strong>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {notes && (
-                    <div style={{ fontSize: '0.72rem', color: '#475569', fontStyle: 'italic', marginTop: '4px', background: '#f1f5f9', padding: '3px 6px', borderRadius: '4px' }}>
-                      "{toStartCase(notes)}"
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Toggle Mode & Category Buttons */}
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -768,11 +902,21 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
               </button>
             </div>
 
-            {/* Worker Avatar & Name Banner */}
+            {/* Worker Avatar & Name Banner (Clickable to Expand Photo) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '1rem', marginBottom: '1.25rem' }}>
-              <div style={{ width: '54px', height: '54px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.4rem', boxShadow: '0 3px 10px rgba(180, 83, 9, 0.3)', flexShrink: 0 }}>
-                {worker.name.charAt(0)}
-              </div>
+              {worker.photo_url ? (
+                <img
+                  src={worker.photo_url}
+                  alt={worker.name}
+                  onClick={() => setPreviewImageData({ url: worker.photo_url, title: `${worker.name} Profile Picture` })}
+                  style={{ width: '58px', height: '58px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #d97706', boxShadow: '0 3px 10px rgba(180, 83, 9, 0.3)', cursor: 'pointer', flexShrink: 0 }}
+                  title="Click to view full profile photo"
+                />
+              ) : (
+                <div style={{ width: '58px', height: '58px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.5rem', boxShadow: '0 3px 10px rgba(180, 83, 9, 0.3)', flexShrink: 0 }}>
+                  {worker.name.charAt(0)}
+                </div>
+              )}
               <div>
                 <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
                   {worker.name}
@@ -820,6 +964,15 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── FULL-SCREEN IMAGE LIGHTBOX MODAL & WHATSAPP SHARE ── */}
+      {previewImageData && (
+        <FullImagePreviewModal
+          imageUrl={previewImageData.url}
+          title={previewImageData.title}
+          onClose={() => setPreviewImageData(null)}
+        />
       )}
     </div>
   );
