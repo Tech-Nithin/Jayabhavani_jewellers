@@ -343,7 +343,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
             onClick={onBack}
             style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '7px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}
           >
-            <i className="fa-solid fa-arrow-left"></i> {translations[lang]?.backBtn || 'Back'}
+            <i className="fa-solid fa-arrow-left"></i>
           </button>
 
           <div>
@@ -362,31 +362,32 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
         </div>
       </div>
 
-      {/* ── 4 INTERACTIVE CLICKABLE KPI SUMMARY CARDS ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+      {/* ── 4 INTERACTIVE CLICKABLE KPI SUMMARY CARDS (SINGLE ROW IN TABLET VIEW) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.6rem', marginBottom: '1.25rem' }}>
         {/* Total Orders Card */}
         <div
           onClick={() => setStatusFilter('ALL')}
           title="Click to show all orders"
           style={{
             background: statusFilter === 'ALL' ? '#f1f5f9' : '#f8fafc',
-            padding: '0.85rem 1.1rem',
-            borderRadius: '14px',
+            padding: '0.65rem 0.75rem',
+            borderRadius: '12px',
             border: statusFilter === 'ALL' ? '2px solid #0f172a' : '1px solid #e2e8f0',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.85rem',
+            gap: '0.6rem',
             cursor: 'pointer',
             boxShadow: statusFilter === 'ALL' ? '0 4px 12px rgba(15,23,42,0.12)' : 'none',
             transition: 'all 0.2s ease',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#cbd5e1', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#cbd5e1', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem', flexShrink: 0 }}>
             <i className="fa-solid fa-boxes-stacked"></i>
           </div>
-          <div>
-            <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase' }}>Total Orders</span>
-            <strong style={{ fontSize: '1.25rem', color: '#0f172a', fontWeight: 800 }}>{totalOrdersCount}</strong>
+          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.60rem', color: '#64748b', fontWeight: 800, display: 'block', textTransform: 'uppercase' }}>Total Orders</span>
+            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>{totalOrdersCount}</strong>
           </div>
         </div>
 
@@ -396,23 +397,24 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
           title="Click to show only still processing orders"
           style={{
             background: statusFilter === 'PENDING' ? '#fef3c7' : '#fffbe8',
-            padding: '0.85rem 1.1rem',
-            borderRadius: '14px',
+            padding: '0.65rem 0.75rem',
+            borderRadius: '12px',
             border: statusFilter === 'PENDING' ? '2px solid #d97706' : '1px solid #fde68a',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.85rem',
+            gap: '0.6rem',
             cursor: 'pointer',
             boxShadow: statusFilter === 'PENDING' ? '0 4px 12px rgba(217,119,6,0.15)' : 'none',
             transition: 'all 0.2s ease',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem', flexShrink: 0 }}>
             <i className="fa-solid fa-hourglass-half"></i>
           </div>
-          <div>
-            <span style={{ fontSize: '0.68rem', color: '#b45309', fontWeight: 700, display: 'block', textTransform: 'uppercase' }}>Still Processing</span>
-            <strong style={{ fontSize: '1.25rem', color: '#92400e', fontWeight: 800 }}>{pendingCount}</strong>
+          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.60rem', color: '#b45309', fontWeight: 800, display: 'block', textTransform: 'uppercase' }}>Still Processing</span>
+            <strong style={{ fontSize: '1.1rem', color: '#92400e', fontWeight: 800 }}>{pendingCount}</strong>
           </div>
         </div>
 
@@ -422,23 +424,24 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
           title="Click to show only completed orders"
           style={{
             background: statusFilter === 'COMPLETED' ? '#dcfce7' : '#f0fdf4',
-            padding: '0.85rem 1.1rem',
-            borderRadius: '14px',
+            padding: '0.65rem 0.75rem',
+            borderRadius: '12px',
             border: statusFilter === 'COMPLETED' ? '2px solid #16a34a' : '1px solid #bbf7d0',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.85rem',
+            gap: '0.6rem',
             cursor: 'pointer',
             boxShadow: statusFilter === 'COMPLETED' ? '0 4px 12px rgba(22,163,74,0.15)' : 'none',
             transition: 'all 0.2s ease',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#dcfce7', color: '#15803d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#dcfce7', color: '#15803d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem', flexShrink: 0 }}>
             <i className="fa-solid fa-circle-check"></i>
           </div>
-          <div>
-            <span style={{ fontSize: '0.68rem', color: '#15803d', fontWeight: 700, display: 'block', textTransform: 'uppercase' }}>Completed</span>
-            <strong style={{ fontSize: '1.25rem', color: '#166534', fontWeight: 800 }}>{completedCount}</strong>
+          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.60rem', color: '#15803d', fontWeight: 800, display: 'block', textTransform: 'uppercase' }}>Completed</span>
+            <strong style={{ fontSize: '1.1rem', color: '#166534', fontWeight: 800 }}>{completedCount}</strong>
           </div>
         </div>
 
@@ -448,21 +451,22 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
           title="Click to show all artisans"
           style={{
             background: '#f0f9ff',
-            padding: '0.85rem 1.1rem',
-            borderRadius: '14px',
+            padding: '0.65rem 0.75rem',
+            borderRadius: '12px',
             border: '1px solid #bae6fd',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.85rem',
+            gap: '0.6rem',
             cursor: 'pointer',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem', flexShrink: 0 }}>
             <i className="fa-solid fa-users-gears"></i>
           </div>
-          <div>
-            <span style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 700, display: 'block', textTransform: 'uppercase' }}>Artisans Assigned</span>
-            <strong style={{ fontSize: '1.25rem', color: '#075985', fontWeight: 800 }}>{activeWorkersCount}</strong>
+          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.60rem', color: '#0369a1', fontWeight: 800, display: 'block', textTransform: 'uppercase' }}>Artisans</span>
+            <strong style={{ fontSize: '1.1rem', color: '#075985', fontWeight: 800 }}>{activeWorkersCount}</strong>
           </div>
         </div>
       </div>
@@ -554,17 +558,17 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.82rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: 700 }}>
                 <th style={{ padding: '0.85rem 0.75rem', width: '50px', textAlign: 'center' }}>S.No</th>
-                {isAll && <th style={{ padding: '0.85rem 1rem' }}>Worker Details</th>}
-                <th style={{ padding: '0.85rem 1rem' }}>Customer Details</th>
-                <th style={{ padding: '0.85rem 1rem' }}>Item & Metal</th>
-                <th style={{ padding: '0.85rem 1rem' }}>Gross & Net Wt</th>
-                <th style={{ padding: '0.85rem 1rem' }}>Assigned Date</th>
-                <th style={{ padding: '0.85rem 1rem' }}>Completed Date</th>
-                <th style={{ padding: '0.85rem 1rem' }}>Days Taken / Duration</th>
+                {isAll && <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Worker Name</th>}
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Customer Details</th>
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Item & Metal</th>
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Gross & Net Wt</th>
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Assigned Date</th>
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Completed Date</th>
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Days Taken / Duration</th>
               </tr>
             </thead>
             <tbody>
@@ -579,39 +583,39 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
                       {idx + 1}
                     </td>
                     {isAll && (
-                      <td style={{ padding: '0.85rem 1rem' }}>
+                      <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                         <div style={{ fontWeight: 800, color: '#d97706' }}>{ord.assigned_worker_name || 'Worker'}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 700 }}>ID: {ord.assigned_worker_id || '—'}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 700 }}></div>
                       </td>
                     )}
-                    <td style={{ padding: '0.85rem 1rem' }}>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>{ord.customer_name}</div>
                       <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{ord.customer_phone || '—'}</div>
                     </td>
-                    <td style={{ padding: '0.85rem 1rem' }}>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>{ord.item_name}</div>
                       <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: ord.metal_type === 'GOLD' ? '#fef3c7' : '#e0f2fe', color: ord.metal_type === 'GOLD' ? '#b45309' : '#0369a1' }}>
                         {ord.metal_type}
                       </span>
                     </td>
-                    <td style={{ padding: '0.85rem 1rem' }}>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>{ord.gross_weight_grams} g</div>
                       <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Net: {ord.net_weight_grams} g</div>
                     </td>
-                    <td style={{ padding: '0.85rem 1rem', color: '#334155', fontSize: '0.78rem' }}>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#334155', fontSize: '0.78rem' }}>
                       {fmtDate(ord.assigned_at || ord.created_at)}
                     </td>
-                    <td style={{ padding: '0.85rem 1rem', color: isReturned ? '#15803d' : '#94a3b8', fontWeight: isReturned ? 700 : 500, fontSize: '0.78rem' }}>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'center', color: isReturned ? '#15803d' : '#94a3b8', fontWeight: isReturned ? 700 : 500, fontSize: '0.78rem' }}>
                       {isReturned ? fmtDate(ord.returned_at) : '—'}
                     </td>
-                    <td style={{ padding: '0.85rem 1rem' }}>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                       <span style={{
-                        padding: '4px 10px',
-                        borderRadius: '12px',
+                        padding: '3px 8px',
+                        borderRadius: '8px',
                         background: isReturned ? '#dcfce7' : '#fef3c7',
                         color: isReturned ? '#15803d' : '#b45309',
                         fontWeight: 800,
-                        fontSize: '0.75rem',
+                        fontSize: '0.68rem',
                         display: 'inline-block',
                       }}>
                         {durationText}
