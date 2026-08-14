@@ -6,6 +6,45 @@ interface FullImagePreviewModalProps {
   onClose: () => void;
 }
 
+/**
+ * Converts any WebP / image URL into a high-quality binary JPEG File
+ * Ensures WhatsApp renders shared media as inline photos instead of documents.
+ */
+const convertUrlToJpegFile = async (url: string, fileName: string): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas context failed'));
+        return;
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const jpegFile = new File([blob], `${fileName}.jpg`, { type: 'image/jpeg' });
+            resolve(jpegFile);
+          } else {
+            reject(new Error('Blob conversion failed'));
+          }
+        },
+        'image/jpeg',
+        0.92
+      );
+    };
+    img.onerror = () => reject(new Error('Failed to load image for JPEG conversion'));
+    img.src = url;
+  });
+};
+
 export const FullImagePreviewModal: React.FC<FullImagePreviewModalProps> = ({
   imageUrl,
   title = 'Transaction Image',
@@ -13,53 +52,41 @@ export const FullImagePreviewModal: React.FC<FullImagePreviewModalProps> = ({
 }) => {
   if (!imageUrl) return null;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     try {
+      const sanitizedTitle = title.replace(/\s+/g, '_');
+      const jpegFile = await convertUrlToJpegFile(imageUrl, `JBJ_${sanitizedTitle}_${Date.now()}`);
+      const downloadUrl = URL.createObjectURL(jpegFile);
       const link = document.createElement('a');
-      link.href = imageUrl;
-      link.download = `JBJ_${title.replace(/\s+/g, '_')}_${Date.now()}.png`;
+      link.href = downloadUrl;
+      link.download = jpegFile.name;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
     } catch (e) {
-      console.error('Download failed:', e);
+      console.error('JPEG download fallback:', e);
       window.open(imageUrl, '_blank');
     }
   };
 
   const handleShareWhatsApp = async () => {
-    // 1. Try Native Web Share API (Mobile / Tablet devices)
-    if (navigator.share) {
-      try {
-        // If image is data URL or http, attempt blob conversion if possible
-        if (imageUrl.startsWith('data:image')) {
-          const res = await fetch(imageUrl);
-          const blob = await res.blob();
-          const file = new File([blob], 'photo.png', { type: blob.type || 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: title,
-              text: `Jaya Bhavani Jewellers — ${title}`,
-              files: [file],
-            });
-            return;
-          }
-        }
+    try {
+      // Convert stored WebP image to pure JPEG file for WhatsApp native photo sharing
+      const jpegFile = await convertUrlToJpegFile(imageUrl, `jbj_photo_${Date.now()}`);
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [jpegFile] })) {
         await navigator.share({
-          title: title,
-          text: `Jaya Bhavani Jewellers — ${title}`,
-          url: window.location.href,
+          files: [jpegFile], // 👈 Pure JPEG image photo (WhatsApp renders as camera photo!)
         });
         return;
-      } catch (err) {
-        console.warn('Native share failed or cancelled:', err);
       }
+    } catch (err: any) {
+      console.warn('File share notice:', err.message || err);
     }
 
-    // 2. Desktop Fallback: Trigger download & open WhatsApp Web
+    // Desktop Fallback: Download JPEG photo file directly
     handleDownload();
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(`Jaya Bhavani Jewellers — ${title}`)}`;
-    window.open(whatsappUrl, '_blank');
   };
 
   return (
@@ -130,7 +157,7 @@ export const FullImagePreviewModal: React.FC<FullImagePreviewModalProps> = ({
                 gap: '5px',
               }}
             >
-              <i className="fa-solid fa-download" style={{ color: '#0284c7' }}></i> Download
+              <i className="fa-solid fa-download" style={{ color: '#0284c7' }}></i> Download (JPEG)
             </button>
 
             {/* Close Button */}

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
 import { AddWorkerView } from './AddWorkerView';
 import { WorkerTransactionsView } from './WorkerTransactionsView';
 import { WorkerWorkHistoryView } from './WorkerWorkHistoryView';
+import { convertImageToWebP } from '../utils/imageUtils';
 
 export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Language }> = ({
   lang = 'EN',
@@ -12,6 +13,74 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
   const [selectedWorker, setSelectedWorker] = useState<any | null>(null);
   const [workers, setWorkers] = useState<any[]>([]);
   const [previewWorkerPhoto, setPreviewWorkerPhoto] = useState<{ url?: string; name: string; id: string } | null>(null);
+
+  // Worker Profile Editing State in Worker Management List
+  const [editingWorker, setEditingWorker] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editSpecialization, setEditSpecialization] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editPhotoUrl, setEditPhotoUrl] = useState('');
+  const [isSavingWorker, setIsSavingWorker] = useState(false);
+  const profilePhotoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEditWorker = (w: any) => {
+    setEditingWorker(w);
+    setEditName(w.name || '');
+    setEditPhone(w.phone || '');
+    setEditAddress(w.address || '');
+    setEditSpecialization(w.specialization || '');
+    setEditNotes(w.notes || '');
+    setEditPhotoUrl(w.photo_url || '');
+  };
+
+  const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const webpUrl = await convertImageToWebP(file, { quality: 0.90 });
+      setEditPhotoUrl(webpUrl);
+    } catch (err) {
+      console.error('Failed to convert worker profile photo to WebP:', err);
+    }
+  };
+
+  const handleSaveWorkerProfile = async () => {
+    if (!editingWorker || !editName.trim()) {
+      alert('⚠️ Please enter worker name.');
+      return;
+    }
+    setIsSavingWorker(true);
+    try {
+      const res = await fetch(`${API_BASE}/work-assignment/workers/${editingWorker.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName,
+          phone: editPhone,
+          address: editAddress,
+          specialization: editSpecialization,
+          notes: editNotes,
+          photo_url: editPhotoUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.worker) {
+        const updated = data.worker;
+        setWorkers((prev) => prev.map((w) => (w.id === updated.id ? { ...w, ...updated } : w)));
+        setEditingWorker(null);
+        alert(`✅ Worker profile updated for ${updated.name}!`);
+      } else {
+        alert(`❌ Failed to update worker profile: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Error updating worker: ${err.message}`);
+    } finally {
+      setIsSavingWorker(false);
+    }
+  };
 
   // 1. Sync from URL query parameters
   useEffect(() => {
@@ -99,6 +168,11 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
         /* ── SUB-SCREEN 3: WORKER TRANSACTIONS (WhatsApp Chat UI) ── */
         <WorkerTransactionsView
           worker={selectedWorker}
+          workers={workers}
+          onSelectWorker={(w) => {
+            setSelectedWorker(w);
+            updateUrlView('workers', 'TRANSACTIONS', w.id);
+          }}
           onBack={() => {
             setViewMode('LIST');
             setSelectedWorker(null);
@@ -281,18 +355,26 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
                     </div>
                   </div>
 
-                  {/* Action Buttons: Work History & Transactions */}
-                  <div style={{ display: 'flex', gap: '0.5rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9' }}>
+                  {/* Action Buttons: Edit Profile, Work History & Transactions */}
+                  <div style={{ display: 'flex', gap: '0.4rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9' }}>
+                    <button
+                      onClick={() => handleStartEditWorker(w)}
+                      style={{ padding: '7px 8px', borderRadius: '8px', border: '1px solid #d97706', background: '#fffbeb', color: '#b45309', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                      title="Edit worker details or change profile photo"
+                    >
+                      <i className="fa-solid fa-pen-to-square"></i> Edit
+                    </button>
+
                     <button
                       onClick={() => {
                         setSelectedWorker(w);
                         setViewMode('WORK_HISTORY');
                         updateUrlView('workers', 'WORK_HISTORY', w.id);
                       }}
-                      style={{ flex: 1, padding: '7px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#334155', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                      style={{ flex: 1, padding: '7px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#334155', fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                     >
                       <i className="fa-solid fa-clipboard-list" style={{ color: '#0284c7' }}></i>
-                      {translations[lang]?.workHistoryTab || 'Work History'}
+                      History
                     </button>
 
                     <button
@@ -301,10 +383,10 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
                         setViewMode('TRANSACTIONS');
                         updateUrlView('workers', 'TRANSACTIONS', w.id);
                       }}
-                      style={{ flex: 1, padding: '7px 10px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #075e54 0%, #128c7e 100%)', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', boxShadow: '0 2px 8px rgba(7, 94, 84, 0.25)' }}
+                      style={{ flex: 1, padding: '7px 8px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #075e54 0%, #128c7e 100%)', color: '#ffffff', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', boxShadow: '0 2px 8px rgba(7, 94, 84, 0.25)' }}
                     >
                       <i className="fa-solid fa-comments"></i>
-                      {translations[lang]?.seeTransactions || 'See Transactions'}
+                      Chat
                     </button>
                   </div>
                 </div>
@@ -356,6 +438,151 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
             <span style={{ fontSize: '0.8rem', color: '#0284c7', fontWeight: 700, background: '#e0f2fe', padding: '3px 12px', borderRadius: '12px', display: 'inline-block' }}>
               Worker ID: {previewWorkerPhoto.id}
             </span>
+          </div>
+        </div>
+      )}
+      {/* ── WORKER PROFILE EDIT DIALOG MODAL ── */}
+      {editingWorker && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#ffffff', borderRadius: '20px', maxWidth: '480px', width: '100%', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid #cbd5e1', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-user-pen" style={{ color: '#d97706' }}></i>
+                Edit Worker Profile ({editingWorker.id})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingWorker(null)}
+                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '1.2rem', cursor: 'pointer' }}
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Hidden Profile Photo Input Picker */}
+            <input
+              ref={profilePhotoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleProfilePhotoUpload}
+              style={{ display: 'none' }}
+            />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              {/* Profile Photo Picker Banner */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '0.75rem' }}>
+                {editPhotoUrl ? (
+                  <img
+                    src={editPhotoUrl}
+                    alt="Preview"
+                    style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d97706', flexShrink: 0 }}
+                  />
+                ) : (
+                  <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.3rem', flexShrink: 0 }}>
+                    {editName ? editName.charAt(0) : '?'}
+                  </div>
+                )}
+
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
+                    Profile Avatar / Photo
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => profilePhotoInputRef.current?.click()}
+                    style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #d97706', background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <i className="fa-solid fa-camera"></i> Change / Upload Photo
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                  Worker Name *
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Worker Name..."
+                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="Phone..."
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    value={editSpecialization}
+                    onChange={(e) => setEditSpecialization(e.target.value)}
+                    placeholder="Goldsmith Artisan..."
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={editAddress}
+                  onChange={(e) => setEditAddress(e.target.value)}
+                  placeholder="Address / Location..."
+                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                  Notes & Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Add worker remarks..."
+                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingWorker(null)}
+                  style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem' }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingWorker}
+                  onClick={handleSaveWorkerProfile}
+                  style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <i className="fa-solid fa-floppy-disk"></i> {isSavingWorker ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

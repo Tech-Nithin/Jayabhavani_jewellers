@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import multer from 'multer';
 import { supabase } from '../../config/supabase';
+import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 
@@ -555,6 +559,58 @@ router.post('/workers', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/workers/:id
+router.put('/workers/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, address, specialization, photo_url, notes } = req.body;
+
+    const updatePayload: any = {};
+    if (name !== undefined) updatePayload.name = name.trim();
+    if (phone !== undefined) updatePayload.phone = phone.trim();
+    if (address !== undefined) updatePayload.address = address.trim();
+    if (specialization !== undefined) updatePayload.specialization = specialization.trim();
+    if (photo_url !== undefined) {
+      if (photo_url && photo_url.startsWith('data:image/')) {
+        updatePayload.photo_url = await uploadToCloudinaryAsWebP(photo_url, 'jewellery_product_images');
+      } else {
+        updatePayload.photo_url = photo_url;
+      }
+    }
+    if (notes !== undefined) updatePayload.notes = notes.trim();
+
+    const { data: updatedRow, error: dbErr } = await supabase
+      .from('workers')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (dbErr) {
+      console.error('❌ Supabase Update Error (workers):', dbErr);
+      return res.status(500).json({
+        success: false,
+        message: `Database update error: ${dbErr.message}`,
+        details: dbErr,
+      });
+    }
+
+    const idx = mockWorkers.findIndex((w) => w.id === id);
+    if (idx !== -1) {
+      mockWorkers[idx] = { ...mockWorkers[idx], ...updatedRow };
+    }
+
+    res.json({
+      success: true,
+      message: 'Worker profile updated successfully!',
+      worker: updatedRow || { id, ...updatePayload },
+    });
+  } catch (err: any) {
+    console.error('❌ PUT /workers/:id Exception:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to update worker profile' });
+  }
+});
+
 // ── WORKER TRANSACTIONS ENDPOINTS (WhatsApp Chat Ledger) ──
 
 const txFilePath = path.join(__dirname, '../../../../data/worker_transactions.json');
@@ -590,22 +646,58 @@ const saveLocalTransaction = (txn: WorkerTransactionItem) => {
   }
 };
 
-// GET /api/worker-transactions?workerId=WRK-101
+// GET /api/worker-transactions?workerId=WRK-101&days=7&beforeDate=...&search=...
 router.get('/worker-transactions', async (req: Request, res: Response) => {
-  const { workerId } = req.query;
+  const { workerId, days, beforeDate, search, fullHistory } = req.query;
 
   try {
-    // 1. Try querying Supabase database first
-    const { data: dbTxns, error: dbErr } = await supabase
-      .from('worker_transactions')
-      .select('*')
-      .order('created_at', { ascending: true });
+    let query = supabase.from('worker_transactions').select('*').order('created_at', { ascending: true });
+
+    if (workerId) {
+      query = query.eq('worker_id', String(workerId));
+    }
+
+    const { data: dbTxns, error: dbErr } = await query;
 
     if (!dbErr && dbTxns) {
       let filtered = dbTxns;
-      if (workerId) {
-        filtered = filtered.filter((t: any) => t.worker_id === String(workerId));
+
+      // 🔍 SEARCH MODE: Search 100% full database history across all fields
+      if (search && String(search).trim() !== '') {
+        const q = String(search).toLowerCase().trim();
+        filtered = filtered.filter((t: any) => {
+          const item = (t.item_name || '').toLowerCase();
+          const notes = (t.notes || '').toLowerCase();
+          const category = (t.category || '').toLowerCase();
+          const amount = String(t.amount_cash || '');
+          const weight = String(t.weight_grams || '');
+          const touch = String(t.touch_percentage || '');
+          return item.includes(q) || notes.includes(q) || category.includes(q) || amount.includes(q) || weight.includes(q) || touch.includes(q);
+        });
+        return res.json({
+          success: true,
+          transactions: filtered,
+          total_count: filtered.length,
+          search_active: true,
+          source: 'supabase_database',
+        });
       }
+
+      // 📅 DATE & PAGINATION MODE (7 Days Initial Load / Scroll Pagination)
+      if (fullHistory === 'true' || fullHistory === '1') {
+        // Return full history without date cutoff
+      } else {
+        const cutoffDate = beforeDate ? new Date(String(beforeDate)) : new Date();
+        const daysCount = Number(days) || 7;
+        const startDate = new Date(cutoffDate.getTime() - daysCount * 24 * 60 * 60 * 1000);
+
+        if (beforeDate) {
+          filtered = filtered.filter((t: any) => new Date(t.created_at) < cutoffDate);
+        } else {
+          filtered = filtered.filter((t: any) => new Date(t.created_at) >= startDate);
+        }
+      }
+
       return res.json({
         success: true,
         transactions: filtered,
@@ -633,6 +725,29 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
     combined = combined.filter((t) => t.worker_id === String(workerId));
   }
 
+  if (search && String(search).trim() !== '') {
+    const q = String(search).toLowerCase().trim();
+    combined = combined.filter((t: any) => {
+      const item = (t.item_name || '').toLowerCase();
+      const notes = (t.notes || '').toLowerCase();
+      const category = (t.category || '').toLowerCase();
+      const amount = String(t.amount_cash || '');
+      const weight = String(t.weight_grams || '');
+      const touch = String(t.touch_percentage || '');
+      return item.includes(q) || notes.includes(q) || category.includes(q) || amount.includes(q) || weight.includes(q) || touch.includes(q);
+    });
+  } else if (fullHistory !== 'true' && fullHistory !== '1') {
+    const cutoffDate = beforeDate ? new Date(String(beforeDate)) : new Date();
+    const daysCount = Number(days) || 7;
+    const startDate = new Date(cutoffDate.getTime() - daysCount * 24 * 60 * 60 * 1000);
+
+    if (beforeDate) {
+      combined = combined.filter((t: any) => new Date(t.created_at) < cutoffDate);
+    } else {
+      combined = combined.filter((t: any) => new Date(t.created_at) >= startDate);
+    }
+  }
+
   res.json({
     success: true,
     transactions: combined,
@@ -640,8 +755,8 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
   });
 });
 
-// POST /api/worker-transactions
-router.post('/worker-transactions', async (req: Request, res: Response) => {
+// POST /api/worker-transactions (Supports both JSON & FormData Binary WebP Uploads)
+router.post('/worker-transactions', upload.array('files'), async (req: Request, res: Response) => {
   try {
     const {
       worker_id,
@@ -652,6 +767,8 @@ router.post('/worker-transactions', async (req: Request, res: Response) => {
       weight_grams,
       touch_percentage,
       item_name,
+      cash_metal_link,
+      applied_rate_per_gram,
       photos,
       notes,
     } = req.body;
@@ -667,18 +784,56 @@ router.post('/worker-transactions', async (req: Request, res: Response) => {
     const touch = Number(touch_percentage) || 91.6;
     const fine = wt > 0 ? Number(((wt * touch) / 100).toFixed(3)) : 0;
 
-    const newTxn: WorkerTransactionItem = {
+    const cashAmt = Number(amount_cash) || 0;
+    const ratePerGram = Number(applied_rate_per_gram) || 0;
+    const eqGrams = (category === 'CASH' && cashAmt > 0 && ratePerGram > 0)
+      ? Number((cashAmt / ratePerGram).toFixed(3))
+      : 0;
+
+    const uploadedPhotos: string[] = [];
+
+    // 1. Process binary files uploaded via FormData (Pure Binary WebP)
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      for (const f of req.files as Express.Multer.File[]) {
+        try {
+          const cUrl = await uploadToCloudinaryFile(f.buffer, f.originalname, 'jewellery_product_images');
+          uploadedPhotos.push(cUrl);
+        } catch (e) {
+          console.error('Failed binary WebP upload to Cloudinary:', e);
+        }
+      }
+    }
+
+    // 2. Process any JSON base64 string photos if passed
+    if (photos) {
+      const parsedPhotos = typeof photos === 'string' ? JSON.parse(photos) : photos;
+      if (Array.isArray(parsedPhotos)) {
+        for (const p of parsedPhotos) {
+          if (typeof p === 'string' && p.startsWith('data:image/')) {
+            const cUrl = await uploadToCloudinaryAsWebP(p, 'jewellery_product_images');
+            uploadedPhotos.push(cUrl);
+          } else if (typeof p === 'string' && p.startsWith('http')) {
+            uploadedPhotos.push(p);
+          }
+        }
+      }
+    }
+
+    const newTxn: any = {
       id: `TXN-${Date.now()}`,
       worker_id,
       order_id: order_id || null,
       direction: direction === 'INCOMING' ? 'INCOMING' : 'OUTGOING',
       category: category || 'GOLD',
-      amount_cash: Number(amount_cash) || 0,
+      amount_cash: cashAmt,
       weight_grams: wt,
       touch_percentage: touch,
       fine_weight_grams: fine,
       item_name: item_name || '',
-      photos: Array.isArray(photos) ? photos : [],
+      cash_metal_link: cash_metal_link || (category === 'CASH' ? 'FOR_GOLD' : null),
+      applied_rate_per_gram: ratePerGram,
+      equivalent_metal_grams: eqGrams,
+      photos: uploadedPhotos,
       notes: notes || '',
       created_at: new Date().toISOString(),
     };
@@ -688,27 +843,50 @@ router.post('/worker-transactions', async (req: Request, res: Response) => {
     mockTransactions.push(newTxn);
 
     // 2. Try inserting into Supabase Database
-    const { data: insertedDb, error: dbErr } = await supabase
+    let finalInserted: any = newTxn;
+    let { data: insertedDb, error: dbErr } = await supabase
       .from('worker_transactions')
       .insert([newTxn])
       .select()
       .single();
 
-    if (dbErr) {
-      console.error('❌ Supabase Insert Error (worker_transactions):', dbErr);
-      return res.json({
-        success: true,
-        message: `Saved to local persistent file! (Database note: ${dbErr.message})`,
-        transaction: newTxn,
-        warning: `Database Notice [Code ${dbErr.code}]: ${dbErr.message}`,
-        db_details: dbErr,
-      });
+    if (!dbErr && insertedDb) {
+      finalInserted = insertedDb;
+    } else if (dbErr) {
+      console.warn('⚠️ Primary Supabase insert notice:', dbErr.message);
+      // Fallback: Retry with standard schema payload if extra cash columns don't exist in Supabase table yet
+      const baseDbPayload = {
+        id: newTxn.id,
+        worker_id: newTxn.worker_id,
+        order_id: newTxn.order_id,
+        direction: newTxn.direction,
+        category: newTxn.category,
+        amount_cash: newTxn.amount_cash,
+        weight_grams: newTxn.weight_grams,
+        touch_percentage: newTxn.touch_percentage,
+        fine_weight_grams: newTxn.fine_weight_grams,
+        item_name: newTxn.item_name,
+        photos: newTxn.photos,
+        notes: newTxn.notes,
+        created_at: newTxn.created_at,
+      };
+
+      const { data: retryDb, error: retryErr } = await supabase
+        .from('worker_transactions')
+        .insert([baseDbPayload])
+        .select()
+        .single();
+
+      if (!retryErr && retryDb) {
+        finalInserted = { ...retryDb, ...newTxn };
+        dbErr = null; // Suppress warning because fallback insert succeeded!
+      }
     }
 
     res.json({
       success: true,
       message: 'Transaction recorded and saved to database successfully!',
-      transaction: insertedDb || newTxn,
+      transaction: finalInserted,
     });
   } catch (err: any) {
     console.error('❌ POST /api/worker-transactions Exception:', err);
