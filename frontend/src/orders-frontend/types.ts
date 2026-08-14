@@ -15,6 +15,7 @@ export interface OrderItem {
   making_charges: number;
   estimated_delivery_date: string;
   notes: string;
+  image_url?: string;
   // Rate applied at time of order
   applied_rate_per_gram?: number;
   // HMW & Additional Charges

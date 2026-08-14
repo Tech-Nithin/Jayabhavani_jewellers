@@ -256,7 +256,7 @@ export const translations = {
 
     // --- WORK ASSIGNMENT MODULE CLUSTER ---
     workAssignmentTitle: 'Worker Management',
-    workAssignmentSub: 'Manage registered artisans, crafting work histories, and metal/cash payment ledgers',
+    workAssignmentSub: 'Manage registered workers, crafting work histories, and metal/cash payment ledgers',
     workersList: 'Workers List',
     seeWorkHistory: 'See Work History',
     addNewWorker: 'Add New Worker',

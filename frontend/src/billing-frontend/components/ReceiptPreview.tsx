@@ -217,11 +217,11 @@ export const downloadReceiptAsPNG = async (receiptId: string, custName?: string)
   }
 };
 
-const formatMax2Decimals = (val: number | string | undefined | null): string => {
+const formatMax3Decimals = (val: number | string | undefined | null): string => {
   if (val === undefined || val === null || val === '') return '0';
   const num = Number(val);
   if (isNaN(num)) return '0';
-  const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+  const rounded = Math.round((num + Number.EPSILON) * 1000) / 1000;
   return String(rounded);
 };
 
@@ -450,31 +450,31 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <span style={{ fontWeight: 700 }}>Quantity & Unit:</span>
                     <strong>
                       {it.quantity_value || 1} {it.quantity_unit === 'PAIRS' ? 'Pairs' : it.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}
-                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + '"'})` : ''}
+                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + ' inches'})` : ''}
                     </strong>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                     <span style={{ fontWeight: 700 }}>{t.grossItemWeightReceipt}</span>
-                    <strong>{formatMax2Decimals(details.grossWeight)} gm</strong>
+                    <strong>{formatMax3Decimals(details.grossWeight)} gm</strong>
                   </div>
 
                   {details.deductionWeight > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                       <span style={{ fontWeight: 700 }}>{t.deductionReceipt} ({it.deduction_name || 'Stones/Wax'}):</span>
-                      <strong>- {formatMax2Decimals(details.deductionWeight)} gm</strong>
+                      <strong>- {formatMax3Decimals(details.deductionWeight)} gm</strong>
                     </div>
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
                     <span>{isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel}:</span>
-                    <strong>{formatMax2Decimals(details.netWeight)} gm</strong>
+                    <strong>{formatMax3Decimals(details.netWeight)} gm</strong>
                   </div>
 
                   {isSell && details.wastagePercent > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
-                      <span>HMW ({formatMax2Decimals(details.wastagePercent)}%):</span>
-                      <strong>{formatMax2Decimals(details.totalChargedWeight)} gm</strong>
+                      <span>HMW ({formatMax3Decimals(details.wastagePercent)}%):</span>
+                      <strong>{formatMax3Decimals(details.totalChargedWeight)} gm</strong>
                     </div>
                   )}
 
@@ -482,11 +482,11 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
                         <span>{t.itemQualityReceipt}</span>
-                        <strong>{formatMax2Decimals(details.purityPercent)}%</strong>
+                        <strong>{formatMax3Decimals(details.purityPercent)}%</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                        <span>{isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel} ({formatMax2Decimals(details.purityPercent)}%):</span>
-                        <strong>{formatMax2Decimals(details.pureWeight)} gm</strong>
+                        <span>{isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel} ({formatMax3Decimals(details.purityPercent)}%):</span>
+                        <strong>{formatMax3Decimals(details.pureWeight)} gm</strong>
                       </div>
                     </>
                   )}
@@ -633,8 +633,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             </>
           )}
 
-          {/* Payment Breakdown (Paid vs Balance Due) */}
-          {(advancePaidAmount !== undefined || balanceDueAmount !== undefined) && (
+          {/* Payment Breakdown (Paid vs Balance Due) - Shown ONLY when customer owes money to store */}
+          {mode !== 'BUY' && totalSellValue >= totalBuyCredit && (advancePaidAmount !== undefined || balanceDueAmount !== undefined) && (
             <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #cbd5e1', fontSize: '0.72rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a', fontWeight: 700 }}>
                 <span>{lang === 'TE' ? 'చెల్లించిన మొత్తం' : 'Amount Paid'}:</span>
@@ -650,7 +650,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           )}
 
           {/* Payment History List (Installments) */}
-          {paymentHistory && paymentHistory.length > 0 && (
+          {mode !== 'BUY' && totalSellValue >= totalBuyCredit && paymentHistory && paymentHistory.length > 0 && (
             <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #cbd5e1', fontSize: '0.68rem' }}>
               <div style={{ fontWeight: 800, color: '#334155', marginBottom: '3px' }}>
                 Payment History (Installments):

@@ -5,6 +5,7 @@ import { translations } from '../../utils/translations';
 import type { Language } from '../../utils/translations';
 import { API_BASE } from '../../config/apiConfig';
 import { getTeluguTransliterationSync } from '../../utils/transliterate';
+import { FullImagePreviewModal } from '../../inventory-frontend/components/FullImagePreviewModal';
 
 interface CustomerDirectoryViewProps {
   customers: CustomerDirectoryRecord[];
@@ -28,6 +29,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   onViewInvoiceDetails,
 }) => {
   const t = translations[lang] || translations.EN;
+  const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
   void onSelectCustomerForBill;
   void onEditCustomerRecord;
   const [search, setSearch] = useState(() => {
@@ -1132,75 +1134,78 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                     <td className="col-product" style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
                       {(() => {
                         const items: any[] = cust.latestInvoice?.receipt_json_data?.items || [];
+                        const primaryImg = cust.latestInvoice?.image_url || cust.latestInvoice?.receipt_json_data?.image_url || items.find((i: any) => i.image_url)?.image_url || '';
 
-                        if (items.length > 0) {
-                          return (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              {items.map((item: any, i: number) => {
-                                const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
-                                const itemType = (item.item_type || mode).toUpperCase();
-                                const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
-
-                                return (
-                                  <div key={i} style={{ fontSize: '0.74rem', color: '#334155' }}>
-                                    <span
-                                      style={{
-                                        fontSize: '0.60rem',
-                                        fontWeight: 700,
-                                        padding: '1px 4px',
-                                        borderRadius: '3px',
-                                        background: itemMetal === 'GOLD' ? '#fffbeb' : '#f1f5f9',
-                                        color: itemMetal === 'GOLD' ? '#b45309' : '#475569',
-                                        border: itemMetal === 'GOLD' ? '1px solid #fde68a' : '1px solid #cbd5e1',
-                                      }}
-                                    >
-                                      {itemMetal}
-                                    </span>&nbsp;
-                                    <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
-                                    {mode === 'EXCHANGE' && (
-                                      <span
-                                        style={{
-                                          marginLeft: '4px',
-                                          padding: '1px 4px',
-                                          borderRadius: '3px',
-                                          fontSize: '0.6rem',
-                                          fontWeight: 700,
-                                          background: itemType === 'SELL' ? '#fef3c7' : '#e0f2fe',
-                                          color: itemType === 'SELL' ? '#b45309' : '#0369a1',
-                                          border: itemType === 'SELL' ? '1px solid #fde68a' : '1px solid #bae6fd',
-                                        }}
-                                      >
-                                        JBJ-{itemType}
-                                      </span>
-
-                                    )}
-
-                                    {/* <div style={{ fontSize: '0.69rem', color: '#64748b', marginTop: '1px' }}>
-                                      <span
-                                        style={{
-                                          fontSize: '0.60rem',
-                                          fontWeight: 700,
-                                          padding: '1px 4px',
-                                          borderRadius: '3px',
-                                          background: itemMetal === 'GOLD' ? '#fffbeb' : '#f1f5f9',
-                                          color: itemMetal === 'GOLD' ? '#b45309' : '#475569',
-                                          border: itemMetal === 'GOLD' ? '1px solid #fde68a' : '1px solid #cbd5e1',
-                                        }}
-                                      >
-                                        {itemMetal}
-                                      </span>
-                                    </div> */}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        }
-
-                        // Fallback for single legacy records
                         return (
-                          <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.76rem' }}>
-                            {cust.products.join(', ')}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                            {primaryImg ? (
+                              <img
+                                src={primaryImg}
+                                alt="Product"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage({ url: primaryImg, title: cust.name ? `${cust.name} Purchase` : 'Product Image' });
+                                }}
+                                title="Click to enlarge image"
+                                style={{ width: '44px', height: '44px', borderRadius: '10px', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', flexShrink: 0, cursor: 'pointer', transition: 'transform 0.15s ease' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                              />
+                            ) : (
+                              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+                                <i className="fa-solid fa-gem" style={{ color: '#d97706' }} />
+                              </div>
+                            )}
+                            <div>
+                              {items.length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {items.map((item: any, i: number) => {
+                                    const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
+                                    const itemType = (item.item_type || mode).toUpperCase();
+                                    const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
+
+                                    return (
+                                      <div key={i} style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                        <span
+                                          style={{
+                                            fontSize: '0.60rem',
+                                            fontWeight: 700,
+                                            padding: '1px 4px',
+                                            borderRadius: '3px',
+                                            background: itemMetal === 'GOLD' ? '#fffbeb' : '#f1f5f9',
+                                            color: itemMetal === 'GOLD' ? '#b45309' : '#475569',
+                                            border: itemMetal === 'GOLD' ? '1px solid #fde68a' : '1px solid #cbd5e1',
+                                          }}
+                                        >
+                                          {itemMetal}
+                                        </span>
+                                        <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
+                                        {mode === 'EXCHANGE' && (
+                                          <span
+                                            style={{
+                                              marginLeft: '4px',
+                                              padding: '1px 4px',
+                                              borderRadius: '3px',
+                                              fontSize: '0.6rem',
+                                              fontWeight: 700,
+                                              background: itemType === 'SELL' ? '#fef3c7' : '#e0f2fe',
+                                              color: itemType === 'SELL' ? '#b45309' : '#0369a1',
+                                              border: itemType === 'SELL' ? '1px solid #fde68a' : '1px solid #bae6fd',
+                                            }}
+                                          >
+                                            JBJ-{itemType}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.76rem' }}>
+                                  {cust.products.join(', ')}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         );
                       })()}
@@ -1387,6 +1392,15 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           customer={selectedCustomer}
           rates={rates}
           onClose={() => setSelectedCustomer(null)}
+        />
+      )}
+
+      {/* FULL IMAGE PREVIEW MODAL */}
+      {previewImage && (
+        <FullImagePreviewModal
+          imageUrl={previewImage.url}
+          title={previewImage.title}
+          onClose={() => setPreviewImage(null)}
         />
       )}
     </div>

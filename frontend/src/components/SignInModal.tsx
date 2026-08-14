@@ -40,22 +40,22 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   };
 
   return (
-    <div 
-      className="search-overlay active" 
-      style={{ 
+    <div
+      className="search-overlay active"
+      style={{
         position: 'fixed',
         inset: 0,
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         zIndex: 10000,
         opacity: 1,
         pointerEvents: 'all'
       }}
     >
       {/* Background Image & Overlay */}
-      <div 
-        onClick={onClose} 
+      <div
+        onClick={onClose}
         style={{
           position: 'fixed',
           inset: 0,
@@ -63,12 +63,12 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
-        }} 
+        }}
       />
 
       {/* Glassmorphism Modal Card */}
-      <div 
-        className="auth-card animate-scale-up" 
+      <div
+        className="auth-card animate-scale-up"
         style={{
           position: 'relative',
           width: '100%',

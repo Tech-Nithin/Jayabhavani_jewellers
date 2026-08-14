@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import type { GlobalRates, BillItem, CustomerDirectoryRecord } from './types';
-import { ReceiptPreview, downloadReceiptAsPNG, printReceipt80mm } from './components/ReceiptPreview';
+import { ReceiptPreview, printReceipt80mm } from './components/ReceiptPreview';
 import { CustomerDirectoryView } from './components/CustomerDirectoryView';
 import { EditRatesModal } from './components/EditRatesModal';
 import { InvoiceDetailsView } from './components/InvoiceDetailsView';
+import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
 
 import { API_BASE } from '../config/apiConfig';
 import { getTeluguTransliteration } from '../utils/transliterate';
@@ -12,11 +13,11 @@ import { getTeluguTransliteration } from '../utils/transliterate';
 const toStartCase = (str: string): string =>
   str.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 
-const formatMax2Decimals = (val: number | string | undefined | null): string => {
+const formatMax3Decimals = (val: number | string | undefined | null): string => {
   if (val === undefined || val === null || val === '') return '0';
   const num = Number(val);
   if (isNaN(num)) return '0';
-  const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+  const rounded = Math.round((num + Number.EPSILON) * 1000) / 1000;
   return String(rounded);
 };
 
@@ -384,6 +385,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
   // View state: 'POS' | 'CUSTOMERS' | 'DETAILS' - synced with URL params
   const [selectedCustomerDetailsRecord, setSelectedCustomerDetailsRecord] = useState<CustomerDirectoryRecord | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
   const [activeView, setActiveView] = useState<'POS' | 'CUSTOMERS' | 'DETAILS'>(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('history')) return 'CUSTOMERS';
@@ -673,6 +675,34 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     );
   };
 
+  const [uploadingImageItemId, setUploadingImageItemId] = useState<string | null>(null);
+
+  const handleItemImageUpload = (itemId: string, file: File) => {
+    setUploadingImageItemId(itemId);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          setUploadingImageItemId(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        const webpDataUrl = canvas.toDataURL('image/webp', 0.85);
+        handleUpdateItem(itemId, 'image_url', webpDataUrl);
+        setUploadingImageItemId(null);
+      };
+      img.onerror = () => setUploadingImageItemId(null);
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => setUploadingImageItemId(null);
+    reader.readAsDataURL(file);
+  };
+
   const { totalSellValue, totalBuyCredit, netPayable } = calcResults;
 
   const handlePreSubmitCheck = () => {
@@ -751,8 +781,34 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
     setCreating(true);
     try {
-      const firstItem = items[0];
-      const enrichedItems = items.map((it) => {
+      // Deferred Cloudinary upload: Upload local Base64/Blob WebP images to Cloudinary ONLY when submitting
+      const itemsWithCloudinaryImages = await Promise.all(
+        items.map(async (it) => {
+          if (it.image_url && (it.image_url.startsWith('data:image/') || it.image_url.startsWith('blob:'))) {
+            try {
+              const formData = new FormData();
+              formData.append('file', it.image_url);
+              formData.append('image', it.image_url);
+              const resUpload = await fetch(`${API_BASE}/inventory/upload-cloudinary`, {
+                method: 'POST',
+                body: formData,
+              });
+              if (resUpload.ok) {
+                const dataUpload = await resUpload.json();
+                if (dataUpload.success && dataUpload.url) {
+                  return { ...it, image_url: dataUpload.url };
+                }
+              }
+            } catch (errUpload) {
+              console.error('Deferred Cloudinary upload error:', errUpload);
+            }
+          }
+          return it;
+        })
+      );
+
+      const firstItem = itemsWithCloudinaryImages[0];
+      const enrichedItems = itemsWithCloudinaryImages.map((it) => {
         const det = calcResults.itemDetails[it.id];
         const purityNum = Number(it.purity_percentage) || 100;
         const weightNum = Number(it.weight_grams) || 0;
@@ -839,6 +895,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
             final_amount: grandTotalVal,
             receipt_json_data: orderReceiptPayload,
             submitted: 'no',
+            image_url: primaryItem?.image_url || '',
             hmw_percentage: Number(primaryItem?.wastage_percent) || 0,
             hmw_weight: Number((totalNetW + (totalNetW * ((Number(primaryItem?.wastage_percent) || 0) / 100))).toFixed(3)),
             additional_charge_name: primaryItem?.additional_charges_name || '',
@@ -853,7 +910,6 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         if (resOrder.ok && dataOrder.success) {
           fetchCustomerDirectory();
           printReceipt80mm('pos-realtime-receipt-card');
-          downloadReceiptAsPNG('pos-realtime-receipt-card', customerName);
           setSuccessModal({
             open: true,
             message: 'Custom Order Registered & Saved to Orders Database!',
@@ -894,9 +950,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
       if (res.ok && data.success) {
         fetchCustomerDirectory();
 
-        // Trigger automatic 80mm thermal receipt printing & PNG download
+        // Trigger automatic 80mm thermal receipt printing
         printReceipt80mm('pos-realtime-receipt-card');
-        downloadReceiptAsPNG('pos-realtime-receipt-card', customerName);
 
         // Show Success Confirmation Modal without erasing data on screen!
         setSuccessModal({
@@ -1542,6 +1597,93 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                               </div>
                             </div>
 
+                            {/* Item Reference Photo / Design Image Picker */}
+                            <div style={{ marginBottom: '0.75rem', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                {uploadingImageItemId === it.id ? (
+                                  <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#fef3c7', border: '1.5px solid #d97706', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+                                    <i className="fa-solid fa-spinner fa-spin" />
+                                  </div>
+                                ) : it.image_url ? (
+                                  <img
+                                    src={it.image_url}
+                                    alt="Ornament Design"
+                                    onClick={() => setPreviewImage({ url: it.image_url!, title: it.product_name || 'Ornament Design' })}
+                                    title="Click to enlarge image"
+                                    style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer', transition: 'transform 0.15s ease' }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                  />
+                                ) : (
+                                  <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
+                                    <i className="fa-solid fa-camera" />
+                                  </div>
+                                )}
+                                <div>
+                                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f172a' }}>
+                                    {lang === 'TE' ? 'ఆర్డర్ నమూనా ఫోటో (Design Photo)' : 'Item Reference Photo / Design Image'}
+                                  </div>
+                                  <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                                    {uploadingImageItemId === it.id
+                                      ? 'Converting & loading preview...'
+                                      : it.image_url
+                                      ? 'Photo attached (Will store on Sale Done)'
+                                      : 'Optional reference image for craftsmen'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <label
+                                  style={{
+                                    padding: '5px 12px',
+                                    borderRadius: '6px',
+                                    background: it.image_url ? '#fef3c7' : '#ffffff',
+                                    border: '1px solid #d97706',
+                                    color: '#b45309',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    opacity: uploadingImageItemId === it.id ? 0.7 : 1,
+                                    pointerEvents: uploadingImageItemId === it.id ? 'none' : 'auto',
+                                  }}
+                                >
+                                  {uploadingImageItemId === it.id ? (
+                                    <span><i className="fa-solid fa-spinner fa-spin"></i> Processing...</span>
+                                  ) : (
+                                    <>
+                                      <i className="fa-solid fa-upload"></i>
+                                      {it.image_url ? 'Change Photo' : 'Upload Image'}
+                                    </>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        handleItemImageUpload(it.id, file);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                {it.image_url && !uploadingImageItemId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateItem(it.id, 'image_url', '')}
+                                    style={{ padding: '5px 8px', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                                    title="Remove Photo"
+                                  >
+                                    <i className="fa-solid fa-trash-can"></i>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
                             {/* Row 2.5 (2 main columns): Left Unit Type | Right Sub-Grid (Quantity Count & Length in inches) */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                               {/* Left Side: Unit Type */}
@@ -1699,7 +1841,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                           type="text"
                                           readOnly
                                           placeholder="0.000"
-                                          value={grossW > 0 ? formatMax2Decimals(netW) : ''}
+                                          value={grossW > 0 ? formatMax3Decimals(netW) : ''}
                                           style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.65rem', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', fontWeight: 700, color: '#15803d', fontSize: '0.85rem' }}
                                         />
                                         <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#15803d', pointerEvents: 'none' }}>
@@ -1735,7 +1877,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                       type="text"
                                       readOnly
                                       placeholder="0.000"
-                                      value={grossW > 0 ? formatMax2Decimals(totalWWithHmw) : ''}
+                                      value={grossW > 0 ? formatMax3Decimals(totalWWithHmw) : ''}
                                       style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fef3c7', fontWeight: 700, color: '#b45309', fontSize: '0.85rem' }}
                                     />
                                     <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#b45309', pointerEvents: 'none' }}>
@@ -1784,7 +1926,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                             type="text"
                                             readOnly
                                             placeholder="0.000"
-                                            value={grossW > 0 && purityPct > 0 ? formatMax2Decimals(pureW) : ''}
+                                            value={grossW > 0 && purityPct > 0 ? formatMax3Decimals(pureW) : ''}
                                             style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fffbeb', fontWeight: 700, color: '#d97706', fontSize: '0.85rem' }}
                                           />
                                           <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#d97706', pointerEvents: 'none' }}>
@@ -1893,7 +2035,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                             type="text"
                                             readOnly
                                             placeholder="0.000"
-                                            value={grossW > 0 && retPurityPct > 0 ? formatMax2Decimals(calculatedRetPureG) : (it.return_pure_gold || '')}
+                                            value={grossW > 0 && retPurityPct > 0 ? formatMax3Decimals(calculatedRetPureG) : (it.return_pure_gold || '')}
                                             style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #ddd6fe', background: '#f5f3ff', fontWeight: 700, color: '#6d28d9', fontSize: '0.85rem' }}
                                           />
                                           <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', pointerEvents: 'none' }}>
@@ -1925,7 +2067,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   if (!isCustomerPaying) return null;
 
                   const grandTotalAmount = mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
-                  const calculatedPaidAmount = paymentType === 'FULL' ? grandTotalAmount : Math.min(grandTotalAmount, parseIndianCurrencyNumber(advancePaidAmount));
+                  const rawAdvanceNum = parseIndianCurrencyNumber(advancePaidAmount);
+                  const isExceeded = paymentType === 'PARTIAL' && rawAdvanceNum > grandTotalAmount && grandTotalAmount > 0;
+                  const calculatedPaidAmount = paymentType === 'FULL' ? grandTotalAmount : Math.min(grandTotalAmount, rawAdvanceNum);
                   const calculatedDueAmount = Math.max(0, grandTotalAmount - calculatedPaidAmount);
 
                   return (
@@ -1996,8 +2140,23 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                               onFocus={(e) => e.target.select()}
                               value={advancePaidAmount}
                               onChange={(e) => setAdvancePaidAmount(formatIndianCurrencyInput(e.target.value))}
-                              style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1.5px solid #d97706', fontSize: '0.88rem', fontWeight: 800, color: '#b45309', background: '#fffbeb' }}
+                              style={{
+                                width: '100%',
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: '6px',
+                                border: isExceeded ? '1.5px solid #ef4444' : '1.5px solid #d97706',
+                                fontSize: '0.88rem',
+                                fontWeight: 800,
+                                color: isExceeded ? '#dc2626' : '#b45309',
+                                background: isExceeded ? '#fef2f2' : '#fffbeb',
+                              }}
                             />
+                            {isExceeded && (
+                              <div style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <i className="fa-solid fa-circle-exclamation"></i>
+                                {lang === 'TE' ? 'మోతాదు మించింది (Value Exceeded)' : 'Value Exceeded'}
+                              </div>
+                            )}
                           </div>
 
                           <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -2042,8 +2201,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
                     <div style={{ paddingLeft: '1rem', borderLeft: '2px solid #e2e8f0' }}>
                       <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>{t.grandTotal}</span>
-                      <span style={{ fontSize: '0.68rem', color: mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? '#0369a1' : '#64748b', fontWeight: 600, display: 'block', marginTop: '-2px' }}>
-                        {mode === 'BUY' || (mode === 'EXCHANGE' && totalBuyCredit > totalSellValue) ? t.needToPayCustomerTag : t.customerPaidTag}
+                      <span style={{ fontSize: '0.68rem', color: mode === 'BUY' || totalBuyCredit > totalSellValue ? '#0369a1' : '#64748b', fontWeight: 600, display: 'block', marginTop: '-2px' }}>
+                        {mode === 'BUY' || totalBuyCredit > totalSellValue ? t.needToPayCustomerTag : t.customerPaidTag}
                       </span>
                       <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
                         ₹{mode === 'BUY' ? totalBuyCredit.toLocaleString('en-IN') : mode === 'SELL' ? totalSellValue.toLocaleString('en-IN') : Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}
@@ -2058,7 +2217,6 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         setActiveBillType('ESTIMATION');
                         setTimeout(() => {
                           printReceipt80mm('pos-realtime-receipt-card');
-                          downloadReceiptAsPNG('pos-realtime-receipt-card', customerName || 'Estimation_Bill');
                         }, 100);
                       }}
                       style={{
@@ -2211,6 +2369,14 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                 </div>
               </div>
             </div>
+          )}
+          {/* FULL IMAGE PREVIEW MODAL */}
+          {previewImage && (
+            <FullImagePreviewModal
+              imageUrl={previewImage.url}
+              title={previewImage.title}
+              onClose={() => setPreviewImage(null)}
+            />
           )}
         </>
       )}
