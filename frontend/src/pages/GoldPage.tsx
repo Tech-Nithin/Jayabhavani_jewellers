@@ -326,7 +326,6 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
                   borderRadius: '8px'
                 }}
               >
-                <span style={{ fontSize: '1rem' }}>{currentCat.icon}</span>
                 <span>{currentCat.label}</span>
                 <svg
                   width="13"
@@ -355,6 +354,8 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
                     top: 'calc(100% + 14px)',
                     left: 0,
                     minWidth: '210px',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
                     background: '#ffffff',
                     borderRadius: '16px',
                     border: '1px solid rgba(0,0,0,0.08)',
@@ -388,7 +389,6 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>{cat.icon}</span>
                           <span>{cat.label}</span>
                         </div>
                         {isSelected && <span style={{ fontSize: '0.85rem', color: '#b45309', fontWeight: 'bold' }}>✓</span>}
@@ -490,7 +490,6 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <span style={{ marginRight: '6px' }}>{cat.icon}</span>
                     {cat.label}
                   </button>
                 ))}
