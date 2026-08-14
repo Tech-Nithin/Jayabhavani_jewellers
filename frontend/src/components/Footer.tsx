@@ -1,5 +1,5 @@
 const shopLinks = ['Rings', 'Necklaces', 'Earrings', 'Bangles', 'Bridal Sets', 'New Arrivals'];
-const careLinks = ['Size Guide', 'Jewellery Care', 'Returns & Exchange', 'Shipping Policy', 'Track Your Order', 'Contact Us'];
+const careLinks = ['Size Guide', 'Jewellery Care', 'Exchange', 'Shipping Policy', 'Track Your Order', 'Contact Us'];
 const aboutLinks = ['Our Story', 'Certifications', 'Store Locator', 'Press & Media', 'Careers', 'Blog'];
 
 export default function Footer() {
