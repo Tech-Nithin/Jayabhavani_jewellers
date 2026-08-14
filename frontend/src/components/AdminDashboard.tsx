@@ -7,6 +7,7 @@ import { WorkAssignmentModule } from '../work-assignment-frontend/WorkAssignment
 import { OrdersModule } from '../orders-frontend/OrdersModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
 import AnnouncementBar from './AnnouncementBar';
+import { PwaInstallBanner } from './PwaInstallBanner';
 
 import { translations } from '../utils/translations';
 import type { Language } from '../utils/translations';
@@ -271,8 +272,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
+                  {/* PWA Download / Install Button for Admin */}
+                  <PwaInstallBanner mode="menu" />
+
                   {/* Logout Button */}
-                  <div style={{ paddingTop: '0.6rem' }}>
+                  <div style={{ paddingTop: '0.4rem' }}>
                     <button
                       type="button"
                       onClick={() => {
@@ -479,8 +483,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
+                {/* PWA Download / Install Button for Admin */}
+                <PwaInstallBanner mode="menu" />
+
                 {/* Logout Button */}
-                <div style={{ paddingTop: '0.6rem' }}>
+                <div style={{ paddingTop: '0.4rem' }}>
                   <button
                     type="button"
                     onClick={() => {
