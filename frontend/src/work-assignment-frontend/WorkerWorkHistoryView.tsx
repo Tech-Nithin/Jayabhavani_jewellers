@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
+import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
 
 interface ModernSelectProps {
   value: string;
@@ -233,6 +234,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
   onBack,
   lang = 'EN',
 }) => {
+  const t = getWorkAssignmentTranslation(lang);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -349,7 +351,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
           <div>
             <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
               <i className="fa-solid fa-clipboard-check" style={{ color: '#d97706', marginRight: '8px' }}></i>
-              {isAll ? (translations[lang]?.allWorkersMasterTitle || 'All Workers — Master Work & Orders History') : `${worker.name} — ${translations[lang]?.workerWorkHistoryTitle || 'Work & Orders History'}`}
+              {isAll ? 'All Workers — Master Work & Orders History' : `${worker.name} — ${t.workHistoryTab}`}
             </h2>
             <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
               {isAll ? (

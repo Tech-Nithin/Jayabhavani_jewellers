@@ -33,6 +33,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
   const [editingProduct, setEditingProduct] = useState<InventoryProduct | null>(null);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [selectedWebpBlob, setSelectedWebpBlob] = useState<Blob | null>(null);
   const [previewZoomImage, setPreviewZoomImage] = useState<string>('');
 
   // Category Options
@@ -124,12 +125,16 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
 
   const openAddPage = () => {
     setEditingProduct(null);
+    setSelectedWebpBlob(null);
+    setImagePreview('');
     setView('add');
     updateUrlParams(activeMetal, selectedOrnament, searchTerm, 'add');
   };
 
   const openEditPage = (product: InventoryProduct) => {
     setEditingProduct(product);
+    setSelectedWebpBlob(null);
+    setImagePreview(product.img || '');
     setView('edit');
     updateUrlParams(activeMetal, selectedOrnament, searchTerm, 'edit');
   };
@@ -137,6 +142,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
   const closeFormView = () => {
     setView('list');
     setEditingProduct(null);
+    setSelectedWebpBlob(null);
     updateUrlParams(activeMetal, selectedOrnament, searchTerm, 'list');
   };
 
@@ -225,8 +231,12 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const snapshotUrl = canvas.toDataURL('image/webp', 0.85);
-      setImagePreview(snapshotUrl);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          setSelectedWebpBlob(blob);
+          setImagePreview(URL.createObjectURL(blob));
+        }
+      }, 'image/webp', 0.85);
       stopCamera();
     }
   };
@@ -257,9 +267,12 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, w, h);
-            setImagePreview(canvas.toDataURL('image/webp', 0.8));
-          } else {
-            setImagePreview(reader.result as string);
+            canvas.toBlob((blob) => {
+              if (blob) {
+                setSelectedWebpBlob(blob);
+                setImagePreview(URL.createObjectURL(blob));
+              }
+            }, 'image/webp', 0.85);
           }
         };
         img.src = reader.result as string;
@@ -268,17 +281,28 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     }
   };
 
-  const uploadToCloudinary = async (imageDataUrl: string): Promise<string> => {
-    if (!imageDataUrl || imageDataUrl.startsWith('/')) {
-      return imageDataUrl || (activeMetal === 'GOLD' ? '/Eternal_Solitaire_Ring.jpg' : '/Pearl_Drop_Earrings.jpg');
+  const uploadToCloudinary = async (imageDataUrlOrBlob: string, pendingBlob?: Blob | null): Promise<string> => {
+    if (!pendingBlob && (!imageDataUrlOrBlob || imageDataUrlOrBlob.startsWith('/') || imageDataUrlOrBlob.startsWith('http'))) {
+      return imageDataUrlOrBlob || (activeMetal === 'GOLD' ? '/Eternal_Solitaire_Ring.jpg' : '/Pearl_Drop_Earrings.jpg');
     }
 
     try {
-      const res = await fetch(`${API_BASE}/inventory/upload-cloudinary`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageDataUrl }),
-      });
+      let res;
+      if (pendingBlob) {
+        const formData = new FormData();
+        formData.append('file', pendingBlob, 'inventory_item.webp');
+        console.log(`📤 Uploading raw WebP blob (${pendingBlob.size} bytes) via FormData to Cloudinary...`);
+        res = await fetch(`${API_BASE}/inventory/upload-cloudinary`, {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        res = await fetch(`${API_BASE}/inventory/upload-cloudinary`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageDataUrlOrBlob }),
+        });
+      }
 
       const data = await res.json();
       if (data.success && data.url) {
@@ -287,24 +311,26 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     } catch (err) {
       console.warn('Backend Cloudinary upload warning:', err);
     }
-    return imageDataUrl;
+    return imageDataUrlOrBlob;
   };
 
   const handleSaveProduct = async (productData: Partial<InventoryProduct>) => {
     let cloudinaryUrl = productData.img || '';
-    if (cloudinaryUrl && cloudinaryUrl.startsWith('data:')) {
-      cloudinaryUrl = await uploadToCloudinary(cloudinaryUrl);
+    if (selectedWebpBlob || (cloudinaryUrl && (cloudinaryUrl.startsWith('data:') || cloudinaryUrl.startsWith('blob:')))) {
+      cloudinaryUrl = await uploadToCloudinary(cloudinaryUrl, selectedWebpBlob);
+      setSelectedWebpBlob(null);
     }
 
     const isEdit = Boolean(productData.id);
     const targetId = productData.id;
     const url = isEdit ? `${API_BASE}/inventory/products/${targetId}` : `${API_BASE}/inventory/products`;
     const method = isEdit ? 'PUT' : 'POST';
+    const itemType = (productData.item_type || activeMetal) as 'GOLD' | 'SILVER';
 
     const payload = {
       name: productData.name,
       category: productData.category,
-      item_type: productData.item_type || activeMetal,
+      item_type: itemType,
       weight_from_grams: productData.weight_from_grams,
       weight_to_grams: productData.weight_to_grams,
       weight_grams: productData.weight_grams,
@@ -326,7 +352,11 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
           } else {
             setProducts([data.product, ...products]);
           }
+          setActiveMetal(itemType);
+          setSelectedOrnament('ALL');
+          updateUrlParams(itemType, 'ALL', searchTerm, 'list');
           closeFormView();
+          await fetchInventory();
           return;
         }
       }
@@ -339,7 +369,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
       id: targetId || `prod-${Date.now()}`,
       name: payload.name || 'New Item',
       category: payload.category || 'Ring',
-      item_type: payload.item_type as 'GOLD' | 'SILVER',
+      item_type: itemType,
       weight_from_grams: payload.weight_from_grams,
       weight_to_grams: payload.weight_to_grams,
       weight_grams: payload.weight_grams,
@@ -351,6 +381,9 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     } else {
       setProducts([fallbackItem, ...products]);
     }
+    setActiveMetal(itemType);
+    setSelectedOrnament('ALL');
+    updateUrlParams(itemType, 'ALL', searchTerm, 'list');
     closeFormView();
   };
 
@@ -386,7 +419,6 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     const matchesOrnament = selectedOrnament === 'ALL' || !selectedOrnament || p.category.toLowerCase() === selectedOrnament.toLowerCase();
     
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return matchesOrnament;
 
     const teCategory = getTeluguTransliterationSync(p.category).toLowerCase();
     const teName = getTeluguTransliterationSync(p.name).toLowerCase();

@@ -1,10 +1,12 @@
 import React from 'react';
+import { getWorkAssignmentTranslation, type Language } from './workAssignmentTranslations';
 
 interface SellingDetailsTableProps {
   invoices: any[];
   loading: boolean;
   searchTerm?: string;
   onAssignClick: (item: any) => void;
+  lang?: Language;
 }
 
 export const SellingDetailsTable: React.FC<SellingDetailsTableProps> = ({
@@ -12,7 +14,9 @@ export const SellingDetailsTable: React.FC<SellingDetailsTableProps> = ({
   loading,
   searchTerm = '',
   onAssignClick,
+  lang = 'EN',
 }) => {
+  const t = getWorkAssignmentTranslation(lang);
 
   const filtered = invoices.filter((item) => {
     const q = searchTerm.toLowerCase();
@@ -141,7 +145,7 @@ export const SellingDetailsTable: React.FC<SellingDetailsTableProps> = ({
             <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}># / MODE</th>
             <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '14%' }}>DATE & TIME</th>
             <th style={{ padding: '0.65rem 0.75rem', width: '24%' }}>CUSTOMER</th>
-            <th style={{ padding: '0.65rem 0.75rem', width: '28%' }}>PRODUCT (JBJ SELL/BUY)</th>
+            <th style={{ padding: '0.65rem 0.75rem', width: '28%' }}>{t.itemCol}</th>
             <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '11%' }}>WEIGHT</th>
             <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '13%' }}>FINAL AMOUNT</th>
             <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', width: '12%' }}>ACTION</th>

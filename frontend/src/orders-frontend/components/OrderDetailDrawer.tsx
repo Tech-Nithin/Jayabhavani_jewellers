@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import type { OrderItem } from '../types';
 import { ReceiptPreview, downloadReceiptAsPNG } from '../../billing-frontend/components/ReceiptPreview';
+import { getOrdersTranslation, type Language } from '../ordersTranslations';
 
 interface OrderDetailViewProps {
   order: OrderItem;
   onBack: () => void;
   initialShowBill?: boolean;
   onSeeBill?: () => void;
+  lang?: Language;
 }
 
 const fmt = (isoStr?: string | null): string => {
@@ -81,7 +83,8 @@ const Card: React.FC<{ icon: string; title: string; accent: string; children: Re
   </div>
 );
 
-export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack, initialShowBill = false, onSeeBill }) => {
+export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack, initialShowBill = false, onSeeBill, lang = 'EN' }) => {
+  const t = getOrdersTranslation(lang);
   const isAssigned = !!(order.assigned_worker_id || order.assigned_worker_name);
   const isReturned = order.returned_from_worker === 'yes';
   const isSubmitted = order.submitted === 'yes' || order.sold_status === 'SOLD';
@@ -192,10 +195,10 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
       {/* ── MAIN CONTENT ── */}
       <div style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
 
-        {/* Row 1: Order Item Details — full width, 2 explicit columns */}
+        {/* Row 1: Order Item Details */}
         <Card
           icon="fa-solid fa-gem"
-          title="Order Item Details"
+          title={t.itemBreakdownSec}
           accent="#d97706"
           action={
             billPayload ? (
@@ -235,9 +238,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
                 }
               />
               <Row label="Gross Weight" value={
-                <span style={{ display: 'inline-block', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', borderRadius: '6px', padding: '1px 10px', fontWeight: 700, fontSize: '0.82rem' }}>
-                  {order.gross_weight_grams} g
-                </span>
+                <strong>{order.gross_weight_grams} g</strong>
               } />
               <Row label="Deduction Weight" value={`${Math.max(0, (order.gross_weight_grams || 0) - (order.net_weight_grams || 0)).toFixed(3)} g`} />
               <Row label="Net Weight" value={`${order.net_weight_grams} g`} />
@@ -256,7 +257,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
               } />
               <Row label="Add. Charges Name" value={order.additional_charge_name || '—'} />
               <Row label="Add. Charges (₹)" value={order.additional_charge_value ? `₹${Number(order.additional_charge_value).toLocaleString('en-IN')}` : '—'} />
-              <Row label="Making Charges" value={`₹${(order.making_charges || 0).toLocaleString('en-IN')}`} />
+              <Row label={t.makingChargesLabel} value={`₹${(order.making_charges || 0).toLocaleString('en-IN')}`} />
               <Row label="Notes" value={order.notes || '—'} />
             </div>
 
@@ -267,7 +268,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' }}>
 
           {/* Card 2: Worker Assignment */}
-          <Card icon="fa-solid fa-user-gear" title="Worker Assignment" accent="#2563eb">
+          <Card icon="fa-solid fa-user-gear" title={t.assignedWorkerCol} accent="#2563eb">
             <Row
               label="Status"
               value={isAssigned

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { API_BASE } from '../config/apiConfig';
-import { translations, type Language } from '../utils/translations';
+import { type Language } from '../utils/translations';
+import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
 
 interface AddWorkerViewProps {
   open?: boolean;
@@ -17,6 +18,7 @@ export const AddWorkerView: React.FC<AddWorkerViewProps> = ({
   onWorkerAdded,
   lang = 'EN',
 }) => {
+  const t = getWorkAssignmentTranslation(lang);
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -84,7 +86,7 @@ export const AddWorkerView: React.FC<AddWorkerViewProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
           <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-solid fa-user-plus" style={{ color: '#059669' }}></i>
-            {translations[lang]?.newWorkerInfoTitle || 'Add New Worker Information'}
+            {t.addWorkerTitle}
           </h3>
           <button
             type="button"

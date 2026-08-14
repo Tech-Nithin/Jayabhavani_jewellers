@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../../config/apiConfig';
 import type { LoanRecord, MetalRates } from '../types';
 import { INTEREST_RATES, TIMELINE_MONTHS } from '../types';
+import { getFinanceTranslation, type Language } from '../financeTranslations';
 
 interface IssueNewLoanModalProps {
   isOpen: boolean;
   editingRecord: LoanRecord | null;
   metalRates: MetalRates;
+  lang?: Language;
   onClose: () => void;
   onSaveSuccess: () => void;
 }
@@ -33,9 +35,11 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
   isOpen,
   editingRecord,
   metalRates,
+  lang = 'EN',
   onClose,
   onSaveSuccess,
 }) => {
+  const t = getFinanceTranslation(lang);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -305,11 +309,11 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
         <div style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid #eaecf0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#ffffff', zIndex: 10, borderRadius: '24px 24px 0 0', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: editingRecord ? '#fef3c7' : '#e0e7ff', padding: '2px 10px', borderRadius: '20px', fontSize: '0.68rem', color: editingRecord ? '#92400e' : '#4338ca', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-              <i className={editingRecord ? 'fa-solid fa-pen-to-square' : 'fa-solid fa-scale-balanced'} /> {editingRecord ? 'Edit Loan Record' : 'Girvi Loan Processing'}
+              <i className={editingRecord ? 'fa-solid fa-pen-to-square' : 'fa-solid fa-scale-balanced'} /> {editingRecord ? t.editLoanBadge : t.girviProcessingBadge}
             </div>
             <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 800, letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <i className={editingRecord ? 'fa-solid fa-pen-to-square' : 'fa-solid fa-hand-holding-dollar'} style={{ color: editingRecord ? '#d97706' : '#6366f1' }} />
-              {editingRecord ? 'Edit Pledge Loan' : 'Issue New Pledge Loan'}
+              {editingRecord ? t.editLoanModalTitle : t.issueLoanModalTitle}
             </h3>
           </div>
 
@@ -317,13 +321,13 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '5px 12px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <i className="fa-solid fa-coins" style={{ color: '#d97706', fontSize: '0.85rem' }} />
-              <span style={{ fontSize: '0.75rem', color: '#78350f', fontWeight: 700 }}>Gold:</span>
+              <span style={{ fontSize: '0.75rem', color: '#78350f', fontWeight: 700 }}>{t.goldRateLabel}</span>
               <span style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 800 }}>₹{metalRates.gold_rate_per_gram.toLocaleString('en-IN')}/g</span>
             </div>
 
             <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '5px 12px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <i className="fa-solid fa-shield-halved" style={{ color: '#475569', fontSize: '0.85rem' }} />
-              <span style={{ fontSize: '0.75rem', color: '#334155', fontWeight: 700 }}>Silver:</span>
+              <span style={{ fontSize: '0.75rem', color: '#334155', fontWeight: 700 }}>{t.silverRateLabel}</span>
               <span style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 800 }}>₹{metalRates.silver_rate_per_gram.toLocaleString('en-IN')}/g</span>
             </div>
 
@@ -343,7 +347,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                   <i className="fa-solid fa-gem" />
                 </div>
                 <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#78350f', fontWeight: 800, letterSpacing: '-0.2px' }}>
-                  1. Pledged Asset Details & Live Valuation
+                  {t.assetDetailsSection}
                 </h4>
               </div>
 
@@ -495,7 +499,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.15rem' }}>
               {/* Image Upload Area */}
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}><i className="fa-solid fa-camera" style={{ color: '#b45309', marginRight: '4px' }} /> Pledged Item Photo</label>
+                <label style={labelStyle}><i className="fa-solid fa-camera" style={{ color: '#b45309', marginRight: '4px' }} /> {t.pledgedItemPhotoLabel}</label>
 
                 {/* Hidden inputs */}
                 <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleImageChange(e.target.files[0])} />
@@ -514,7 +518,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                         )}
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>Pledged Item Photo Attached</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>{t.pledgedItemPhotoLabel}</div>
                         {imageUploading ? (
                           <span style={{ fontSize: '0.72rem', color: '#6366f1', fontWeight: 600 }}><i className="fa-solid fa-spinner fa-spin" /> Uploading image...</span>
                         ) : (
@@ -540,10 +544,10 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                       <i className="fa-solid fa-cloud-arrow-up" />
                     </div>
                     <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>
-                      Upload Pledged Item Photo
+                      {t.uploadPhotoPrompt}
                     </div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.85rem' }}>
-                      Supports JPEG, PNG, WebP · Max 5MB
+                      {t.supportsPhotoText}
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.65rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -552,14 +556,14 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                         onClick={() => fileInputRef.current?.click()}
                         style={{ padding: '8px 16px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '10px', fontSize: '0.78rem', color: '#334155', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
                       >
-                        <i className="fa-solid fa-folder-open" style={{ color: '#6366f1' }} /> Browse Gallery
+                        <i className="fa-solid fa-folder-open" style={{ color: '#6366f1' }} /> {t.browseGalleryBtn}
                       </button>
                       <button
                         type="button"
                         onClick={startWebcam}
                         style={{ padding: '8px 16px', background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(14, 165, 233, 0.3)' }}
                       >
-                        <i className="fa-solid fa-camera" /> Live Camera
+                        <i className="fa-solid fa-camera" /> {t.liveCameraBtn}
                       </button>
                     </div>
                   </div>
@@ -568,21 +572,21 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
 
               {/* Type Selector */}
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Type *</label>
+                <label style={labelStyle}>{t.typeLabel}</label>
                 <div style={{ display: 'flex', gap: '6px', background: '#ffffff', padding: '3px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
                   <button
                     type="button"
                     onClick={() => setForm(f => ({ ...f, item_metal_type: 'gold' }))}
                     style={{ flex: 1, padding: '7px', borderRadius: '8px', border: 'none', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', background: form.item_metal_type === 'gold' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent', color: form.item_metal_type === 'gold' ? '#ffffff' : '#64748b', transition: 'all 0.2s' }}
                   >
-                    <i className="fa-solid fa-coins" /> Gold
+                    <i className="fa-solid fa-coins" /> {t.goldCategory}
                   </button>
                   <button
                     type="button"
                     onClick={() => setForm(f => ({ ...f, item_metal_type: 'silver' }))}
                     style={{ flex: 1, padding: '7px', borderRadius: '8px', border: 'none', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', background: form.item_metal_type === 'silver' ? 'linear-gradient(135deg, #64748b 0%, #475569 100%)' : 'transparent', color: form.item_metal_type === 'silver' ? '#ffffff' : '#64748b', transition: 'all 0.2s' }}
                   >
-                    <i className="fa-solid fa-shield-halved" /> Silver
+                    <i className="fa-solid fa-shield-halved" /> {t.silverCategory}
                   </button>
                   <button
                     type="button"
@@ -595,7 +599,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                     }))}
                     style={{ flex: 1, padding: '7px', borderRadius: '8px', border: 'none', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', background: form.item_metal_type === 'cash' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent', color: form.item_metal_type === 'cash' ? '#ffffff' : '#64748b', transition: 'all 0.2s' }}
                   >
-                    <i className="fa-solid fa-money-bill-wave" /> Cash
+                    <i className="fa-solid fa-money-bill-wave" /> {t.cashCategory}
                   </button>
                 </div>
               </div>
@@ -605,11 +609,11 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                   {/* Row 1: Item Name & Item Weight */}
                   <div style={{ display: 'flex', gap: '1.15rem', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <label style={labelStyle}>Item Name *</label>
-                      <input type="text" required placeholder="e.g. 22K Gold Bangle Set" value={form.item_name} onChange={e => setForm(f => ({ ...f, item_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
+                      <label style={labelStyle}>{t.itemNameLabel}</label>
+                      <input type="text" required placeholder={t.itemNamePlaceholder} value={form.item_name} onChange={e => setForm(f => ({ ...f, item_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
                     </div>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <label style={labelStyle}>Item Weight (Grams) *</label>
+                      <label style={labelStyle}>{t.itemWeightLabel}</label>
                       <input type="number" required step="0.001" min="0.001" placeholder="10.000" value={form.item_weight_grams} onChange={e => setForm(f => ({ ...f, item_weight_grams: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={inputStyle} />
                     </div>
                   </div>
@@ -617,11 +621,11 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                   {/* Row 2: Item Deduction Name & Item Deduction Weight */}
                   <div style={{ display: 'flex', gap: '1.15rem', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <label style={labelStyle}>Item Deduction Name</label>
-                      <input type="text" placeholder="e.g. Stones / Enamel / Wax" value={form.item_deduction_name} onChange={e => setForm(f => ({ ...f, item_deduction_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
+                      <label style={labelStyle}>{t.itemDeductionNameLabel}</label>
+                      <input type="text" placeholder={t.itemDeductionPlaceholder} value={form.item_deduction_name} onChange={e => setForm(f => ({ ...f, item_deduction_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
                     </div>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <label style={labelStyle}>Item Deduction Weight (Grams)</label>
+                      <label style={labelStyle}>{t.itemDeductionWeightLabel}</label>
                       <input type="number" step="0.001" min="0" placeholder="0.000" value={form.item_deduction_weight} onChange={e => setForm(f => ({ ...f, item_deduction_weight: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={inputStyle} />
                     </div>
                   </div>
@@ -629,11 +633,11 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                   {/* Row 3: Item Purity & Total Pure Metal Weight */}
                   <div style={{ display: 'flex', gap: '1.15rem', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <label style={labelStyle}>Item Purity (%) *</label>
+                      <label style={labelStyle}>{t.touchPurityLabel}</label>
                       <input type="number" required step="0.01" min="1" max="100" placeholder="70.00" value={form.item_purity_percent} onChange={e => setForm(f => ({ ...f, item_purity_percent: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={inputStyle} />
                     </div>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <label style={labelStyle}>Total Pure Metal ({form.item_metal_type === 'silver' ? 'Silver' : 'Gold'}) Weight (Grams)</label>
+                      <label style={labelStyle}>{t.pureMetalWeightLabel} ({form.item_metal_type === 'silver' ? (lang === 'TE' || lang === 'te' ? 'వెండి' : 'Silver') : (lang === 'TE' || lang === 'te' ? 'బంగారం' : 'Gold')})</label>
                       <input
                         type="text"
                         disabled
@@ -688,35 +692,35 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                 <i className="fa-solid fa-user-tie" />
               </div>
               <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#0f172a', fontWeight: 800, letterSpacing: '-0.2px' }}>
-                2. Customer Profile & Financial Terms
+                {t.customerSection}
               </h4>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1.15rem' }}>
               {/* Name */}
               <div>
-                <label style={labelStyle}>First Name *</label>
-                <input type="text" required placeholder="Ramesh" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
+                <label style={labelStyle}>{t.firstNameLabel}</label>
+                <input type="text" required placeholder={t.firstNamePlaceholder} value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: capitalizeWords(e.target.value) }))} style={textInputStyle} />
               </div>
               {/* Surname */}
               <div>
-                <label style={labelStyle}>Surname *</label>
-                <input type="text" required placeholder="Patel" value={form.customer_surname} onChange={e => setForm(f => ({ ...f, customer_surname: capitalizeWords(e.target.value) }))} style={textInputStyle} />
+                <label style={labelStyle}>{t.surnameLabel}</label>
+                <input type="text" required placeholder={t.surnamePlaceholder} value={form.customer_surname} onChange={e => setForm(f => ({ ...f, customer_surname: capitalizeWords(e.target.value) }))} style={textInputStyle} />
               </div>
               {/* Phone */}
               <div>
-                <label style={labelStyle}>Phone Number *</label>
-                <input type="tel" inputMode="numeric" pattern="[0-9]*" required placeholder="9876543210" maxLength={10} value={form.customer_phone} onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value.replace(/\D/g, '') }))} style={inputStyle} />
+                <label style={labelStyle}>{t.phoneLabel}</label>
+                <input type="tel" inputMode="numeric" pattern="[0-9]*" required placeholder={t.phonePlaceholder} maxLength={10} value={form.customer_phone} onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value.replace(/\D/g, '') }))} style={inputStyle} />
               </div>
               {/* Address */}
               <div>
-                <label style={labelStyle}>Address *</label>
-                <input type="text" required placeholder="Main Street, House No. 12, Hyderabad" value={form.customer_address} onChange={e => setForm(f => ({ ...f, customer_address: capitalizeWords(e.target.value) }))} style={textInputStyle} />
+                <label style={labelStyle}>{t.villageAddressLabel}</label>
+                <input type="text" required placeholder={t.villageAddressPlaceholder} value={form.customer_address} onChange={e => setForm(f => ({ ...f, customer_address: capitalizeWords(e.target.value) }))} style={textInputStyle} />
               </div>
               {/* Amount */}
               <div>
-                <label style={labelStyle}>Loan Amount (Principal ₹) *</label>
-                <input type="number" required min="1" placeholder="50000" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={{ ...inputStyle, fontWeight: 700, color: (form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#dc2626' : '#0f172a', borderColor: (form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#ef4444' : '#cbd5e1' }} />
+                <label style={labelStyle}>{t.principalAmountLabel}</label>
+                <input type="number" required min="1" placeholder={t.principalPlaceholder} value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} style={{ ...inputStyle, fontWeight: 700, color: (form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#dc2626' : '#0f172a', borderColor: (form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue ? '#ef4444' : '#cbd5e1' }} />
                 {(form.item_metal_type as string) !== 'cash' && Number(form.amount) > 0 && itemTotalValue > 0 && Number(form.amount) > itemTotalValue && (
                   <span style={{ marginTop: '4px', padding: '3px 8px', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.68rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                     <i className="fa-solid fa-triangle-exclamation" /> Loan amount exceeded
@@ -725,7 +729,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
               </div>
               {/* Rate */}
               <div style={{ position: 'relative' }} ref={rateDropdownRef}>
-                <label style={labelStyle}>Rate of Interest (%) *</label>
+                <label style={labelStyle}>{t.interestRateLabel}</label>
                 <div
                   onClick={() => { setOpenRateSelect(!openRateSelect); setOpenTimelineSelect(false); }}
                   style={{
@@ -742,7 +746,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                     userSelect: 'none',
                   }}
                 >
-                  <span>{form.interest_rate_percent}% per month (₹{form.interest_rate_percent} for ₹100)</span>
+                  <span>{(lang === 'TE' || lang === 'te') ? `నెలకూ ${form.interest_rate_percent}% (₹100 కి ₹${form.interest_rate_percent} వడ్డీ)` : `${form.interest_rate_percent}% per month (₹${form.interest_rate_percent} for ₹100)`}</span>
                   <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.75rem', color: '#6366f1', transform: openRateSelect ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                 </div>
 
@@ -786,7 +790,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                           onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
                           onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                         >
-                          {r}% per month (₹{r} for ₹100)
+                          {(lang === 'TE' || lang === 'te') ? `నెలకూ ${r}% (₹100 కి ₹${r} వడ్డీ)` : `${r}% per month (₹${r} for ₹100)`}
                         </div>
                       );
                     })}
@@ -796,7 +800,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
 
               {/* Timeline */}
               <div style={{ position: 'relative' }} ref={timelineDropdownRef}>
-                <label style={labelStyle}>Timeline (Months) *</label>
+                <label style={labelStyle}>{t.timelineMonthsLabel}</label>
                 <div
                   onClick={() => { setOpenTimelineSelect(!openTimelineSelect); setOpenRateSelect(false); }}
                   style={{
@@ -813,7 +817,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                     userSelect: 'none',
                   }}
                 >
-                  <span>{form.timeline_months} {Number(form.timeline_months) === 1 ? 'Month Timeline' : 'Months Timeline'}</span>
+                  <span>{form.timeline_months} {(lang === 'TE' || lang === 'te') ? (Number(form.timeline_months) === 1 ? t.monthTimelineUnit : t.monthsTimelineUnit) : (Number(form.timeline_months) === 1 ? t.monthTimelineUnit : t.monthsTimelineUnit)}</span>
                   <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.75rem', color: '#6366f1', transform: openTimelineSelect ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                 </div>
 
@@ -857,7 +861,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                           onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
                           onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                         >
-                          {m} {m === 1 ? 'Month Timeline' : 'Months Timeline'}
+                          {m} {(lang === 'TE' || lang === 'te') ? (m === 1 ? t.monthTimelineUnit : t.monthsTimelineUnit) : (m === 1 ? t.monthTimelineUnit : t.monthsTimelineUnit)}
                         </div>
                       );
                     })}
@@ -901,14 +905,14 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
           {/* ── Modal Action Footer ── */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.85rem', marginTop: '1.5rem', paddingTop: '1.15rem', borderTop: '1px solid #eaecf0' }}>
             <button type="button" onClick={onClose} style={{ padding: '11px 22px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, color: '#ffffff', fontSize: '0.85rem', boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)', transition: 'all 0.2s' }}>
-              Cancel
+              {t.cancelBtn}
             </button>
             <button
               type="submit"
               disabled={submitting || imageUploading}
               style={{ padding: '11px 26px', background: submitting ? '#a5b4fc' : 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', color: '#ffffff', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '0.88rem', cursor: submitting ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)', transition: 'all 0.2s' }}
             >
-              {submitting ? <><i className="fa-solid fa-spinner fa-spin" /> Issuing Loan...</> : <><i className="fa-solid fa-check" /> {editingRecord ? 'Update Pledge Loan Record' : 'Issue Pledge Loan Record'}</>}
+              {submitting ? <><i className="fa-solid fa-spinner fa-spin" /> {t.processingLoanBtn}</> : <><i className="fa-solid fa-check" /> {editingRecord ? t.updateLoanBtn : t.saveLoanBtn}</>}
             </button>
           </div>
         </form>

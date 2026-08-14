@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
-import { translations, type Language } from '../utils/translations';
+import { type Language } from '../utils/translations';
+import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
 import { AddWorkerView } from './AddWorkerView';
 import { WorkerTransactionsView } from './WorkerTransactionsView';
 import { WorkerWorkHistoryView } from './WorkerWorkHistoryView';
@@ -9,6 +10,7 @@ import { convertImageToWebP } from '../utils/imageUtils';
 export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Language }> = ({
   lang = 'EN',
 }) => {
+  const t = getWorkAssignmentTranslation(lang);
   const [viewMode, setViewMode] = useState<'LIST' | 'ADD_WORKER' | 'WORK_HISTORY' | 'TRANSACTIONS'>('LIST');
   const [selectedWorker, setSelectedWorker] = useState<any | null>(null);
   const [workers, setWorkers] = useState<any[]>([]);
@@ -187,18 +189,18 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
           <div style={{ marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
             <div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>
-                <i className="fa-solid fa-users-gears" style={{ color: '#d97706', marginRight: '10px' }}></i>
-                {translations[lang]?.workAssignmentTitle || 'Worker Management'}
+                {/* <i className="fa-solid fa-users-gears" style={{ color: '#d97706', marginRight: '10px' }}></i> */}
+                {t.workAssignmentTitle}
               </h2>
               <p style={{ margin: '3px 0 0 0', color: '#64748b', fontSize: '0.78rem' }}>
-                {translations[lang]?.workAssignmentSub || 'Manage registered artisans, crafting work histories, and metal/cash payment ledgers'}
+                {t.workAssignmentSub}
               </p>
             </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <h3 style={{ fontSize: '1.0rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              {translations[lang]?.workersList || 'Workers List'} ({workers.length})
+              {t.workersTab} ({workers.length})
             </h3>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -223,7 +225,7 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
                 }}
               >
                 <i className="fa-solid fa-clipboard-list" style={{ color: '#c78202ff' }}></i>
-                {translations[lang]?.seeWorkHistory || 'See Work History'}
+                {t.workHistoryTab}
               </button>
 
               <button
@@ -246,7 +248,7 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
                   boxShadow: '0 4px 12px rgba(180, 83, 9, 0.25)',
                 }}
               >
-                <i className="fa-solid fa-user-plus"></i> {translations[lang]?.addNewWorker || 'Add New Worker'}
+                <i className="fa-solid fa-user-plus"></i> {t.addWorkerTab}
               </button>
             </div>
           </div>

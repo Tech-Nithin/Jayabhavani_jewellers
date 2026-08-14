@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
+import { getOrdersTranslation } from './ordersTranslations';
 import type { OrderItem, WorkerItem } from './types';
 import { OrdersHistoryTable } from './components/OrdersHistoryTable';
 import { AssignWorkerModal } from './components/AssignWorkerModal';
@@ -28,6 +29,7 @@ const parseIndianCurrencyNumber = (val: string | number | undefined | null): num
 export const OrdersModule: React.FC<{ lang?: Language }> = ({
   lang = 'EN',
 }) => {
+  const t = getOrdersTranslation(lang);
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [workers, setWorkers] = useState<WorkerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -476,10 +478,10 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
         <div>
           <h1 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <i className="fa-solid fa-list-check" style={{ color: '#d97706' }}></i>
-            {translations[lang]?.ordersScreenTitle || 'Custom Orders History & Worker Assignment'}
+            {t.ordersScreenTitle}
           </h1>
           <p style={{ margin: '3px 0 0 0', color: '#64748b', fontSize: '0.78rem' }}>
-            {translations[lang]?.ordersScreenSub || 'Track all POS billing orders, worker assignments, balance payments & delivery sales'}
+            {t.ordersScreenSub}
           </p>
         </div>
 
@@ -509,29 +511,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
               whiteSpace: 'nowrap',
             }}
           >
-            <i className="fa-solid fa-plus-circle"></i> {translations[lang]?.createOrderBtn || 'Create Order'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setAddWorkerModal({ open: true, name: '', phone: '', address: '', specialization: '', photoUrl: '', notes: '', isSubmitting: false })}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '8px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-              color: '#ffffff',
-              fontWeight: 700,
-              fontSize: '0.78rem',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <i className="fa-solid fa-user-plus"></i> {translations[lang]?.addNewWorker || 'Add New Worker'}
+            <i className="fa-solid fa-plus-circle"></i> {t.newOrderBtn}
           </button>
         </div>
       </div>
@@ -542,7 +522,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           <i className="fa-solid fa-magnifying-glass" style={{ color: '#94a3b8' }}></i>
           <input
             type="text"
-            placeholder={translations[lang]?.searchOrdersPlaceholder || 'Search by customer name, phone, item, or order ID...'}
+            placeholder={t.searchOrdersPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ width: '100%', border: 'none', outline: 'none', fontSize: '0.80rem', color: '#0f172a', background: 'transparent' }}
@@ -568,7 +548,13 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
                 boxShadow: statusFilter === st ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
               }}
             >
-              {st === 'ALL' ? (translations[lang]?.allOrdersTab || 'All Orders') : st}
+              {st === 'ALL'
+                ? t.allOrdersTab
+                : st === 'PENDING'
+                ? ((t as any).notAssignedTab || 'Not Assigned')
+                : st === 'ASSIGNED'
+                ? ((t as any).assignedTab || 'Assigned')
+                : t.completedTab}
             </button>
           ))}
         </div>

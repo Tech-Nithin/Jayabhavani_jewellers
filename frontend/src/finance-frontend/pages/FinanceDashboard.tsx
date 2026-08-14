@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { API_BASE } from '../../config/apiConfig';
+import { getFinanceTranslation, type Language } from '../financeTranslations';
 
 interface FinanceSummary {
   totalRevenue: number;
@@ -8,7 +9,8 @@ interface FinanceSummary {
   currency: string;
 }
 
-export const FinanceDashboard: React.FC = () => {
+export const FinanceDashboard: React.FC<{ lang?: Language }> = ({ lang = 'EN' }) => {
+  const t = getFinanceTranslation(lang);
   const [data, setData] = useState<{ summary: FinanceSummary; monthlyReports: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +35,7 @@ export const FinanceDashboard: React.FC = () => {
   return (
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', color: '#fff' }}>
       <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', color: '#4facfe', marginBottom: '0.5rem' }}>📊 Finance & Accounting Module</h1>
+        <h1 style={{ fontSize: '2rem', color: '#4facfe', marginBottom: '0.5rem' }}>📊 {t.financeScreenTitle}</h1>
         <p style={{ color: '#a1a1c0', margin: 0 }}>
           Dedicated Finance workspace for revenue analysis, expense management, and profit tracking.
         </p>
