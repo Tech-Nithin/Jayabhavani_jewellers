@@ -1,6 +1,7 @@
 import React from 'react';
 import type { OrderItem } from '../types';
 import { translations, type Language } from '../../utils/translations';
+import { getOrdersTranslation } from '../ordersTranslations';
 
 interface PaymentSettlementModalProps {
   open: boolean;
@@ -23,6 +24,7 @@ export const PaymentSettlementModal: React.FC<PaymentSettlementModalProps> = ({
   onClose,
   onConfirm,
 }) => {
+  const t = getOrdersTranslation(lang);
   if (!open || !order) return null;
 
   return (
@@ -31,7 +33,7 @@ export const PaymentSettlementModal: React.FC<PaymentSettlementModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.65rem' }}>
           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-solid fa-money-bill-wave" style={{ color: '#16a34a' }}></i>
-            {translations[lang]?.paymentSettlementTitle || 'Payment Settlement & Mark Sold'}
+            {t.paymentSettlementTitle}
           </h3>
           <button
             type="button"

@@ -1,9 +1,11 @@
 import React from 'react';
 import type { LoanRecord } from '../types';
+import { getFinanceTranslation, type Language } from '../financeTranslations';
 
 interface DeleteConfirmDialogProps {
   isOpen: boolean;
   record: LoanRecord | null;
+  lang?: Language;
   onClose: () => void;
   onConfirm: () => Promise<void>;
   submitting: boolean;
@@ -12,10 +14,12 @@ interface DeleteConfirmDialogProps {
 export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   isOpen,
   record,
+  lang = 'EN',
   onClose,
   onConfirm,
   submitting,
 }) => {
+  const t = getFinanceTranslation(lang);
   if (!isOpen || !record) return null;
 
   return (
@@ -26,8 +30,8 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
             <i className="fa-solid fa-trash" />
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>Delete Loan Record?</div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>This record will be moved to the Deleted tab. You can undo this action.</div>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>{t.deleteModalTitle}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{t.deleteModalWarning}</div>
           </div>
         </div>
         <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.75rem', marginBottom: '1.25rem', border: '1px solid #e2e8f0' }}>
@@ -40,7 +44,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
             onClick={onClose}
             style={{ flex: 1, padding: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', color: '#475569' }}
           >
-            Cancel
+            {t.cancelBtn}
           </button>
           <button
             type="button"
@@ -48,7 +52,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
             onClick={onConfirm}
             style={{ flex: 1, padding: '10px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', opacity: submitting ? 0.7 : 1 }}
           >
-            {submitting ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-trash" />} Yes, Delete
+            {submitting ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-trash" />} {t.confirmDeleteBtn}
           </button>
         </div>
       </div>

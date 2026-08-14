@@ -1,6 +1,7 @@
 import React from 'react';
 import type { OrderItem, WorkerItem } from '../types';
 import { translations, type Language } from '../../utils/translations';
+import { getOrdersTranslation } from '../ordersTranslations';
 
 interface AssignWorkerModalProps {
   open: boolean;
@@ -33,6 +34,7 @@ export const AssignWorkerModal: React.FC<AssignWorkerModalProps> = ({
   onOpenAddWorkerModal,
   lang = 'EN',
 }) => {
+  const t = getOrdersTranslation(lang);
   if (!open || !order) return null;
 
   const filteredWorkers = workers.filter(
@@ -48,7 +50,7 @@ export const AssignWorkerModal: React.FC<AssignWorkerModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.65rem' }}>
           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-solid fa-user-plus" style={{ color: '#d97706' }}></i>
-            {translations[lang]?.assignOrderToWorkerTitle || 'Assign Order to Worker'}
+            {t.assignWorkerTitle}
           </h3>
           <button
             type="button"

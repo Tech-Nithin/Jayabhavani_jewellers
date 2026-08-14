@@ -3,11 +3,11 @@ import { API_BASE } from '../config/apiConfig';
 import type { LoanRecord, MetalRates } from './types';
 import { IssueNewLoanModal, DeleteConfirmDialog, SettlementDialog } from './components';
 
-import { translations } from '../utils/translations';
+import { getFinanceTranslation } from './financeTranslations';
 import type { Language } from '../utils/translations';
 
 export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }> = ({ globalSearch = '', lang = 'EN' }) => {
-  const t = translations[lang] || translations.EN;
+  const t = getFinanceTranslation(lang);
   const [ledger, setLedger] = useState<LoanRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(globalSearch);
@@ -202,18 +202,18 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         <div>
           <h2 style={{ fontSize: '1.5rem', color: '#0f172a', fontWeight: 800, margin: 0 }}>
             <i className="fa-solid fa-scale-balanced" style={{ color: '#6366f1', marginRight: '8px' }} />
-            {t.financeModuleTitle}
+            {t.financeScreenTitle}
           </h2>
           <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.8rem' }}>
-            {t.financeModuleSub}
+            {t.financeScreenSub}
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', background: '#fff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #e6decb' }}>
-            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>From:</span>
+            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>{t.fromLabel}</span>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ border: '1px solid #d4c7b8', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
-            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>To:</span>
+            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>{t.toLabel}</span>
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ border: '1px solid #d4c7b8', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
           </div>
 
@@ -221,7 +221,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
             onClick={() => { setEditingRecord(null); setShowModal(true); }}
             style={{ padding: '8px 16px', background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 4px 14px rgba(180, 83, 9, 0.3)' }}
           >
-            <i className="fa-solid fa-plus" /> Issue New Loan
+            <i className="fa-solid fa-plus" /> {t.issueNewLoanBtn}
           </button>
         </div>
       </div>
@@ -247,10 +247,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       `}</style>
       <div className="finance-kpi-grid">
         {[
-          { label: 'TOTAL DEBT PRINCIPAL', value: `₹${kpiTotalDebt.toLocaleString('en-IN')}`, sub: metalFilter === 'all' ? 'Active loan capital' : `Active capital – ${metalFilter.toUpperCase()}`, icon: 'fa-briefcase', isGold: true },
-          { label: 'INTEREST ACCRUED', value: `₹${Math.round(kpiTotalInterest).toLocaleString('en-IN')}`, sub: metalFilter === 'all' ? 'Live per-month interest' : `Interest – ${metalFilter.toUpperCase()}`, icon: 'fa-chart-line', isGold: true },
-          { label: 'OPEN LOAN ACCOUNTS', value: String(kpiOpenLoans.length), sub: metalFilter === 'all' ? 'Active interest monthly' : `Active – ${metalFilter.toUpperCase()}`, icon: 'fa-key', isGold: false },
-          { label: 'CLOSED ACCOUNTS', value: String(kpiClosedLoans.length), sub: metalFilter === 'all' ? 'Fully settled' : `Settled – ${metalFilter.toUpperCase()}`, icon: 'fa-circle-check', isGold: false },
+          { label: t.totalDebtPrincipal, value: `₹${kpiTotalDebt.toLocaleString('en-IN')}`, sub: metalFilter === 'all' ? t.activeLoanCapital : `${t.activeLoanCapital} – ${metalFilter.toUpperCase()}`, icon: 'fa-briefcase', isGold: true },
+          { label: t.interestAccrued, value: `₹${Math.round(kpiTotalInterest).toLocaleString('en-IN')}`, sub: metalFilter === 'all' ? t.livePerMonthInterest : `${t.livePerMonthInterest} – ${metalFilter.toUpperCase()}`, icon: 'fa-chart-line', isGold: true },
+          { label: t.openLoanAccounts, value: String(kpiOpenLoans.length), sub: metalFilter === 'all' ? t.activeInterestMonthly : `${t.activeInterestMonthly} – ${metalFilter.toUpperCase()}`, icon: 'fa-key', isGold: false },
+          { label: t.closedAccounts, value: String(kpiClosedLoans.length), sub: metalFilter === 'all' ? t.fullySettled : `${t.fullySettled} – ${metalFilter.toUpperCase()}`, icon: 'fa-circle-check', isGold: false },
         ].map((card, i) => (
           <div
             key={i}
@@ -297,7 +297,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
           <h3 style={{ margin: 0, fontSize: '1rem', color: '#181310', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
             <i className="fa-solid fa-table-list" style={{ color: '#d97706' }} />
-            Pledge Loan Interest Ledger
+            {t.pledgeLoanLedgerTitle}
           </h3>
 
           {/* Search Loan Person Input Bar */}
@@ -305,7 +305,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
             <i className="fa-solid fa-magnifying-glass" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.8rem' }} />
             <input
               type="text"
-              placeholder="Search by name, phone, item, amount, date, timeline..."
+              placeholder={t.searchFinancePlaceholder}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               style={{
@@ -355,7 +355,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '5px',
               }}
             >
-              <i className="fa-solid fa-layer-group" /> All ({metalFilteredLedger.length})
+              <i className="fa-solid fa-layer-group" /> {t.allTab} ({metalFilteredLedger.length})
             </button>
 
             <button
@@ -377,7 +377,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '5px',
               }}
             >
-              <i className="fa-solid fa-clock-rotate-left" /> Pending ({pendingMetalCount})
+              <i className="fa-solid fa-clock-rotate-left" /> {t.pendingTab} ({pendingMetalCount})
             </button>
 
             <button
@@ -399,7 +399,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '5px',
               }}
             >
-              <i className="fa-solid fa-circle-check" /> Completed ({completedMetalCount})
+              <i className="fa-solid fa-circle-check" /> {t.completedTab} ({completedMetalCount})
             </button>
 
             <button
@@ -421,7 +421,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '5px',
               }}
             >
-              <i className="fa-solid fa-triangle-exclamation" /> Overdue ({overdueMetalCount})
+              <i className="fa-solid fa-triangle-exclamation" /> {t.overdueTab} ({overdueMetalCount})
             </button>
 
             <button
@@ -443,7 +443,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '5px',
               }}
             >
-              <i className="fa-solid fa-trash" /> Deleted ({deletedMetalCount})
+              <i className="fa-solid fa-trash" /> {t.deletedTab} ({deletedMetalCount})
             </button>
           </div>
 
@@ -463,14 +463,14 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 cursor: 'pointer',
                 background: metalFilter === 'all' ? 'linear-gradient(135deg, #475569 0%, #334155 100%)' : 'transparent',
                 color: metalFilter === 'all' ? '#ffffff' : '#64748b',
-                boxShadow: metalFilter === 'all' ? '0 2px 4px rgba(51, 65, 85, 0.25)' : 'none',
+                boxShadow: metalFilter === 'all' ? '0 2px 4px rgba(51, 65, 85, 0.3)' : 'none',
                 transition: 'all 0.2s',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-shapes" /> All Metals ({ledger.length})
+              <i className="fa-solid fa-border-all" /> {t.allMetals} ({ledger.length})
             </button>
 
             <button
@@ -485,16 +485,16 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 fontSize: '0.74rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                background: metalFilter === 'gold' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+                background: metalFilter === 'gold' ? 'linear-gradient(135deg, #d97706 0%, #b45309 100%)' : 'transparent',
                 color: metalFilter === 'gold' ? '#ffffff' : '#b45309',
-                boxShadow: metalFilter === 'gold' ? '0 2px 4px rgba(245, 158, 11, 0.3)' : 'none',
+                boxShadow: metalFilter === 'gold' ? '0 2px 4px rgba(217, 119, 6, 0.3)' : 'none',
                 transition: 'all 0.2s',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-coins" /> Gold ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'gold' && r.item_name?.toLowerCase() !== 'cash').length})
+              <i className="fa-solid fa-coins" /> {t.goldCategory} ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'gold' && r.item_name?.toLowerCase() !== 'cash').length})
             </button>
 
             <button
@@ -518,7 +518,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-gem" /> Silver ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'silver' && r.item_name?.toLowerCase() !== 'cash').length})
+              <i className="fa-solid fa-gem" /> {t.silverCategory} ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'silver' && r.item_name?.toLowerCase() !== 'cash').length})
             </button>
 
             <button
@@ -542,7 +542,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-money-bill-wave" /> Cash ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'cash' || r.item_name?.toLowerCase() === 'cash').length})
+              <i className="fa-solid fa-money-bill-wave" /> {t.cashCategory} ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'cash' || r.item_name?.toLowerCase() === 'cash').length})
             </button>
           </div>
         </div>
@@ -556,10 +556,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
             {/* Pagination controls top bar */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
               <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                Showing <strong>{filteredLedger.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong>–<strong>{Math.min(currentPage * pageSize, filteredLedger.length)}</strong> of <strong>{filteredLedger.length}</strong> records
+                {t.showingRecords} <strong>{filteredLedger.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong>–<strong>{Math.min(currentPage * pageSize, filteredLedger.length)}</strong> {t.ofRecords} <strong>{filteredLedger.length}</strong> {t.recordsLabel}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Rows per page:</label>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{t.rowsPerPage}</label>
                 <select
                   value={pageSize}
                   onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
@@ -572,17 +572,17 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
             <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #eaecf0', background: '#f8fafc', color: '#475569' }}>
-                <th style={{ padding: '10px 12px' }}>S.No</th>
-                <th style={{ padding: '10px 12px' }}>Loan Date</th>
-                <th style={{ padding: '10px 12px' }}>Customer</th>
-                <th style={{ padding: '10px 12px' }}>Item</th>
-                <th style={{ padding: '10px 12px' }}>Debt Amount</th>
-                <th style={{ padding: '10px 12px' }}>Timeline</th>
-                <th style={{ padding: '10px 12px' }}>Monthly</th>
-                <th style={{ padding: '10px 12px' }}>Total Amount</th>
-                <th style={{ padding: '10px 12px' }}>Item Value</th>
-                <th style={{ padding: '10px 12px' }}>Status</th>
-                <th style={{ padding: '10px 12px' }}>Actions</th>
+                <th style={{ padding: '10px 12px' }}>{t.snCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.loanDateCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.customerCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.itemCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.debtAmountCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.timelineCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.monthlyRateCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.totalAmountCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.itemValueCol}</th>
+                <th style={{ padding: '10px 12px' }}>{t.statusHeader}</th>
+                <th style={{ padding: '10px 12px' }}>{t.actionsCol}</th>
               </tr>
             </thead>
             <tbody>
@@ -801,6 +801,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         isOpen={showModal}
         editingRecord={editingRecord}
         metalRates={metalRates}
+        lang={lang}
         onClose={handleCloseModal}
         onSaveSuccess={() => {
           handleCloseModal();
@@ -812,6 +813,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       <DeleteConfirmDialog
         isOpen={deleteConfirmRecord !== null}
         record={deleteConfirmRecord}
+        lang={lang}
         onClose={() => setDeleteConfirmRecord(null)}
         onConfirm={async () => {
           if (deleteConfirmRecord) {
@@ -826,6 +828,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       <SettlementDialog
         isOpen={confirmCompleteRecord !== null}
         record={confirmCompleteRecord}
+        lang={lang}
         onClose={() => setConfirmCompleteRecord(null)}
         onConfirm={async (finalInterest) => {
           if (confirmCompleteRecord) {

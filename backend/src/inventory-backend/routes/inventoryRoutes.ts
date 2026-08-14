@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { supabase } from '../../config/supabase';
+import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 // GET /api/inventory/products
 router.get('/products', async (req: Request, res: Response) => {
@@ -47,12 +50,22 @@ router.get('/products', async (req: Request, res: Response) => {
   }
 });
 
-// Reliable Helper function: Upload image to Cloudinary signed folder
+// Reliable Helper function: Upload image to Cloudinary as WebP
 async function uploadToCloudinaryHelper(imageStr: string): Promise<string> {
   if (!imageStr || imageStr.startsWith('http://') || imageStr.startsWith('https://')) {
     return imageStr || '/Eternal_Solitaire_Ring.jpg';
   }
 
+  try {
+    const webpUrl = await uploadToCloudinaryAsWebP(imageStr, 'inventory_products');
+    if (webpUrl && (webpUrl.startsWith('http://') || webpUrl.startsWith('https://'))) {
+      return webpUrl;
+    }
+  } catch (err) {
+    console.warn('⚠️ Primary uploadToCloudinaryAsWebP warning:', err);
+  }
+
+  // Backup fallback upload preset if SDK env vars are missing
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'kkwteo4l';
   const preset = process.env.CLOUDINARY_UPLOAD_PRESET || 'jewellery_preset';
 
@@ -60,9 +73,10 @@ async function uploadToCloudinaryHelper(imageStr: string): Promise<string> {
     const formData = new FormData();
     formData.append('file', imageStr);
     formData.append('upload_preset', preset);
-    formData.append('folder', 'signed');
+    formData.append('folder', 'inventory_products');
+    formData.append('format', 'webp');
 
-    console.log(`📤 Uploading image to Cloudinary (${cloudName}, folder: signed)...`);
+    console.log(`📤 Uploading image to Cloudinary (${cloudName}, folder: inventory_products, format: webp)...`);
 
     const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
       method: 'POST',
@@ -72,35 +86,14 @@ async function uploadToCloudinaryHelper(imageStr: string): Promise<string> {
     const data: any = await res.json();
     if (data.secure_url) {
       const optimizedWebpUrl = data.secure_url.replace('/upload/', '/upload/f_auto,q_auto/').replace(/\.(png|jpg|jpeg)$/i, '.webp');
-      console.log('✨ Successfully uploaded image to Cloudinary signed folder:', optimizedWebpUrl);
+      console.log('✨ Successfully uploaded WebP image to Cloudinary:', optimizedWebpUrl);
       return optimizedWebpUrl;
-    } else {
-      console.warn('⚠️ Cloudinary API returned warning/error:', data);
     }
   } catch (err) {
-    console.error('❌ Cloudinary upload error:', err);
+    console.error('❌ Cloudinary fallback upload error:', err);
   }
 
-  // Backup fallback if primary preset fails
-  try {
-    const formDataDemo = new FormData();
-    formDataDemo.append('file', imageStr);
-    formDataDemo.append('upload_preset', 'unsigned');
-    formDataDemo.append('folder', 'signed');
-
-    const resDemo = await fetch('https://api.cloudinary.com/v1_1/demo/image/upload', {
-      method: 'POST',
-      body: formDataDemo,
-    });
-    const dataDemo: any = await resDemo.json();
-    if (dataDemo.secure_url) {
-      return dataDemo.secure_url.replace('/upload/', '/upload/f_auto,q_auto/').replace(/\.(png|jpg|jpeg)$/i, '.webp');
-    }
-  } catch (demoErr) {
-    console.error('Demo upload error:', demoErr);
-  }
-
-  return 'https://res.cloudinary.com/demo/image/upload/f_auto,q_auto/v1/samples/landscapes/beach-boat.webp';
+  return imageStr;
 }
 
 // Helper function: Generate Sequential Category ID (cat-01, cat-02, cat-03...)
@@ -223,19 +216,29 @@ router.post('/products', async (req: Request, res: Response) => {
   res.json({ success: true, product: responseProduct });
 });
 
-// POST /api/inventory/upload-cloudinary
-router.post('/upload-cloudinary', async (req: Request, res: Response) => {
+// POST /api/inventory/upload-cloudinary (Supports direct binary WebP file via multipart/form-data or legacy payload)
+router.post('/upload-cloudinary', upload.single('file'), async (req: Request, res: Response) => {
   try {
-    const { image } = req.body;
+    if (req.file) {
+      console.log(`📤 Uploading direct binary WebP file (${req.file.size} bytes) to Cloudinary...`);
+      const url = await uploadToCloudinaryFile(
+        req.file.buffer,
+        req.file.originalname || `inv_${Date.now()}.webp`,
+        'inventory_products'
+      );
+      return res.json({ success: true, url });
+    }
+
+    const { image } = req.body || {};
     if (!image) {
-      return res.status(400).json({ success: false, message: 'No image data provided' });
+      return res.status(400).json({ success: false, message: 'No image file or data provided' });
     }
 
     const cloudinaryWebpUrl = await uploadToCloudinaryHelper(image);
     return res.json({ success: true, url: cloudinaryWebpUrl });
-  } catch (err) {
-    console.error('Backend Cloudinary upload error:', err);
-    return res.json({ success: true, url: req.body.image });
+  } catch (err: any) {
+    console.error('Backend Cloudinary upload error:', err.message || err);
+    return res.status(500).json({ success: false, message: 'Upload failed', url: '' });
   }
 });
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
+import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
 import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
 import { convertImageToWebP, convertImageToWebPBlob } from '../utils/imageUtils';
 
@@ -43,6 +44,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   onBack,
   lang = 'EN',
 }) => {
+  const t = getWorkAssignmentTranslation(lang);
   // Active Selected Worker State (Supports internal switching)
   const [worker, setWorker] = useState(initialWorker);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
@@ -218,12 +220,31 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     fetchInitialTransactions();
   }, [worker?.id]);
 
-  // Search trigger: Queries 100% of full historical records for this worker
+  const scrollToBottom = (smooth = true) => {
+    setTimeout(() => {
+      if (chatBottomRef.current) {
+        chatBottomRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+      } else if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }, 80);
+  };
+
+  // Auto-scroll to very bottom (most recent messages) on load / worker switch
+  useEffect(() => {
+    if (!loading && transactions.length > 0 && !loadingOlderMessages) {
+      scrollToBottom(false);
+    }
+  }, [worker?.id, loading]);
+
+  // Search trigger: Queries 100% of full historical records for this worker, or restores full timeline when cleared
   useEffect(() => {
     if (searchQuery.trim() !== '') {
       fetchFullTransactions(searchQuery);
+    } else if (searchQuery === '' && !isSearchOpen) {
+      fetchInitialTransactions();
     }
-  }, [searchQuery]);
+  }, [searchQuery, isSearchOpen]);
 
   // Initial fetch: Recent 7 Days only for fast load!
   const fetchInitialTransactions = async () => {
@@ -235,6 +256,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.transactions)) {
         setTransactions(data.transactions);
+        scrollToBottom(false);
         if (data.transactions.length < 5) {
           fetchFullTransactions();
         }
@@ -349,12 +371,12 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       const defaultName = hasPhotos && !amountCash && !weightGrams
         ? 'Photo Attachment'
         : category === 'CASH'
-        ? 'Cash Payment'
-        : category === 'GOLD'
-        ? 'Raw Gold Bar'
-        : category === 'SILVER'
-        ? 'Raw Silver Bar'
-        : 'Ornament Item';
+          ? 'Cash Payment'
+          : category === 'GOLD'
+            ? 'Raw Gold Bar'
+            : category === 'SILVER'
+              ? 'Raw Silver Bar'
+              : 'Ornament Item';
 
       const formattedItemName = toStartCase(itemName.trim()) || defaultName;
       const formattedNotes = toStartCase(notes.trim());
@@ -386,6 +408,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       const data = await res.json();
       if (data.success && data.transaction) {
         setTransactions((prev) => [...prev, data.transaction]);
+        scrollToBottom(true);
         // Reset form inputs
         setAmountCash('');
         setAppliedRatePerGram('');
@@ -476,7 +499,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   );
 
   return (
-    <div className="tablet-dense-view" style={{ background: '#f0f2f5', borderRadius: '18px', border: '1px solid #cbd5e1', boxShadow: '0 8px 30px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'row', height: 'calc(97vh - 45px)', overflow: 'hidden' }}>
+    <div className="tablet-dense-view worker-chat-view" style={{ background: '#f0f2f5', borderRadius: '18px', border: '1px solid #cbd5e1', boxShadow: '0 8px 30px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'row', height: 'calc(97vh - 45px)', overflow: 'hidden' }}>
 
       {/* ── SLIM WORKER SWITCHER SIDEBAR (1-CLICK USER SWITCH) ── */}
       <div
@@ -639,19 +662,58 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
             {/* Strict 100% Fine Metal Balance summary pills */}
             <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', whiteSpace: 'nowrap' }}>
-              <div style={{ background: '#fef3c7', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: '6px', textAlign: 'right' }}>
-                <span style={{ fontSize: '0.55rem', color: '#b45309', fontWeight: 800, display: 'block' }}>Pure Gold</span>
-                <strong style={{ fontSize: '0.66rem', color: '#92400e' }}>{netFineGoldBalance.toFixed(3)} g</strong>
+              {/* Pure Gold Pill */}
+              <div
+                title={netFineGoldBalance > 0.0001 ? t.workerNeedsToSendUs : netFineGoldBalance < -0.0001 ? t.needsToSendWorker : t.fullySettled}
+                style={{ background: '#fef3c7', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: '6px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '65px' }}
+              >
+                <span style={{ fontSize: '0.55rem', color: '#b45309', fontWeight: 800, display: 'block' }}>{t.pureGoldLabel}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+                  {netFineGoldBalance > 0.0001 ? (
+                    <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 900 }} />
+                  ) : netFineGoldBalance < -0.0001 ? (
+                    <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.62rem', color: '#dc2626', fontWeight: 900 }} />
+                  ) : null}
+                  <strong style={{ fontSize: '0.66rem', color: netFineGoldBalance < -0.0001 ? '#dc2626' : '#92400e', fontWeight: 800 }}>
+                    {Math.abs(netFineGoldBalance).toFixed(3)} g
+                  </strong>
+                </div>
               </div>
 
-              <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '2px 6px', borderRadius: '6px', textAlign: 'right' }}>
+              {/* Pure Silver Pill */}
+              <div
+                title={netFineSilverBalance > 0.0001 ? 'Worker needs to send to us' : netFineSilverBalance < -0.0001 ? 'Needs to send to worker' : 'Fully Settled'}
+                style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '2px 6px', borderRadius: '6px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '65px' }}
+              >
                 <span style={{ fontSize: '0.55rem', color: '#475569', fontWeight: 800, display: 'block' }}>Pure Silver</span>
-                <strong style={{ fontSize: '0.66rem', color: '#334155' }}>{netFineSilverBalance.toFixed(3)} g</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+                  {netFineSilverBalance > 0.0001 ? (
+                    <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 900 }} />
+                  ) : netFineSilverBalance < -0.0001 ? (
+                    <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.62rem', color: '#dc2626', fontWeight: 900 }} />
+                  ) : null}
+                  <strong style={{ fontSize: '0.66rem', color: netFineSilverBalance < -0.0001 ? '#dc2626' : '#334155', fontWeight: 800 }}>
+                    {Math.abs(netFineSilverBalance).toFixed(3)} g
+                  </strong>
+                </div>
               </div>
 
-              <div style={{ background: '#e0f2fe', border: '1px solid #bae6fd', padding: '2px 6px', borderRadius: '6px', textAlign: 'right' }}>
+              {/* Net Cash Pill */}
+              <div
+                title={netCashBalance > 0.01 ? 'Worker needs to send to us' : netCashBalance < -0.01 ? 'Needs to send to worker' : 'Fully Settled'}
+                style={{ background: '#e0f2fe', border: '1px solid #bae6fd', padding: '2px 6px', borderRadius: '6px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '65px' }}
+              >
                 <span style={{ fontSize: '0.55rem', color: '#0369a1', fontWeight: 800, display: 'block' }}>Net Cash</span>
-                <strong style={{ fontSize: '0.66rem', color: '#075985' }}>₹{netCashBalance.toLocaleString('en-IN')}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+                  {netCashBalance > 0.01 ? (
+                    <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 900 }} />
+                  ) : netCashBalance < -0.01 ? (
+                    <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.62rem', color: '#dc2626', fontWeight: 900 }} />
+                  ) : null}
+                  <strong style={{ fontSize: '0.66rem', color: netCashBalance < -0.01 ? '#dc2626' : '#075985', fontWeight: 800 }}>
+                    ₹{Math.abs(Math.round(netCashBalance)).toLocaleString('en-IN')}
+                  </strong>
+                </div>
               </div>
             </div>
 
@@ -770,6 +832,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                   setIsSearchOpen(false);
                   setSearchQuery('');
                   setActiveMatchIdx(0);
+                  fetchInitialTransactions();
                 }}
                 style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '4px 10px', color: '#64748b', cursor: 'pointer', fontSize: '0.80rem', fontWeight: 700, flexShrink: 0 }}
               >
@@ -862,6 +925,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                   }}
                 >
                   <div
+                    className="worker-chat-bubble"
                     style={{
                       maxWidth: '75%',
                       minWidth: '210px',
@@ -1027,7 +1091,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
               {/* Live Message Preview Banner (Toggleable ON/OFF) */}
               {isMessagePreviewEnabled && (
-                <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '12px', border: '1px dashed #0284c7', marginBottom: '0.75rem' }}>
+                <div className="worker-chat-live-preview" style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '12px', border: '1px dashed #0284c7', marginBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <i className="fa-solid fa-eye"></i> Live Message Preview ({direction === 'OUTGOING' ? 'Sending to Worker' : 'Receiving from Worker'})
@@ -1051,7 +1115,17 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         <span style={{ fontSize: '0.62rem', color: '#64748b' }}>Now</span>
                       </div>
 
-                      {category === 'CASH' ? (
+                      {/* Photo Attachment Mode Header or Category Breakdown */}
+                      {photos && photos.length > 0 && !amountCash && !weightGrams ? (
+                        <div style={{ margin: '4px 0', padding: '6px 10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#0284c7', fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="fa-solid fa-camera" style={{ color: '#0284c7' }}></i> PHOTO ATTACHMENT
+                          </div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
+                            {toStartCase(itemName.trim()) || 'Photo Attachment'}
+                          </div>
+                        </div>
+                      ) : category === 'CASH' ? (
                         <div style={{ margin: '4px 0', padding: '6px 10px', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                           <div style={{ fontSize: '0.65rem', color: '#166534', fontWeight: 800, display: 'flex', justifyContent: 'space-between' }}>
                             <span>CASH PAYMENT</span>
@@ -1099,13 +1173,56 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                           "{toStartCase(notes)}"
                         </div>
                       )}
+
+                      {/* Photo Thumbnails Preview in Live Preview Banner */}
+                      {photos && photos.length > 0 && (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                          {photos.map((url, idx) => (
+                            <div key={idx} style={{ position: 'relative', display: 'inline-block' }}>
+                              <img
+                                src={url}
+                                alt="Selected Photo Preview"
+                                style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #0284c7', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPhotos((prev) => prev.filter((_, i) => i !== idx));
+                                  setPhotoFiles((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: '-5px',
+                                  right: '-5px',
+                                  background: '#dc2626',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '18px',
+                                  height: '18px',
+                                  fontSize: '0.65rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                }}
+                                title="Remove this photo"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Toggle Mode & Category Buttons */}
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* Toggle Mode & Category Dropdown */}
+              <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '0.65rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ display: 'flex', background: '#f1f5f9', padding: '2px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                   <button
                     type="button"
@@ -1123,41 +1240,47 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.3rem' }}>
-                  {(['GOLD', 'SILVER', 'CASH', 'ORNAMENT'] as const).map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => {
-                        setCategory(cat);
-                        if (cat === 'SILVER') setTouchPercentage('80.0');
-                        if (cat === 'GOLD') setTouchPercentage('91.6');
-                      }}
-                      style={{
-                        padding: '5px 10px',
-                        borderRadius: '6px',
-                        border: category === cat ? '1.5px solid #d97706' : '1px solid #cbd5e1',
-                        background: category === cat ? '#fef3c7' : '#ffffff',
-                        color: category === cat ? '#b45309' : '#475569',
-                        fontWeight: category === cat ? 800 : 600,
-                        fontSize: '0.74rem',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {cat === 'GOLD' ? '🥇 Gold' : cat === 'SILVER' ? '🥈 Silver' : cat === 'CASH' ? '💵 Cash' : '👑 Ornament'}
-                    </button>
-                  ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>
+                    Metal Category:
+                  </label> */}
+                  <select
+                    value={category}
+                    onChange={(e) => {
+                      const cat = e.target.value as 'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT';
+                      setCategory(cat);
+                      if (cat === 'SILVER') setTouchPercentage('80.0');
+                      if (cat === 'GOLD') setTouchPercentage('91.6');
+                    }}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      fontWeight: 800,
+                      fontSize: '0.78rem',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    <option value="GOLD">🥇 Gold</option>
+                    <option value="SILVER">🥈 Silver</option>
+                    <option value="CASH">💵 Cash</option>
+                    <option value="ORNAMENT">👑 Ornament</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Dynamic Parameter Inputs with Field Labels */}
+              {/* Dynamic Parameter Inputs with Field Labels in Start Case */}
               <div style={{ display: 'grid', gridTemplateColumns: category === 'CASH' ? '1.2fr 1.4fr 1.2fr 1.5fr auto' : '1.2fr 1fr 1fr 1.5fr auto', gap: '0.65rem', alignItems: 'flex-end' }}>
 
                 {category === 'CASH' ? (
                   <>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px', textTransform: 'uppercase' }}>
-                        💵 Cash Amount (₹)
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Amount (₹)
                       </label>
                       <input
                         type="number"
@@ -1169,41 +1292,27 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px', textTransform: 'uppercase' }}>
-                        🎯 Purpose / Metal Link
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Purpose
                       </label>
-                      <div style={{ display: 'flex', background: '#f1f5f9', padding: '2px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                        <button
-                          type="button"
-                          onClick={() => setCashMetalLink('FOR_GOLD')}
-                          style={{ flex: 1, padding: '5px 4px', borderRadius: '6px', border: 'none', background: cashMetalLink === 'FOR_GOLD' ? '#d97706' : 'transparent', color: cashMetalLink === 'FOR_GOLD' ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.70rem', cursor: 'pointer' }}
-                        >
-                          🥇 Gold
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCashMetalLink('FOR_SILVER')}
-                          style={{ flex: 1, padding: '5px 4px', borderRadius: '6px', border: 'none', background: cashMetalLink === 'FOR_SILVER' ? '#475569' : 'transparent', color: cashMetalLink === 'FOR_SILVER' ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.70rem', cursor: 'pointer' }}
-                        >
-                          🥈 Silver
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCashMetalLink('GENERAL_CASH')}
-                          style={{ flex: 1, padding: '5px 4px', borderRadius: '6px', border: 'none', background: cashMetalLink === 'GENERAL_CASH' ? '#0284c7' : 'transparent', color: cashMetalLink === 'GENERAL_CASH' ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.70rem', cursor: 'pointer' }}
-                        >
-                          💵 Cash
-                        </button>
-                      </div>
+                      <select
+                        value={cashMetalLink}
+                        onChange={(e) => setCashMetalLink(e.target.value as 'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH')}
+                        style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#ffffff', color: '#0f172a', fontWeight: 700 }}
+                      >
+                        <option value="FOR_GOLD">For Gold</option>
+                        <option value="FOR_SILVER">For Silver</option>
+                        <option value="GENERAL_CASH">General Cash</option>
+                      </select>
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px', textTransform: 'uppercase' }}>
-                        📈 Rate Per Gram (₹/g)
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Rate per grm
                       </label>
                       <input
                         type="number"
-                        placeholder="e.g. 14500"
+                        placeholder="eg 14500"
                         value={appliedRatePerGram}
                         onChange={(e) => setAppliedRatePerGram(e.target.value)}
                         style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
@@ -1213,8 +1322,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                 ) : (
                   <>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px', textTransform: 'uppercase' }}>
-                        🏷️ Metal / Item Name
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        🏷️ Item Name
                       </label>
                       <input
                         type="text"
@@ -1226,8 +1335,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px', textTransform: 'uppercase' }}>
-                        ⚖️ Gross Wt (g)
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Weight
                       </label>
                       <input
                         type="number"
@@ -1240,13 +1349,13 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px', textTransform: 'uppercase' }}>
-                        🎯 Tounch Purity (%)
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Touch (%)
                       </label>
                       <input
                         type="number"
                         step="0.1"
-                        placeholder="Tounch %"
+                        placeholder="Touch %"
                         value={touchPercentage}
                         onChange={(e) => setTouchPercentage(e.target.value)}
                         style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
@@ -1256,8 +1365,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                 )}
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px', textTransform: 'uppercase' }}>
-                    📝 Remarks / Notes
+                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                    Notes
                   </label>
                   <input
                     type="text"
@@ -1272,9 +1381,23 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                   <button
                     type="button"
+                    disabled={isSending}
                     onClick={() => fileInputRef.current?.click()}
                     title="Attach Photos"
-                    style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{
+                      padding: '0.55rem 0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      color: '#475569',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      cursor: isSending ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      opacity: isSending ? 0.6 : 1,
+                    }}
                   >
                     <i className="fa-solid fa-camera" style={{ color: '#0284c7' }}></i>
                     {photos.length > 0 && <span style={{ background: '#d97706', color: '#fff', borderRadius: '50%', padding: '2px 6px', fontSize: '0.65rem' }}>{photos.length}</span>}
@@ -1285,9 +1408,42 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                   <button
                     type="submit"
                     disabled={isSending}
-                    style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', border: 'none', background: direction === 'OUTGOING' ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' : 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: '#ffffff', fontSize: '0.85rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: direction === 'OUTGOING' ? '0 2px 8px rgba(234, 88, 12, 0.3)' : '0 2px 8px rgba(2, 132, 199, 0.3)' }}
+                    style={{
+                      padding: '0.55rem 1.25rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: isSending
+                        ? '#94a3b8'
+                        : direction === 'OUTGOING'
+                          ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
+                          : 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                      color: '#ffffff',
+                      fontSize: '0.85rem',
+                      fontWeight: 800,
+                      cursor: isSending ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      opacity: isSending ? 0.85 : 1,
+                      boxShadow: isSending
+                        ? 'none'
+                        : direction === 'OUTGOING'
+                          ? '0 2px 8px rgba(234, 88, 12, 0.3)'
+                          : '0 2px 8px rgba(2, 132, 199, 0.3)',
+                      transition: 'all 0.15s ease',
+                    }}
                   >
-                    <i className="fa-solid fa-paper-plane"></i> Send
+                    {isSending ? (
+                      <>
+                        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '0.88rem' }}></i>
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-paper-plane"></i>
+                        <span>Send</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

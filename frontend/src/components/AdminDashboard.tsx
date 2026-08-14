@@ -25,7 +25,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToStore,
   activeModule = 'billing',
 }) => {
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment'>(activeModule);
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'workers'>(activeModule as any);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
@@ -51,7 +51,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const syncFromUrl = () => {
       const params = new URLSearchParams(window.location.search);
       const mod = params.get('module');
-      if (mod && ['dashboard', 'billing', 'orders', 'finance', 'inventory', 'work-assignment'].includes(mod)) {
+      if (mod && ['dashboard', 'billing', 'orders', 'finance', 'inventory', 'work-assignment', 'workers'].includes(mod)) {
         setCurrentTab(mod as any);
       }
       const urlLang = (params.get('lang') || '').toUpperCase();
@@ -94,10 +94,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const navItems = [
     { id: 'dashboard', label: t.dashboard, icon: 'fa-solid fa-chart-pie' },
     { id: 'billing', label: t.billing, icon: 'fa-solid fa-cash-register' },
-    { id: 'orders', label: lang === 'TE' ? 'నా ఆర్డర్లు' : 'My Orders', icon: 'fa-solid fa-cart-flatbed' },
+    { id: 'orders', label: lang === 'TE' ? 'ఆర్డర్లు' : 'Orders', icon: 'fa-solid fa-cart-flatbed' },
+    { id: 'workers', label: t.workAssignment, icon: 'fa-solid fa-clipboard-list' },
     { id: 'finance', label: t.finance, icon: 'fa-solid fa-scale-balanced' },
     { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-boxes-stacked' },
-    { id: 'work-assignment', label: t.workAssignment, icon: 'fa-solid fa-clipboard-list' },
   ];
 
   return (
@@ -530,7 +530,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {currentTab === 'orders' && <OrdersModule lang={lang} />}
           {currentTab === 'finance' && <FinanceModule globalSearch={globalSearch} lang={lang} />}
           {currentTab === 'inventory' && <InventoryModule globalSearch={globalSearch} lang={lang} />}
-          {currentTab === 'work-assignment' && <WorkAssignmentModule globalSearch={globalSearch} lang={lang} />}
+          {(currentTab === 'workers' || currentTab === 'work-assignment') && <WorkAssignmentModule globalSearch={globalSearch} lang={lang} />}
         </main>
       </div>
     </div>

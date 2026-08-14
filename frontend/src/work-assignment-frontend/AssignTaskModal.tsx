@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getWorkAssignmentTranslation, type Language } from './workAssignmentTranslations';
 
 interface AssignTaskModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface AssignTaskModalProps {
     mode: 'METAL' | 'CASH';
     invoiceId?: string | number;
   }) => Promise<void>;
+  lang?: Language;
 }
 
 export const AssignTaskModal: React.FC<AssignTaskModalProps> = ({
@@ -22,7 +24,9 @@ export const AssignTaskModal: React.FC<AssignTaskModalProps> = ({
   onClose,
   initialData,
   onSubmit,
+  lang = 'EN',
 }) => {
+  const t = getWorkAssignmentTranslation(lang);
   const [workerName, setWorkerName] = useState('');
   const [itemWeight, setItemWeight] = useState(0);
   const [itemPurity, setItemPurity] = useState(91.6); // Default 22K (91.6%)
@@ -112,7 +116,7 @@ export const AssignTaskModal: React.FC<AssignTaskModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.75rem' }}>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#181310', margin: 0, letterSpacing: '-0.3px' }}>
             <i className="fa-solid fa-clipboard-user" style={{ color: '#d97706', marginRight: '8px' }}></i>
-            Assign Work Crafting
+            {t.addWorkerTitle}
           </h3>
           <button
             onClick={onClose}

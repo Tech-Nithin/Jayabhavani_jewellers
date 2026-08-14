@@ -7,7 +7,7 @@ export const translations = {
     billing: 'Billing',
     finance: 'Finance',
     inventory: 'Inventory',
-    workAssignment: 'Work Assignment',
+    workAssignment: 'Workers',
 
     // Ticker Header
     goldBuyTicker: 'Gold Buy',
@@ -296,7 +296,7 @@ export const translations = {
     billing: 'బిల్లింగ్',
     finance: 'ఫైనాన్స్',
     inventory: 'ఇన్వెంటరీ',
-    workAssignment: 'వర్క్ అసైన్‌మెంట్',
+    workAssignment: 'వర్కర్లు',
 
     // Ticker Header
     goldBuyTicker: 'బంగారం కొనే ధర',

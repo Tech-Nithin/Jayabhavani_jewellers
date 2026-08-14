@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { OrderItem } from '../types';
 import { translations, type Language } from '../../utils/translations';
+import { getOrdersTranslation } from '../ordersTranslations';
 
 interface OrdersHistoryTableProps {
   orders: OrderItem[];
@@ -38,6 +39,7 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
   onViewSeeBill,
   onViewOrderDetails,
 }) => {
+  const t = getOrdersTranslation(lang);
   const [activeDropdownOrderId, setActiveDropdownOrderId] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -82,19 +84,17 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78rem' }}>
         <thead>
           <tr style={{ background: '#f8fafc', borderBottom: '1px solid #cbd5e1', color: '#475569', fontWeight: 700, fontSize: '0.72rem' }}>
-            <th style={{ padding: '0.55rem 0.35rem', textAlign: 'center', width: '36px' }}>S.N.</th>
-            <th style={{ padding: '0.55rem 0.45rem' }}>Order Date</th>
-            <th style={{ padding: '0.55rem 0.45rem' }}>Customer Details</th>
-            <th style={{ padding: '0.55rem 0.45rem' }}>
-              {translations[lang]?.orderItemHeader || 'Order Item'}
-            </th>
-            <th style={{ padding: '0.65rem 0.5rem' }}>Gross Wt</th>
-            <th style={{ padding: '0.65rem 0.5rem' }}>Status</th>
-            <th style={{ padding: '0.65rem 0.5rem' }}>Worker</th>
-            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>Return from Worker</th>
-            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>Cust Paid Status</th>
-            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>Submitted to cust</th>
-            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>Info</th>
+            <th style={{ padding: '0.55rem 0.35rem', textAlign: 'center', width: '36px' }}>{(t as any).snCol || 'S.N.'}</th>
+            <th style={{ padding: '0.55rem 0.45rem', textAlign: 'center' }}>{(t as any).orderDateCol || 'Order Date'}</th>
+            <th style={{ padding: '0.55rem 0.45rem', textAlign: 'center' }}>{(t as any).customerDetailsCol || 'Customer Details'}</th>
+            <th style={{ padding: '0.55rem 0.45rem', textAlign: 'center' }}>{(t as any).orderItemCol || t.itemsCol}</th>
+            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>{(t as any).grossWtHeader || 'Gross Wt'}</th>
+            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>{(t as any).statusHeader || 'Status'}</th>
+            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>{(t as any).workerHeader || 'Worker'}</th>
+            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>{(t as any).returnFromWorkerCol || 'Return from Worker'}</th>
+            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>{(t as any).custPaidStatusCol || 'Cust Paid Status'}</th>
+            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>{(t as any).submittedToCustCol || 'Submitted to cust'}</th>
+            <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center' }}>{(t as any).infoCol || 'Info'}</th>
           </tr>
         </thead>
         <tbody>
