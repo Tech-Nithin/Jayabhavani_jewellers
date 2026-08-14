@@ -12,11 +12,11 @@ import { getTeluguTransliteration } from '../utils/transliterate';
 const toStartCase = (str: string): string =>
   str.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 
-const formatMax2Decimals = (val: number | string | undefined | null): string => {
+const formatMax3Decimals = (val: number | string | undefined | null): string => {
   if (val === undefined || val === null || val === '') return '0';
   const num = Number(val);
   if (isNaN(num)) return '0';
-  const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+  const rounded = Math.round((num + Number.EPSILON) * 1000) / 1000;
   return String(rounded);
 };
 
@@ -1699,7 +1699,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                           type="text"
                                           readOnly
                                           placeholder="0.000"
-                                          value={grossW > 0 ? formatMax2Decimals(netW) : ''}
+                                          value={grossW > 0 ? formatMax3Decimals(netW) : ''}
                                           style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.65rem', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', fontWeight: 700, color: '#15803d', fontSize: '0.85rem' }}
                                         />
                                         <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#15803d', pointerEvents: 'none' }}>
@@ -1735,7 +1735,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                       type="text"
                                       readOnly
                                       placeholder="0.000"
-                                      value={grossW > 0 ? formatMax2Decimals(totalWWithHmw) : ''}
+                                      value={grossW > 0 ? formatMax3Decimals(totalWWithHmw) : ''}
                                       style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fef3c7', fontWeight: 700, color: '#b45309', fontSize: '0.85rem' }}
                                     />
                                     <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#b45309', pointerEvents: 'none' }}>
@@ -1784,7 +1784,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                             type="text"
                                             readOnly
                                             placeholder="0.000"
-                                            value={grossW > 0 && purityPct > 0 ? formatMax2Decimals(pureW) : ''}
+                                            value={grossW > 0 && purityPct > 0 ? formatMax3Decimals(pureW) : ''}
                                             style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fffbeb', fontWeight: 700, color: '#d97706', fontSize: '0.85rem' }}
                                           />
                                           <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#d97706', pointerEvents: 'none' }}>
@@ -1893,7 +1893,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                                             type="text"
                                             readOnly
                                             placeholder="0.000"
-                                            value={grossW > 0 && retPurityPct > 0 ? formatMax2Decimals(calculatedRetPureG) : (it.return_pure_gold || '')}
+                                            value={grossW > 0 && retPurityPct > 0 ? formatMax3Decimals(calculatedRetPureG) : (it.return_pure_gold || '')}
                                             style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #ddd6fe', background: '#f5f3ff', fontWeight: 700, color: '#6d28d9', fontSize: '0.85rem' }}
                                           />
                                           <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', pointerEvents: 'none' }}>
