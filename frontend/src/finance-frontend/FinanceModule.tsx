@@ -610,7 +610,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       </div>
 
       {/* ── Loan Table ── */}
-      <div style={{ background: '#fff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', overflowX: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: '16px', padding: '1.25rem', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', overflowX: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
           <h3 style={{ margin: 0, fontSize: '1rem', color: '#181310', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
             <i className="fa-solid fa-table-list" style={{ color: '#d97706' }} />
@@ -896,7 +896,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 </select>
               </div>
             </div>
-            <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #eaecf0', background: '#f8fafc', color: '#475569' }}>
                 <th style={{ padding: '10px 12px' }}>{t.snCol}</th>
@@ -1107,6 +1108,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
               })}
             </tbody>
           </table>
+            </div>
           {/* Pagination Footer */}
           {filteredLedger.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
