@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { supabase } from '../../config/supabase';
+import { uploadFinanceImageToCloudinary } from '../../utils/cloudinaryHelper';
 
 const router = Router();
 const BUCKET = 'loan-item-images';
@@ -68,31 +69,14 @@ router.post('/upload-image', upload.single('image'), async (req: Request & { fil
   }
 
   try {
-    await ensureBucketExists();
     const ext = req.file.originalname.split('.').pop() || 'jpg';
     const fileName = `loan-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .upload(fileName, req.file.buffer, {
-        contentType: req.file.mimetype,
-        upsert: false,
-      });
-
-    if (error || !data) {
-      console.error('❌ Supabase Storage upload error:', JSON.stringify(error));
-      return res.status(500).json({
-        success: false,
-        message: `Storage upload failed: ${error?.message || 'Unknown Supabase error'}`,
-        detail: error,
-      });
-    }
-
-    const { data: publicUrlData } = supabase.storage.from(BUCKET).getPublicUrl(data.path);
-    res.json({ success: true, url: publicUrlData.publicUrl, path: data.path });
+    const cloudinaryUrl = await uploadFinanceImageToCloudinary(req.file.buffer, fileName);
+    res.json({ success: true, url: cloudinaryUrl, path: fileName });
   } catch (err: any) {
-    console.error('❌ Image upload exception:', err);
-    res.status(500).json({ success: false, message: `Image upload exception: ${err?.message || err}` });
+    console.error('❌ Cloudinary image upload exception:', err);
+    res.status(500).json({ success: false, message: `Image upload failed: ${err?.message || err}` });
   }
 });
 
