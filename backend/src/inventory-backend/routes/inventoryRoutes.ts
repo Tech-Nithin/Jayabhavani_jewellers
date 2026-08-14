@@ -9,10 +9,21 @@ const upload = multer({ storage: multer.memoryStorage() });
 // GET /api/inventory/products
 router.get('/products', async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
+    const { category } = req.query;
+
+    let queryBuilder = supabase
       .from('inventory_products')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
+    if (category && typeof category === 'string' && category.toLowerCase() !== 'all') {
+      let searchVal = category.trim();
+      if (searchVal.toLowerCase().endsWith('s') && searchVal.length > 3) {
+        searchVal = searchVal.slice(0, -1);
+      }
+      queryBuilder = queryBuilder.ilike('category', `%${searchVal}%`);
+    }
+
+    const { data, error } = await queryBuilder.order('created_at', { ascending: false });
 
     if (error) {
       console.warn('Supabase fetch error:', error.message);

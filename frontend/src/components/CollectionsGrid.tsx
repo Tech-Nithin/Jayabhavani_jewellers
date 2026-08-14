@@ -1,12 +1,21 @@
 import type { Collection } from '../types';
 import { collections } from '../data/products';
 
-function CollectionCard({ col }: { col: Collection }) {
+function CollectionCard({ col, onExplore }: { col: Collection; onExplore?: (id: string) => void }) {
+  const handleClick = (e: React.MouseEvent) => {
+    if (onExplore) {
+      e.preventDefault();
+      onExplore(col.id);
+    }
+  };
+
   return (
     <div
       className={`collection-card reveal${col.large ? ' large' : ''}`}
       id={col.id}
       tabIndex={0}
+      onClick={handleClick}
+      style={{ cursor: onExplore ? 'pointer' : 'default' }}
     >
       <div className="collection-img-wrap">
         <img
@@ -27,13 +36,17 @@ function CollectionCard({ col }: { col: Collection }) {
         <span className="collection-tag">{col.tag}</span>
         <h3 className="collection-name">{col.name}</h3>
         <p className="collection-count">{col.count}</p>
-        <a href={col.href} className="collection-cta">Explore →</a>
+        <a href={col.href} className="collection-cta" onClick={handleClick}>Explore →</a>
       </div>
     </div>
   );
 }
 
-export default function CollectionsGrid() {
+interface CollectionsGridProps {
+  onExplore?: (id: string) => void;
+}
+
+export default function CollectionsGrid({ onExplore }: CollectionsGridProps) {
   return (
     <section className="section collections-section" id="collections">
       <div className="container">
@@ -44,7 +57,7 @@ export default function CollectionsGrid() {
         </div>
         <div className="collections-grid">
           {collections.map((col: Collection) => (
-            <CollectionCard key={col.id} col={col} />
+            <CollectionCard key={col.id} col={col} onExplore={onExplore} />
           ))}
         </div>
       </div>

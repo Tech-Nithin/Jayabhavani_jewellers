@@ -241,12 +241,18 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED'>('ALL');
   const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
-  const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>('ALL');
+  const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>(worker?.id || 'ALL');
   const [workersList, setWorkersList] = useState<any[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   const isAll = worker?.id === 'ALL';
+
+  useEffect(() => {
+    if (worker?.id) {
+      setSelectedWorkerFilter(worker.id);
+    }
+  }, [worker?.id]);
 
   useEffect(() => {
     fetchWorkersList();
@@ -506,13 +512,11 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
         </div>
 
         {/* Assigned To Worker Modern Custom Dropdown (Keyboard Accessible & ONLY Worker Names) */}
-        {isAll && (
-          <ModernWorkerSelect
-            value={selectedWorkerFilter}
-            onChange={setSelectedWorkerFilter}
-            workers={workersList}
-          />
-        )}
+        <ModernWorkerSelect
+          value={selectedWorkerFilter}
+          onChange={setSelectedWorkerFilter}
+          workers={workersList}
+        />
 
         {/* Date Range Picker */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '4px 10px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>

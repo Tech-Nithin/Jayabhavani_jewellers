@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
+import productCardRoutes from './routes/productCardRoutes';
 
 // Modular backend domain routers
 import dashboardRoutes from './dashboard-backend/routes/dashboardRoutes';
@@ -69,6 +70,7 @@ app.use((req: Request, res: Response, next) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api', productRoutes);
+app.use('/api/product-card', productCardRoutes);
 
 // Modular 4 Domain Endpoints
 app.use('/api/dashboard', dashboardRoutes);
