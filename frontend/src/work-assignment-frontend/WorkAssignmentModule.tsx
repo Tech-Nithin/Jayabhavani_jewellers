@@ -101,9 +101,14 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
         setViewMode('LIST');
       }
 
-      if (wId && workers.length > 0) {
-        const found = workers.find((w) => w.id === wId);
-        if (found) setSelectedWorker(found);
+      if (wId) {
+        if (wId.toUpperCase() === 'ALL') {
+          setSelectedWorker({ id: 'ALL', name: 'All Workers' });
+        } else if (workers.length > 0) {
+          const found = workers.find((w) => w.id === wId);
+          if (found) setSelectedWorker(found);
+          else setSelectedWorker({ id: wId, name: wId });
+        }
       }
     };
 
@@ -155,10 +160,10 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
           onWorkerAdded={() => fetchData()}
           lang={lang}
         />
-      ) : viewMode === 'WORK_HISTORY' && selectedWorker ? (
+      ) : viewMode === 'WORK_HISTORY' ? (
         /* ── SUB-SCREEN 2: WORKER WORK HISTORY ── */
         <WorkerWorkHistoryView
-          worker={selectedWorker}
+          worker={selectedWorker || { id: 'ALL', name: 'All Workers' }}
           onBack={() => {
             setViewMode('LIST');
             setSelectedWorker(null);

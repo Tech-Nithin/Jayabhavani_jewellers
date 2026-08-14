@@ -516,11 +516,34 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         <div style={{ padding: '0.6rem 0.75rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
           <button
             type="button"
-            onClick={onBack}
-            style={{ width: '100%', padding: '4px 8px', marginBottom: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
-            title="Go to Worker Management list view"
+            onClick={() => {
+              const params = new URLSearchParams(window.location.search);
+              params.set('module', 'work-assignment');
+              params.set('view', 'work-history');
+              params.set('workerId', worker?.id || 'ALL');
+              window.location.search = params.toString();
+            }}
+            style={{
+              width: '100%',
+              padding: '6px 10px',
+              marginBottom: '8px',
+              borderRadius: '8px',
+              border: '1px solid #b45309',
+              background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+              color: '#ffffff',
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 6px rgba(180, 83, 9, 0.25)',
+              transition: 'all 0.15s ease',
+            }}
+            title="Go to Worker History"
           >
-            <i className="fa-solid fa-users-gears" style={{ color: '#d97706' }}></i> Worker Management
+            <i className="fa-solid fa-clock-rotate-left"></i> Worker History
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
