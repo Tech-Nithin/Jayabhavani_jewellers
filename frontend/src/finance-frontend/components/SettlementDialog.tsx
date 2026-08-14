@@ -20,7 +20,7 @@ export const SettlementDialog: React.FC<SettlementDialogProps> = ({
   submitting,
 }) => {
   const t = getFinanceTranslation(lang);
-  const [editableInterest, setEditableInterest] = useState(0);
+  const [editableInterest, setEditableInterest] = useState<number | string>(0);
 
   useEffect(() => {
     if (isOpen && record) {
@@ -75,7 +75,14 @@ export const SettlementDialog: React.FC<SettlementDialogProps> = ({
             <input
               type="number"
               value={editableInterest}
-              onChange={e => setEditableInterest(Number(e.target.value) || 0)}
+              onChange={e => {
+                const val = e.target.value;
+                if (val === '') {
+                  setEditableInterest('');
+                } else {
+                  setEditableInterest(Number(val));
+                }
+              }}
               style={{
                 width: '100%',
                 padding: '8px 12px 8px 30px',
@@ -110,7 +117,7 @@ export const SettlementDialog: React.FC<SettlementDialogProps> = ({
           <button
             type="button"
             disabled={submitting}
-            onClick={() => onConfirm(editableInterest)}
+            onClick={() => onConfirm(Number(editableInterest) || 0)}
             style={{ flex: 1, padding: '10px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
           >
             {submitting ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-check" />}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import type { LoanRecord, MetalRates } from './types';
 import { IssueNewLoanModal, DeleteConfirmDialog, SettlementDialog } from './components';
@@ -34,9 +34,32 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
   const [deleteConfirmRecord, setDeleteConfirmRecord] = useState<LoanRecord | null>(null);
   const [actionUpdating, setActionUpdating] = useState<string | null>(null);
 
+  // Custom Calendar state & refs for Date Filters
+  const [openStartCalendar, setOpenStartCalendar] = useState(false);
+  const [startCalendarViewDate, setStartCalendarViewDate] = useState<Date>(new Date());
+  const startCalendarDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [openEndCalendar, setOpenEndCalendar] = useState(false);
+  const [endCalendarViewDate, setEndCalendarViewDate] = useState<Date>(new Date());
+  const endCalendarDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => { setSearchTerm(globalSearch); }, [globalSearch]);
   useEffect(() => { fetchData(); fetchMetalRates(); }, []);
   useEffect(() => { setCurrentPage(1); }, [statusFilter, metalFilter, searchTerm, startDate, endDate]);
+
+  // Click outside listener for date range filters
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (startCalendarDropdownRef.current && !startCalendarDropdownRef.current.contains(e.target as Node)) {
+        setOpenStartCalendar(false);
+      }
+      if (endCalendarDropdownRef.current && !endCalendarDropdownRef.current.contains(e.target as Node)) {
+        setOpenEndCalendar(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
   const fetchMetalRates = async () => {
     try {
@@ -191,8 +214,11 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
     }, 0);
 
   // ── Pagination derived ──────────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(filteredLedger.length / pageSize));
-  const paginatedLedger = filteredLedger.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const sortedFilteredLedger = [...filteredLedger].sort((a, b) => {
+    return new Date(b.loan_date).getTime() - new Date(a.loan_date).getTime();
+  });
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredLedger.length / pageSize));
+  const paginatedLedger = sortedFilteredLedger.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div style={{ color: '#1e293b', fontFamily: "'Inter', 'DM Sans', sans-serif" }}>
@@ -210,11 +236,302 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', background: '#fff', padding: '0.4rem 0.75rem', borderRadius: '10px', border: '1px solid #e6decb' }}>
-            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>{t.fromLabel}</span>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ border: '1px solid #d4c7b8', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
-            <span style={{ fontSize: '0.72rem', color: '#786a5e' }}>{t.toLabel}</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ border: '1px solid #d4c7b8', borderRadius: '6px', padding: '0.3rem', fontSize: '0.78rem' }} />
+          {/* Custom From Date Calendar Selector */}
+          <div style={{ position: 'relative' }} ref={startCalendarDropdownRef}>
+            <div
+              onClick={() => { setOpenStartCalendar(!openStartCalendar); setOpenEndCalendar(false); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: '#ffffff',
+                padding: '6px 14px',
+                borderRadius: '12px',
+                border: openStartCalendar ? '1.5px solid #f59e0b' : '1px solid #cbd5e1',
+                boxShadow: openStartCalendar ? '0 0 0 3px rgba(245, 158, 11, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                userSelect: 'none',
+              }}
+            >
+              <i className="fa-solid fa-calendar-days" style={{ color: '#b45309', fontSize: '0.8rem' }} />
+              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>{t.fromLabel}</span>
+              <span style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: 700 }}>{startDate || 'Select'}</span>
+              <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.68rem', color: '#64748b', transform: openStartCalendar ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: '4px' }} />
+            </div>
+
+            {openStartCalendar && (
+              <div style={{
+                position: 'absolute',
+                top: '110%',
+                right: 0,
+                width: '280px',
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1.5px solid #f59e0b',
+                boxShadow: '0 14px 36px rgba(0, 0, 0, 0.16)',
+                padding: '1rem',
+                zIndex: 155,
+              }}>
+                {/* Month / Year Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setStartCalendarViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                    style={{ background: '#fef3c7', border: 'none', color: '#b45309', width: '28px', height: '28px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+                  >
+                    <i className="fa-solid fa-chevron-left" style={{ fontSize: '0.75rem' }} />
+                  </button>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+                    {startCalendarViewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setStartCalendarViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+                    style={{ background: '#fef3c7', border: 'none', color: '#b45309', width: '28px', height: '28px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+                  >
+                    <i className="fa-solid fa-chevron-right" style={{ fontSize: '0.75rem' }} />
+                  </button>
+                </div>
+
+                {/* Day Headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '4px' }}>
+                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                    <span key={day} style={{ fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8' }}>{day}</span>
+                  ))}
+                </div>
+
+                {/* Days Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                  {(() => {
+                    const year = startCalendarViewDate.getFullYear();
+                    const month = startCalendarViewDate.getMonth();
+                    const firstDay = new Date(year, month, 1).getDay();
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    const grid = [];
+
+                    for (let i = 0; i < firstDay; i++) {
+                      grid.push(<div key={`blank-${i}`} />);
+                    }
+
+                    for (let day = 1; day <= daysInMonth; day++) {
+                      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const isSelected = startDate === dateStr;
+                      const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+                      grid.push(
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            setStartDate(dateStr);
+                            setOpenStartCalendar(false);
+                          }}
+                          style={{
+                            height: '32px',
+                            width: '100%',
+                            borderRadius: '8px',
+                            border: isToday && !isSelected ? '1px solid #f59e0b' : 'none',
+                            background: isSelected ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : isToday ? '#fffbeb' : 'transparent',
+                            color: isSelected ? '#ffffff' : isToday ? '#b45309' : '#1e293b',
+                            fontWeight: isSelected || isToday ? 800 : 500,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#fef3c7'; }}
+                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isToday ? '#fffbeb' : 'transparent'; }}
+                        >
+                          {day}
+                        </button>
+                      );
+                    }
+                    return grid;
+                  })()}
+                </div>
+
+                {/* Footer Controls */}
+                <div style={{ marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        setStartDate(todayStr);
+                        setStartCalendarViewDate(new Date());
+                        setOpenStartCalendar(false);
+                      }}
+                      style={{ padding: '4px 10px', background: '#fef3c7', border: 'none', borderRadius: '6px', fontSize: '0.72rem', color: '#b45309', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      Set Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStartDate('');
+                        setOpenStartCalendar(false);
+                      }}
+                      style={{ padding: '4px 10px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontSize: '0.72rem', color: '#64748b', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Selected: <strong>{startDate || 'None'}</strong></span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Custom To Date Calendar Selector */}
+          <div style={{ position: 'relative' }} ref={endCalendarDropdownRef}>
+            <div
+              onClick={() => { setOpenEndCalendar(!openEndCalendar); setOpenStartCalendar(false); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: '#ffffff',
+                padding: '6px 14px',
+                borderRadius: '12px',
+                border: openEndCalendar ? '1.5px solid #f59e0b' : '1px solid #cbd5e1',
+                boxShadow: openEndCalendar ? '0 0 0 3px rgba(245, 158, 11, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                userSelect: 'none',
+              }}
+            >
+              <i className="fa-solid fa-calendar-days" style={{ color: '#b45309', fontSize: '0.8rem' }} />
+              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>{t.toLabel}</span>
+              <span style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: 700 }}>{endDate || 'Select'}</span>
+              <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.68rem', color: '#64748b', transform: openEndCalendar ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: '4px' }} />
+            </div>
+
+            {openEndCalendar && (
+              <div style={{
+                position: 'absolute',
+                top: '110%',
+                right: 0,
+                width: '280px',
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1.5px solid #f59e0b',
+                boxShadow: '0 14px 36px rgba(0, 0, 0, 0.16)',
+                padding: '1rem',
+                zIndex: 155,
+              }}>
+                {/* Month / Year Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setEndCalendarViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                    style={{ background: '#fef3c7', border: 'none', color: '#b45309', width: '28px', height: '28px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+                  >
+                    <i className="fa-solid fa-chevron-left" style={{ fontSize: '0.75rem' }} />
+                  </button>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+                    {endCalendarViewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEndCalendarViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+                    style={{ background: '#fef3c7', border: 'none', color: '#b45309', width: '28px', height: '28px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+                  >
+                    <i className="fa-solid fa-chevron-right" style={{ fontSize: '0.75rem' }} />
+                  </button>
+                </div>
+
+                {/* Day Headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '4px' }}>
+                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                    <span key={day} style={{ fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8' }}>{day}</span>
+                  ))}
+                </div>
+
+                {/* Days Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                  {(() => {
+                    const year = endCalendarViewDate.getFullYear();
+                    const month = endCalendarViewDate.getMonth();
+                    const firstDay = new Date(year, month, 1).getDay();
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    const grid = [];
+
+                    for (let i = 0; i < firstDay; i++) {
+                      grid.push(<div key={`blank-${i}`} />);
+                    }
+
+                    for (let day = 1; day <= daysInMonth; day++) {
+                      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const isSelected = endDate === dateStr;
+                      const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+                      grid.push(
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            setEndDate(dateStr);
+                            setOpenEndCalendar(false);
+                          }}
+                          style={{
+                            height: '32px',
+                            width: '100%',
+                            borderRadius: '8px',
+                            border: isToday && !isSelected ? '1px solid #f59e0b' : 'none',
+                            background: isSelected ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : isToday ? '#fffbeb' : 'transparent',
+                            color: isSelected ? '#ffffff' : isToday ? '#b45309' : '#1e293b',
+                            fontWeight: isSelected || isToday ? 800 : 500,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#fef3c7'; }}
+                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isToday ? '#fffbeb' : 'transparent'; }}
+                        >
+                          {day}
+                        </button>
+                      );
+                    }
+                    return grid;
+                  })()}
+                </div>
+
+                {/* Footer Controls */}
+                <div style={{ marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        setEndDate(todayStr);
+                        setEndCalendarViewDate(new Date());
+                        setOpenEndCalendar(false);
+                      }}
+                      style={{ padding: '4px 10px', background: '#fef3c7', border: 'none', borderRadius: '6px', fontSize: '0.72rem', color: '#b45309', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      Set Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEndDate('');
+                        setOpenEndCalendar(false);
+                      }}
+                      style={{ padding: '4px 10px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontSize: '0.72rem', color: '#64748b', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Selected: <strong>{endDate || 'None'}</strong></span>
+                </div>
+              </div>
+            )}
           </div>
 
           <button
@@ -335,11 +652,13 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
           </div>
 
           {/* Status Filter Toggle Group */}
-          <div style={{ display: 'flex', background: '#f1f5f9', padding: '3px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', background: '#f1f5f9', padding: '3px', borderRadius: '10px', border: '1px solid #e2e8f0', width: '100%' }}>
             <button
               type="button"
               onClick={() => setStatusFilter('all')}
               style={{
+                flex: 1,
+                justifyContent: 'center',
                 padding: '5px 14px',
                 borderRadius: '8px',
                 border: 'none',
@@ -362,6 +681,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
               type="button"
               onClick={() => setStatusFilter('pending')}
               style={{
+                flex: 1,
+                justifyContent: 'center',
                 padding: '5px 14px',
                 borderRadius: '8px',
                 border: 'none',
@@ -384,6 +705,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
               type="button"
               onClick={() => setStatusFilter('completed')}
               style={{
+                flex: 1,
+                justifyContent: 'center',
                 padding: '5px 14px',
                 borderRadius: '8px',
                 border: 'none',
@@ -406,6 +729,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
               type="button"
               onClick={() => setStatusFilter('overdue')}
               style={{
+                flex: 1,
+                justifyContent: 'center',
                 padding: '5px 14px',
                 borderRadius: '8px',
                 border: 'none',
@@ -428,6 +753,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
               type="button"
               onClick={() => setStatusFilter('deleted')}
               style={{
+                flex: 1,
+                justifyContent: 'center',
                 padding: '5px 14px',
                 borderRadius: '8px',
                 border: 'none',
