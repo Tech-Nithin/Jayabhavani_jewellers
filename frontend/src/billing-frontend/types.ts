@@ -33,6 +33,7 @@ export interface BillItem {
   item_length_inches?: string | number;
   return_purity_percentage?: number | string;
   return_pure_gold?: number | string;
+  image_url?: string;
 }
 
 export interface InvoiceRecord {
@@ -65,6 +66,7 @@ export interface InvoiceRecord {
   return_purity_percentage?: number;
   return_pure_gold?: number;
   receipt_json_data?: any;
+  image_url?: string;
   created_at: string;
   updated_at?: string;
 }

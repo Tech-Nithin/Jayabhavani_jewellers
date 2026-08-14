@@ -44,6 +44,7 @@ export interface OrderItem {
   gst_amount?: number;
   final_amount?: number;
   receipt_json_data?: any;
+  image_url?: string;
   assigned_worker_id: string | null;
   assigned_worker_name: string | null;
   created_at: string;
@@ -140,6 +141,7 @@ router.post('/orders', async (req: Request, res: Response) => {
       final_amount,
       receipt_json_data,
       submitted,
+      image_url,
     } = req.body;
 
     const gross = Number(gross_weight_grams) || 0;
@@ -150,6 +152,8 @@ router.post('/orders', async (req: Request, res: Response) => {
     const hmwW = Number(hmw_weight) || Number(((gross * hmwPct) / 100).toFixed(3));
     const retPurity = Number(return_purity_percentage) || 0;
     const retPureG = Number(return_pure_gold) || Number(((net * retPurity) / 100).toFixed(3));
+
+    const finalImageUrl = image_url || receipt_json_data?.image_url || receipt_json_data?.items?.[0]?.image_url || '';
 
     const newOrder: OrderItem = {
       id: generateOrderId(),
@@ -185,6 +189,7 @@ router.post('/orders', async (req: Request, res: Response) => {
       gst_amount: Number(gst_amount) || 0,
       final_amount: Number(final_amount) || 0,
       receipt_json_data: receipt_json_data || null,
+      image_url: finalImageUrl,
       assigned_worker_id: null,
       assigned_worker_name: null,
       created_at: new Date().toISOString(),
@@ -198,6 +203,14 @@ router.post('/orders', async (req: Request, res: Response) => {
       if (!dbErr && dbOrder) {
         return res.json({ success: true, message: 'Order created & stored in database successfully!', order: dbOrder });
       } else if (dbErr) {
+        if (dbErr.code === 'PGRST204' || dbErr.message?.includes('image_url')) {
+          // If image_url column doesn't exist yet in Supabase table schema, fallback gracefully
+          const { image_url: _, ...fallbackPayload } = dbPayload;
+          const { data: retryData, error: retryErr } = await supabase.from('orders').insert([fallbackPayload]).select('*').single();
+          if (!retryErr && retryData) {
+            return res.json({ success: true, message: 'Order created & stored in database successfully!', order: { ...retryData, image_url: finalImageUrl } });
+          }
+        }
         console.error('❌ Supabase orders insert error:', dbErr.message, dbErr.details, dbErr.hint);
         return res.status(500).json({
           success: false,

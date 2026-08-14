@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { getWorkAssignmentTranslation, type Language } from './workAssignmentTranslations';
+import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
 
 interface SellingDetailsTableProps {
   invoices: any[];
@@ -17,6 +18,7 @@ export const SellingDetailsTable: React.FC<SellingDetailsTableProps> = ({
   lang = 'EN',
 }) => {
   const t = getWorkAssignmentTranslation(lang);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
 
   const filtered = invoices.filter((item) => {
     const q = searchTerm.toLowerCase();
@@ -86,30 +88,65 @@ export const SellingDetailsTable: React.FC<SellingDetailsTableProps> = ({
   const getProductDisplay = (inv: any) => {
     const items: any[] = inv.receipt_json_data?.items || [];
     const sellItems = items.filter((i: any) => (i.item_type || 'SELL').toUpperCase() === 'SELL');
+    const primaryImg = inv.image_url || inv.receipt_json_data?.image_url || sellItems[0]?.image_url || items[0]?.image_url || '';
 
     if (sellItems.length > 0) {
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {sellItems.map((item: any, i: number) => {
-            const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
-            const pName = item.product_name || `${itemMetal} Item`;
-            return (
-              <div key={i} style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center' }}>
-                <span style={getMetalBadgeStyle(itemMetal)}>{itemMetal}</span>&nbsp;
-                <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
-              </div>
-            );
-          })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          {primaryImg ? (
+            <img
+              src={primaryImg}
+              alt={inv.product_name || inv.item_name || 'Item'}
+              onClick={() => setPreviewImage({ url: primaryImg, title: inv.product_name || inv.item_name || 'Ornament Design' })}
+              title="Click to enlarge image"
+              style={{ width: '44px', height: '44px', borderRadius: '10px', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', flexShrink: 0, cursor: 'pointer', transition: 'transform 0.15s ease' }}
+              onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+            />
+          ) : (
+            <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+              <i className="fa-solid fa-gem" style={{ color: '#d97706' }} />
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {sellItems.map((item: any, i: number) => {
+              const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
+              const pName = item.product_name || `${itemMetal} Item`;
+              return (
+                <div key={i} style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                  <span style={getMetalBadgeStyle(itemMetal)}>{itemMetal}</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{pName}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       );
     }
 
     const metal = (inv.metal_type || 'GOLD').toUpperCase();
-    const name = inv.product_name || 'Jewelry Item';
+    const name = inv.product_name || inv.item_name || 'Jewelry Item';
     return (
-      <div style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center' }}>
-        <span style={getMetalBadgeStyle(metal)}>{metal}</span>&nbsp;
-        <span style={{ fontWeight: 600, color: '#0f172a' }}>{name}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+        {primaryImg ? (
+          <img
+            src={primaryImg}
+            alt={name}
+            onClick={() => setPreviewImage({ url: primaryImg, title: name })}
+            title="Click to enlarge image"
+            style={{ width: '44px', height: '44px', borderRadius: '10px', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', flexShrink: 0, cursor: 'pointer', transition: 'transform 0.15s ease' }}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+          />
+        ) : (
+          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+            <i className="fa-solid fa-gem" style={{ color: '#d97706' }} />
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={getMetalBadgeStyle(metal)}>{metal}</span>
+          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.8rem' }}>{name}</span>
+        </div>
       </div>
     );
   };
@@ -293,6 +330,14 @@ export const SellingDetailsTable: React.FC<SellingDetailsTableProps> = ({
           )}
         </tbody>
       </table>
+
+      {previewImage && (
+        <FullImagePreviewModal
+          imageUrl={previewImage.url}
+          title={previewImage.title}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
     </div>
   );
 };

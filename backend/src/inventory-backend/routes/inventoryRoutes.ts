@@ -217,13 +217,15 @@ router.post('/products', async (req: Request, res: Response) => {
 });
 
 // POST /api/inventory/upload-cloudinary (Supports direct binary WebP file via multipart/form-data or legacy payload)
-router.post('/upload-cloudinary', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/upload-cloudinary', upload.any(), async (req: Request, res: Response) => {
   try {
-    if (req.file) {
-      console.log(`📤 Uploading direct binary WebP file (${req.file.size} bytes) to Cloudinary...`);
+    const files = req.files as Express.Multer.File[];
+    if (files && files.length > 0) {
+      const file = files[0];
+      console.log(`📤 Uploading direct binary WebP file (${file.size} bytes) to Cloudinary...`);
       const url = await uploadToCloudinaryFile(
-        req.file.buffer,
-        req.file.originalname || `inv_${Date.now()}.webp`,
+        file.buffer,
+        file.originalname || `inv_${Date.now()}.webp`,
         'inventory_products'
       );
       return res.json({ success: true, url });

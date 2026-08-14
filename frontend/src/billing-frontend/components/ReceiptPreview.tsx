@@ -450,7 +450,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <span style={{ fontWeight: 700 }}>Quantity & Unit:</span>
                     <strong>
                       {it.quantity_value || 1} {it.quantity_unit === 'PAIRS' ? 'Pairs' : it.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}
-                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + '"'})` : ''}
+                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + ' inches'})` : ''}
                     </strong>
                   </div>
 
@@ -633,8 +633,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             </>
           )}
 
-          {/* Payment Breakdown (Paid vs Balance Due) */}
-          {(advancePaidAmount !== undefined || balanceDueAmount !== undefined) && (
+          {/* Payment Breakdown (Paid vs Balance Due) - Shown ONLY when customer owes money to store */}
+          {mode !== 'BUY' && totalSellValue >= totalBuyCredit && (advancePaidAmount !== undefined || balanceDueAmount !== undefined) && (
             <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #cbd5e1', fontSize: '0.72rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a', fontWeight: 700 }}>
                 <span>{lang === 'TE' ? 'చెల్లించిన మొత్తం' : 'Amount Paid'}:</span>
@@ -650,7 +650,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           )}
 
           {/* Payment History List (Installments) */}
-          {paymentHistory && paymentHistory.length > 0 && (
+          {mode !== 'BUY' && totalSellValue >= totalBuyCredit && paymentHistory && paymentHistory.length > 0 && (
             <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #cbd5e1', fontSize: '0.68rem' }}>
               <div style={{ fontWeight: 800, color: '#334155', marginBottom: '3px' }}>
                 Payment History (Installments):

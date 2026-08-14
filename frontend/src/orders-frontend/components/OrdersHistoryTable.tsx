@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { OrderItem } from '../types';
 import { translations, type Language } from '../../utils/translations';
 import { getOrdersTranslation } from '../ordersTranslations';
+import { FullImagePreviewModal } from '../../inventory-frontend/components/FullImagePreviewModal';
 
 interface OrdersHistoryTableProps {
   orders: OrderItem[];
@@ -40,8 +41,11 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
   onViewOrderDetails,
 }) => {
   const t = getOrdersTranslation(lang);
+  const commonT = translations[lang] || translations.EN;
+  void commonT;
   const [activeDropdownOrderId, setActiveDropdownOrderId] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
 
   const [returnDateModal, setReturnDateModal] = useState<{
     open: boolean;
@@ -119,20 +123,47 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
                   </div>
                 </td>
                 <td style={{ padding: '0.55rem 0.5rem' }}>
-                  <div style={{ marginTop: '2px' }}>
-                    <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: ord.metal_type === 'GOLD' ? '#fef3c7' : '#e0f2fe', color: ord.metal_type === 'GOLD' ? '#b45309' : '#0369a1' }}>
-                      {ord.metal_type}
-                    </span>
-                  </div>
-                  <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.78rem' }}>
-                    {ord.item_name}
-                    {(ord.quantity_value || ord.item_length_inches) && (
-                      <span style={{ fontSize: '0.68rem', color: '#6366f1', marginLeft: '5px', fontWeight: 700 }}>
-                        ({ord.quantity_value ? `${ord.quantity_value} ${ord.quantity_unit === 'PAIRS' ? 'Pairs' : ord.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}` : ''}
-                        {ord.item_length_inches ? `${ord.quantity_value ? ', ' : ''}L: ${ord.item_length_inches.toString().endsWith('"') ? ord.item_length_inches : ord.item_length_inches + '"'}` : ''})
-                      </span>
-                    )}
-                  </div>
+                  {(() => {
+                    const itemImg = ord.image_url || (ord as any).receipt_json_data?.image_url || (ord as any).receipt_json_data?.items?.[0]?.image_url || '';
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        {itemImg ? (
+                          <img
+                            src={itemImg}
+                            alt={ord.item_name}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewImage({ url: itemImg, title: `${ord.customer_name} - ${ord.item_name}` });
+                            }}
+                            title="Click to enlarge image"
+                            style={{ width: '44px', height: '44px', borderRadius: '10px', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', flexShrink: 0, cursor: 'pointer', transition: 'transform 0.15s ease' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                          />
+                        ) : (
+                          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+                            <i className="fa-solid fa-gem" style={{ color: '#d97706' }} />
+                          </div>
+                        )}
+                        <div>
+                          <div>
+                            <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: ord.metal_type === 'GOLD' ? '#fef3c7' : '#e0f2fe', color: ord.metal_type === 'GOLD' ? '#b45309' : '#0369a1' }}>
+                              {ord.metal_type}
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.78rem' }}>
+                            {ord.item_name}
+                            {(ord.quantity_value || ord.item_length_inches) && (
+                              <span style={{ fontSize: '0.68rem', color: '#6366f1', marginLeft: '5px', fontWeight: 700 }}>
+                                ({ord.quantity_value ? `${ord.quantity_value} ${ord.quantity_unit === 'PAIRS' ? 'Pairs' : ord.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}` : ''}
+                                {ord.item_length_inches ? `${ord.quantity_value ? ', ' : ''}L: ${ord.item_length_inches.toString().endsWith('"') ? ord.item_length_inches : ord.item_length_inches + '"'}` : ''})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </td>
                 <td style={{ padding: '0.55rem 0.5rem' }}>
                   <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.76rem' }}>{ord.gross_weight_grams} g</div>
@@ -538,6 +569,14 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {/* FULL IMAGE PREVIEW MODAL */}
+      {previewImage && (
+        <FullImagePreviewModal
+          imageUrl={previewImage.url}
+          title={previewImage.title}
+          onClose={() => setPreviewImage(null)}
+        />
       )}
     </div>
   );

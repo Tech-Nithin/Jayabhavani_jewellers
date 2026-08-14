@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
 import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
+import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
 
 interface ModernSelectProps {
   value: string;
@@ -239,6 +240,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED'>('ALL');
+  const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
   const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>('ALL');
   const [workersList, setWorkersList] = useState<any[]>([]);
   const [startDate, setStartDate] = useState('');
@@ -355,7 +357,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
             </h2>
             <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
               {isAll ? (
-                <span>Showing custom order assignments across all registered artisans</span>
+                <span>Showing custom order assignments across all registered workers</span>
               ) : (
                 <span>Worker ID: <strong style={{ color: '#0284c7' }}>{worker.id}</strong> &nbsp;·&nbsp; {worker.specialization}</span>
               )}
@@ -450,7 +452,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
         {/* Active Artisans Card */}
         <div
           onClick={() => setStatusFilter('ALL')}
-          title="Click to show all artisans"
+          title="Click to show all workers"
           style={{
             background: '#f0f9ff',
             padding: '0.65rem 0.75rem',
@@ -467,7 +469,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
             <i className="fa-solid fa-users-gears"></i>
           </div>
           <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-            <span style={{ fontSize: '0.60rem', color: '#0369a1', fontWeight: 800, display: 'block', textTransform: 'uppercase' }}>Artisans</span>
+            <span style={{ fontSize: '0.60rem', color: '#0369a1', fontWeight: 800, display: 'block', textTransform: 'uppercase' }}>Workers</span>
             <strong style={{ fontSize: '1.1rem', color: '#075985', fontWeight: 800 }}>{activeWorkersCount}</strong>
           </div>
         </div>
@@ -594,11 +596,35 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>{ord.customer_name}</div>
                       <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{ord.customer_phone || '—'}</div>
                     </td>
-                    <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{ord.item_name}</div>
-                      <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: ord.metal_type === 'GOLD' ? '#fef3c7' : '#e0f2fe', color: ord.metal_type === 'GOLD' ? '#b45309' : '#0369a1' }}>
-                        {ord.metal_type}
-                      </span>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>
+                      {(() => {
+                        const itemImg = ord.image_url || ord.receipt_json_data?.image_url || ord.receipt_json_data?.items?.[0]?.image_url || '';
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                            {itemImg ? (
+                              <img
+                                src={itemImg}
+                                alt={ord.item_name}
+                                onClick={() => setPreviewImage({ url: itemImg, title: ord.item_name })}
+                                title="Click to enlarge image"
+                                style={{ width: '44px', height: '44px', borderRadius: '10px', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', flexShrink: 0, cursor: 'pointer', transition: 'transform 0.15s ease' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                              />
+                            ) : (
+                              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+                                <i className="fa-solid fa-gem" style={{ color: '#d97706' }} />
+                              </div>
+                            )}
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.82rem' }}>{ord.item_name}</div>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: ord.metal_type === 'GOLD' ? '#fef3c7' : '#e0f2fe', color: ord.metal_type === 'GOLD' ? '#b45309' : '#0369a1' }}>
+                                {ord.metal_type}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>{ord.gross_weight_grams} g</div>
@@ -629,6 +655,14 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
             </tbody>
           </table>
         </div>
+      )}
+
+      {previewImage && (
+        <FullImagePreviewModal
+          imageUrl={previewImage.url}
+          title={previewImage.title}
+          onClose={() => setPreviewImage(null)}
+        />
       )}
     </div>
   );
