@@ -1,8 +1,18 @@
 const shopLinks = ['Rings', 'Necklaces', 'Earrings', 'Bangles', 'Bridal Sets', 'New Arrivals'];
-const careLinks = ['Size Guide', 'Jewellery Care', 'Exchange', 'Shipping Policy', 'Track Your Order', 'Contact Us'];
-const aboutLinks = ['Our Story', 'Certifications', 'Store Locator', 'Press & Media', 'Careers', 'Blog'];
+const careLinks = ['Size Guide', 'Jewellery Care', 'Exchange', 'Shipping Policy', 'Contact Us'];
 
-export default function Footer() {
+const aboutLinks = [
+  { label: 'Collections', href: '#collections', view: 'store' as const },
+  { label: 'Gold', href: '?view=gold', view: 'gold' as const },
+  { label: 'Silver', href: '?view=silver', view: 'silver' as const },
+  { label: 'Our Story', href: '#about', view: 'store' as const },
+];
+
+interface FooterProps {
+  onNavigate?: (view: 'store' | 'gold' | 'silver', href?: string) => void;
+}
+
+export default function Footer({ onNavigate }: FooterProps) {
   return (
     <footer className="footer">
       <div className="footer-top">
@@ -46,16 +56,21 @@ export default function Footer() {
         </div>
         <div className="footer-links-group">
           <h4 className="footer-group-title">About Jaya Bhavani</h4>
-          {aboutLinks.map(l => <a key={l} href="#" className="footer-link">{l}</a>)}
-        </div>
-      </div>
-
-      <div className="footer-bottom">
-        <p className="footer-copy">© 2025 Jaya Bhavani  Jewellery. All rights reserved.</p>
-        <div className="footer-legal">
-          <a href="#" className="footer-legal-link">Privacy Policy</a>
-          <a href="#" className="footer-legal-link">Terms of Service</a>
-          <a href="#" className="footer-legal-link">Sitemap</a>
+          {aboutLinks.map(l => (
+            <a
+              key={l.label}
+              href={l.href}
+              onClick={(e) => {
+                if (onNavigate) {
+                  e.preventDefault();
+                  onNavigate(l.view, l.href);
+                }
+              }}
+              className="footer-link"
+            >
+              {l.label}
+            </a>
+          ))}
         </div>
       </div>
     </footer>

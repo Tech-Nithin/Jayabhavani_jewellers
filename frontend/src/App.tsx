@@ -327,7 +327,18 @@ function AppContent() {
         </main>
       )}
 
-      <Footer />
+      <Footer onNavigate={(view, href) => {
+        handleNavigateView(view);
+        if (href && href.startsWith('#')) {
+          const targetId = href.substring(1);
+          setTimeout(() => {
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+              targetEl.scrollIntoView({ behavior: 'smooth' });
+            }
+          }, 300);
+        }
+      }} />
       <CartDrawer />
       <Toast />
       <BackToTop />
