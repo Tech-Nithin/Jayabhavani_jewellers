@@ -51,6 +51,7 @@ function AppContent() {
   const [authOpen, setAuthOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [currentView, setCurrentView] = useState<'store' | 'dashboard' | 'gold' | 'silver'>('store');
+  const [goldCategory, setGoldCategory] = useState<string>('all');
   const [verifyingSession, setVerifyingSession] = useState(true);
 
   // Handle Chrome Swipe Back/Forward Gestures & Browser Back/Forward buttons (popstate)
@@ -72,6 +73,9 @@ function AppContent() {
         }
       } else if (viewParam === 'gold' || viewParam === 'silver') {
         setCurrentView(viewParam);
+        if (viewParam === 'gold') {
+          setGoldCategory('all');
+        }
         setAuthOpen(false);
       } else {
         setCurrentView('store');
@@ -191,12 +195,31 @@ function AppContent() {
     );
   }
 
-  const handleNavigateView = (view: 'store' | 'gold' | 'silver') => {
+  const mapSectionOrColToCategory = (id: string): string => {
+    const clean = id.replace('col-', '');
+    switch (clean) {
+      case 'rings': return 'ring';
+      case 'necklaces': return 'necklace';
+      case 'earrings': return 'earrings';
+      case 'nosepins': return 'nosepin';
+      default: return 'all';
+    }
+  };
+
+  const handleViewAllSection = (sectionId: string) => {
+    const category = mapSectionOrColToCategory(sectionId);
+    handleNavigateView('gold', category);
+  };
+
+  const handleNavigateView = (view: 'store' | 'gold' | 'silver', category: string = 'all') => {
     setCurrentView(view);
     if (view === 'store') {
       window.history.pushState(null, '', window.location.pathname);
     } else {
       window.history.pushState(null, '', `?view=${view}`);
+    }
+    if (view === 'gold') {
+      setGoldCategory(category);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -238,14 +261,17 @@ function AppContent() {
       />
 
       {currentView === 'gold' ? (
-        <GoldPage onBackToStore={() => handleNavigateView('store')} />
+        <GoldPage onBackToStore={() => handleNavigateView('store')} initialCategory={goldCategory} />
       ) : currentView === 'silver' ? (
         <SilverPage onBackToStore={() => handleNavigateView('store')} />
       ) : (
         <main>
           <Hero />
           <TrustStrip />
-          <CollectionsGrid />
+          <CollectionsGrid onExplore={(colId) => {
+            const category = mapSectionOrColToCategory(colId);
+            handleNavigateView('gold', category);
+          }} />
 
           {/* Rings */}
           <ProductSection
@@ -255,6 +281,7 @@ function AppContent() {
             desc="From solitaire to eternity bands — every ring is a promise"
             products={rings}
             viewAllLabel="View All Rings"
+            onViewAll={handleViewAllSection}
           />
 
           <MarqueeStrip />
@@ -268,6 +295,7 @@ function AppContent() {
             products={necklaces}
             alt
             viewAllLabel="View All Necklaces"
+            onViewAll={handleViewAllSection}
           />
 
           {/* Earrings */}
@@ -278,6 +306,7 @@ function AppContent() {
             desc="From subtle studs to grand chandeliers"
             products={earrings}
             viewAllLabel="View All Earrings"
+            onViewAll={handleViewAllSection}
           />
 
           {/* Nose Pins */}
@@ -289,6 +318,7 @@ function AppContent() {
             products={nosepins}
             alt
             viewAllLabel="View All Nose Pins"
+            onViewAll={handleViewAllSection}
           />
 
           <AboutSection />

@@ -9,10 +9,11 @@ interface ProductSectionProps {
   products: Product[];
   alt?: boolean;
   viewAllLabel?: string;
+  onViewAll?: (id: string) => void;
 }
 
 export default function ProductSection({
-  id, tag, title, desc, products, alt = false, viewAllLabel = 'View All',
+  id, tag, title, desc, products, alt = false, viewAllLabel = 'View All', onViewAll,
 }: ProductSectionProps) {
   return (
     <section className={`section products-section${alt ? ' products-alt' : ''}`} id={id}>
@@ -26,7 +27,18 @@ export default function ProductSection({
           {products.map(p => <ProductCard key={p.id} product={p} />)}
         </div>
         <div className="section-footer">
-          <a href="#" className="btn btn-outline">{viewAllLabel}</a>
+          <a
+            href="#"
+            className="btn btn-outline"
+            onClick={(e) => {
+              if (onViewAll) {
+                e.preventDefault();
+                onViewAll(id);
+              }
+            }}
+          >
+            {viewAllLabel}
+          </a>
         </div>
       </div>
     </section>

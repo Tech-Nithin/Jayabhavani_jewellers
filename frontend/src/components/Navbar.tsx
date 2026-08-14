@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useCart } from '../context/CartContext';
 
 interface NavbarProps {
   onSearchOpen: () => void;
@@ -9,8 +8,7 @@ interface NavbarProps {
   user?: { name: string; email: string } | null;
 }
 
-export default function Navbar({ onSearchOpen, onAuthOpen, onNavigate, currentView: _currentView, user }: NavbarProps) {
-  const { cartCount, wishlistCount, openCart } = useCart();
+export default function Navbar({ onSearchOpen: _onSearchOpen, onAuthOpen, onNavigate, currentView: _currentView, user }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -20,10 +18,21 @@ export default function Navbar({ onSearchOpen, onAuthOpen, onNavigate, currentVi
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleNavClick = (view: 'store' | 'gold' | 'silver', _href: string, e: React.MouseEvent) => {
+  const handleNavClick = (view: 'store' | 'gold' | 'silver', href: string, e: React.MouseEvent) => {
     if (onNavigate && (view === 'gold' || view === 'silver' || view === 'store')) {
       e.preventDefault();
       onNavigate(view);
+
+      if (view === 'store' && href.startsWith('#')) {
+        const targetId = href.substring(1);
+        const delay = (_currentView || 'store') === 'store' ? 0 : 300;
+        setTimeout(() => {
+          const targetEl = document.getElementById(targetId);
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, delay);
+      }
     }
   };
 
@@ -79,30 +88,7 @@ export default function Navbar({ onSearchOpen, onAuthOpen, onNavigate, currentVi
             <span /><span /><span />
           </button>
 
-          {/* Search */}
-          <button className="nav-icon" id="search-btn" aria-label="Search" onClick={onSearchOpen}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-          </button>
 
-          {/* Wishlist */}
-          <button className="nav-icon" id="wishlist-btn" aria-label="Wishlist">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-            {wishlistCount > 0 && <span className="badge" id="wishlist-badge">{wishlistCount}</span>}
-          </button>
-
-          {/* Cart */}
-          <button className="nav-icon" id="cart-btn" aria-label="Cart" onClick={openCart}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <path d="M16 10a4 4 0 0 1-8 0" />
-            </svg>
-            {cartCount > 0 && <span className="badge" id="cart-badge">{cartCount}</span>}
-          </button>
 
           {/* Sign In / Account */}
           <button

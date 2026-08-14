@@ -15,11 +15,29 @@ export const goldProducts: Product[] = [
   { id: 'g8', name: '24K Gold Bullion Coin (10g)', category: '24K Gold Bullion', price: 147000, oldPrice: null, badge: 'hot', img: '/images/collection-rings.jpg', color: '#d4b8a0' },
 ];
 
+const areCategoriesMatching = (selCat: string, prodCat: string): boolean => {
+  const sel = selCat.toLowerCase().trim();
+  const prod = prodCat.toLowerCase().trim();
+  
+  if (sel === 'all') return true;
+  if (sel === prod) return true;
+  
+  const normalize = (str: string) => {
+    return str.split(/\s+/).map(w => w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
+  };
+  
+  const selWords = normalize(sel);
+  const prodWords = normalize(prod);
+  
+  return selWords.some(selW => prodWords.some(prodW => prodW.includes(selW) || selW.includes(prodW)));
+};
+
 interface GoldPageProps {
   onBackToStore: () => void;
+  initialCategory?: string;
 }
 
-export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProps) {
+export default function GoldPage({ onBackToStore: _onBackToStore, initialCategory = 'all' }: GoldPageProps) {
   const [_rates, setRates] = useState({
     gold_buy_value: 14200,
     gold_sell_value: 14700,
@@ -43,7 +61,12 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
     fetchRates();
   }, []);
 
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
+
+  useEffect(() => {
+    setSelectedCategory(initialCategory);
+  }, [initialCategory]);
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('popularity');
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
@@ -54,7 +77,10 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
   useEffect(() => {
     async function fetchDbProducts() {
       try {
-        const res = await fetch(`${API_BASE}/inventory/products`);
+        const url = selectedCategory === 'all'
+          ? `${API_BASE}/inventory/products`
+          : `${API_BASE}/inventory/products?category=${encodeURIComponent(selectedCategory)}`;
+        const res = await fetch(url);
         const data = await res.json();
         if (data.success && Array.isArray(data.products)) {
           const goldOnly = data.products
@@ -78,18 +104,50 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
       }
     }
     fetchDbProducts();
+  }, [selectedCategory]);
+
+  const [dbCategories, setDbCategories] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const res = await fetch(`${API_BASE}/inventory/categories`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.categories)) {
+          setDbCategories(data.categories);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch categories:', err);
+      }
+    }
+    fetchCategories();
   }, []);
+
+  const getIconForCategory = (name: string): string => {
+    const lower = name.toLowerCase();
+    if (lower.includes('necklace') || lower.includes('choker') || lower.includes('chain')) return '📿';
+    if (lower.includes('ring') || lower.includes('band')) return '💍';
+    if (lower.includes('earring') || lower.includes('jhumka') || lower.includes('drop')) return '✨';
+    if (lower.includes('nose')) return '💎';
+    if (lower.includes('coin') || lower.includes('bullion') || lower.includes('bar')) return '🪙';
+    if (lower.includes('bangle') || lower.includes('kada') || lower.includes('bracelet')) return '💫';
+    return '✨';
+  };
 
   const categories = [
     { id: 'all', label: 'All Gold', icon: '✨' },
-    { id: 'necklace', label: 'Necklaces', icon: '📿' },
-    { id: 'ring', label: 'Rings', icon: '💍' },
-    { id: 'earrings', label: 'Earrings', icon: '✨' },
-    { id: 'nosepin', label: 'Nose Pins', icon: '💎' },
-    { id: 'bullion', label: 'Coins & Bullion', icon: '🪙' },
+    ...dbCategories.map(cat => ({
+      id: cat.name.toLowerCase(),
+      label: cat.name,
+      icon: getIconForCategory(cat.name)
+    }))
   ];
 
-  const currentCat = categories.find((c) => c.id === selectedCategory) || categories[0];
+  const currentCat = categories.find((c) => {
+    const selLower = selectedCategory.toLowerCase();
+    const catLower = c.id.toLowerCase();
+    return catLower === selLower || catLower.includes(selLower) || selLower.includes(catLower);
+  }) || categories[0];
 
   // Typewriter effect for search placeholder (Pure ornament names)
   useEffect(() => {
@@ -147,7 +205,7 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
     : goldProducts;
 
   const filteredProducts = baseProducts.filter((p) => {
-    const matchesCategory = selectedCategory === 'all' || p.category.toLowerCase().includes(selectedCategory.toLowerCase());
+    const matchesCategory = areCategoriesMatching(selectedCategory, p.category);
     const matchesQuery = searchQuery.trim() === '' ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.category.toLowerCase().includes(searchQuery.toLowerCase());
@@ -412,41 +470,28 @@ export default function GoldPage({ onBackToStore: _onBackToStore }: GoldPageProp
                 Popular
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {[
-                  { label: 'Necklaces', query: 'Necklace' },
-                  { label: 'Temple Jewellery', query: 'Temple' },
-                  { label: 'Solitaire Rings', query: 'Ring' },
-                  { label: 'Gold Kadas', query: 'Kada' },
-                  { label: 'Rose Gold', query: 'Rose Gold' },
-                  { label: 'Emerald Jhumkas', query: 'Jhumka' },
-                  { label: 'Choker Sets', query: 'Choker' },
-                  { label: 'Pendants & Sets', query: 'Pendant' },
-                  { label: 'Nose Pins', query: 'Nose Pin' },
-                  { label: '24K Coins', query: 'Bullion' },
-                  { label: 'Solitaire Bands', query: 'Band' },
-                  { label: 'Gold Chains', query: 'Chain' },
-                  { label: 'Earrings', query: 'Earrings' },
-                ].map((item) => (
+                {categories.map((cat) => (
                   <button
-                    key={item.label}
+                    key={cat.id}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
-                      setSearchQuery(item.query);
+                      setSelectedCategory(cat.id);
                       setIsSearchFocused(false);
                     }}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '10px',
                       border: 'none',
-                      background: searchQuery.toLowerCase() === item.query.toLowerCase() ? '#e2e8f0' : '#f1f5f9',
-                      color: searchQuery.toLowerCase() === item.query.toLowerCase() ? '#0f172a' : '#334155',
+                      background: selectedCategory === cat.id ? '#fef3c7' : '#f1f5f9',
+                      color: selectedCategory === cat.id ? '#92400e' : '#334155',
                       fontSize: '0.86rem',
-                      fontWeight: 500,
+                      fontWeight: selectedCategory === cat.id ? 600 : 500,
                       cursor: 'pointer',
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    {item.label}
+                    <span style={{ marginRight: '6px' }}>{cat.icon}</span>
+                    {cat.label}
                   </button>
                 ))}
               </div>
