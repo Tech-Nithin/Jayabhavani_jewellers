@@ -45,6 +45,8 @@ export async function sendWorkerTransaction(
     weightGrams?: number;
     touchPercentage?: number;
     amountCash?: number;
+    cashMetalLink?: 'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH';
+    appliedRatePerGram?: number;
   }
 ) {
   const formData = new FormData();
@@ -65,6 +67,12 @@ export async function sendWorkerTransaction(
   }
   if (specDetails?.amountCash !== undefined) {
     formData.append('amount_cash', String(specDetails.amountCash));
+  }
+  if (specDetails?.cashMetalLink) {
+    formData.append('cash_metal_link', specDetails.cashMetalLink);
+  }
+  if (specDetails?.appliedRatePerGram !== undefined) {
+    formData.append('applied_rate_per_gram', String(specDetails.appliedRatePerGram));
   }
 
   formData.append('notes', notes.trim());

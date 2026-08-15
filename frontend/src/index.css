@@ -2641,4 +2641,64 @@ textarea::placeholder {
   .worker-chat-bubble strong {
     font-size: 0.68rem !important;
   }
+}
+
+/* ── WORKER TRANSACTIONS CHAT DROPDOWN MENU STYLES ── */
+.wa-bubble-dropdown {
+  position: absolute;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  max-width: 85vw;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Inbound (left-aligned): position menu to left:0 so it expands rightward into the screen */
+.wa-bubble-dropdown.wa-bubble-in,
+.wa-bubble-in .wa-bubble-dropdown,
+.wa-bubble-row:not(.is-outbound) .wa-bubble-dropdown {
+  left: 0;
+  right: auto;
+}
+
+/* Outbound (right-aligned): position menu to right:0 so it expands leftward into the screen */
+.wa-bubble-dropdown.wa-bubble-out,
+.wa-bubble-out .wa-bubble-dropdown,
+.wa-bubble-row.is-outbound .wa-bubble-dropdown {
+  right: 0;
+  left: auto;
+}
+
+.wa-dropdown-item {
+  background: none;
+  border: none;
+  color: #0f172a;
+  padding: 0.65rem 0.9rem;
+  text-align: left;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.wa-dropdown-item:hover {
+  background: #f1f5f9;
+}
+
+.wa-dropdown-item.text-danger {
+  color: #dc2626;
+}
+
+.wa-dropdown-item.text-danger:hover {
+  background: #fef2f2;
 }

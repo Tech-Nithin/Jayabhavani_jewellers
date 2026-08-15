@@ -392,8 +392,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         <div style={{ borderBottom: '1px dashed #94a3b8', paddingBottom: '1rem', marginBottom: '1rem', fontSize: '0.7rem', color: '#334155' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ color: '#0f172a', fontWeight: 700 }}>{t.modeLabel}</span>
-            <strong style={{ color: billType === 'ESTIMATION' ? '#d97706' : (mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5') }}>
-              [{billType === 'ESTIMATION' ? t.estimationBill : (mode === 'SELL' ? t.sellingBill : mode === 'BUY' ? t.buyingBill : t.exchangeBill)}]
+            <strong style={{ color: billType === 'ESTIMATION' ? '#d97706' : (mode === 'ORDER' ? '#d97706' : mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5') }}>
+              [{billType === 'ESTIMATION' ? t.estimationBill : (mode === 'ORDER' ? ((t as any).orderBill || 'JBJ CUSTOM ORDER BILL') : mode === 'SELL' ? t.sellingBill : mode === 'BUY' ? t.buyingBill : t.exchangeBill)}]
             </strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -450,7 +450,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <span style={{ fontWeight: 700 }}>Quantity & Unit:</span>
                     <strong>
                       {it.quantity_value || 1} {it.quantity_unit === 'PAIRS' ? 'Pairs' : it.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}
-                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + ' inches'})` : ''}
+                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + ' in'})` : ''}
                     </strong>
                   </div>
 
@@ -466,11 +466,6 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                    <span>{isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel}:</span>
-                    <strong>{formatMax3Decimals(details.netWeight)} gm</strong>
-                  </div>
-
                   {isSell && details.wastagePercent > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
                       <span>HMW ({formatMax3Decimals(details.wastagePercent)}%):</span>
@@ -480,6 +475,10 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
                   {!isSell && (
                     <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                        <span>{isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel}:</span>
+                        <strong>{formatMax3Decimals(details.netWeight)} gm</strong>
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
                         <span>{t.itemQualityReceipt}</span>
                         <strong>{formatMax3Decimals(details.purityPercent)}%</strong>

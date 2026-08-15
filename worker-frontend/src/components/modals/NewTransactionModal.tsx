@@ -10,10 +10,17 @@ interface Props {
     weightGrams?: number;
     touchPercentage?: number;
     amountCash?: number;
+    cashMetalLink?: 'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH';
+    appliedRatePerGram?: number;
     notes: string;
     photos: File[];
   }) => Promise<void>;
 }
+
+const toSentenceCase = (str?: string | null): string => {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
 
 export const NewTransactionModal: React.FC<Props> = ({
   isOpen,
@@ -25,6 +32,8 @@ export const NewTransactionModal: React.FC<Props> = ({
   const [weightGrams, setWeightGrams] = useState('');
   const [touchPercentage, setTouchPercentage] = useState('91.6');
   const [amountCash, setAmountCash] = useState('');
+  const [cashMetalLink, setCashMetalLink] = useState<'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH'>('FOR_GOLD');
+  const [appliedRatePerGram, setAppliedRatePerGram] = useState('');
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -49,16 +58,25 @@ export const NewTransactionModal: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (category === 'CASH' && cashMetalLink !== 'GENERAL_CASH' && !appliedRatePerGram) {
+      alert(`⚠️ Mandatory Field: Please enter the Rate per Gram (₹) for ${cashMetalLink === 'FOR_GOLD' ? 'Gold' : 'Silver'} purpose.`);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      const formattedName = toSentenceCase(itemName.trim());
       await onSubmitTransaction({
         category,
-        itemName: itemName.trim() || (category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : category === 'CASH' ? 'Cash Transfer' : 'Ornament Item'),
+        itemName: formattedName || (category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : category === 'CASH' ? 'Cash Transfer' : 'Ornament Item'),
         weightGrams: weightGrams ? parseFloat(weightGrams) : undefined,
         touchPercentage: touchPercentage ? parseFloat(touchPercentage) : undefined,
         amountCash: amountCash ? parseFloat(amountCash) : undefined,
-        notes: notes.trim(),
+        cashMetalLink: category === 'CASH' ? cashMetalLink : undefined,
+        appliedRatePerGram: category === 'CASH' && appliedRatePerGram ? parseFloat(appliedRatePerGram) : undefined,
+        notes: toSentenceCase(notes.trim()),
         photos,
       });
 
@@ -67,6 +85,8 @@ export const NewTransactionModal: React.FC<Props> = ({
       setWeightGrams('');
       setTouchPercentage('91.6');
       setAmountCash('');
+      setCashMetalLink('FOR_GOLD');
+      setAppliedRatePerGram('');
       setNotes('');
       setPhotos([]);
       setPreviews([]);
@@ -183,19 +203,97 @@ export const NewTransactionModal: React.FC<Props> = ({
               </div>
             </div>
           ) : (
-            <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '3px' }}>
-                Cash Amount (₹) *
-              </label>
-              <input
-                type="number"
-                placeholder="0"
-                value={amountCash}
-                onChange={(e) => setAmountCash(e.target.value)}
-                className="wa-dialog-textarea"
-                style={{ height: '36px', padding: '6px 10px', color: '#15803d', fontWeight: 700 }}
-                required
-              />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '3px' }}>
+                  Cash Amount (₹) *
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={amountCash}
+                  onChange={(e) => setAmountCash(e.target.value)}
+                  className="wa-dialog-textarea"
+                  style={{ height: '36px', padding: '6px 10px', color: '#15803d', fontWeight: 700 }}
+                  required
+                />
+              </div>
+
+              {/* Purpose Selector Tabs */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '3px' }}>
+                  Cash Purpose / Metal Link *
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setCashMetalLink('FOR_GOLD')}
+                    style={{
+                      padding: '5px 2px',
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      borderRadius: '6px',
+                      border: cashMetalLink === 'FOR_GOLD' ? '2px solid #d97706' : '1px solid #cbd5e1',
+                      background: cashMetalLink === 'FOR_GOLD' ? '#fef3c7' : '#ffffff',
+                      color: cashMetalLink === 'FOR_GOLD' ? '#92400e' : '#475569',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🥇 For Gold
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCashMetalLink('FOR_SILVER')}
+                    style={{
+                      padding: '5px 2px',
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      borderRadius: '6px',
+                      border: cashMetalLink === 'FOR_SILVER' ? '2px solid #475569' : '1px solid #cbd5e1',
+                      background: cashMetalLink === 'FOR_SILVER' ? '#f1f5f9' : '#ffffff',
+                      color: cashMetalLink === 'FOR_SILVER' ? '#1e293b' : '#475569',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🥈 For Silver
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCashMetalLink('GENERAL_CASH')}
+                    style={{
+                      padding: '5px 2px',
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      borderRadius: '6px',
+                      border: cashMetalLink === 'GENERAL_CASH' ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                      background: cashMetalLink === 'GENERAL_CASH' ? '#dcfce7' : '#ffffff',
+                      color: cashMetalLink === 'GENERAL_CASH' ? '#15803d' : '#475569',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    💵 General Cash
+                  </button>
+                </div>
+              </div>
+
+              {cashMetalLink !== 'GENERAL_CASH' && (
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '3px' }}>
+                    {cashMetalLink === 'FOR_GOLD' ? 'Gold Rate per Gram (₹) *' : 'Silver Rate per Gram (₹) *'}
+                  </label>
+                  <input
+                    type="number"
+                    placeholder={cashMetalLink === 'FOR_GOLD' ? 'e.g. 7200' : 'e.g. 95'}
+                    value={appliedRatePerGram}
+                    onChange={(e) => setAppliedRatePerGram(e.target.value)}
+                    className="wa-dialog-textarea"
+                    style={{ height: '36px', padding: '6px 10px', color: '#d97706', fontWeight: 700 }}
+                    required
+                  />
+                </div>
+              )}
             </div>
           )}
 

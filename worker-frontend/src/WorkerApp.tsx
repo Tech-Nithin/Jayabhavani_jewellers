@@ -56,6 +56,12 @@ export default function WorkerApp() {
     loadedDaysRef.current = loadedDays;
   }, [loadedDays]);
 
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
   // Modal States
   const [replyTo, setReplyTo] = useState<ReplyMessageData | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -131,6 +137,14 @@ export default function WorkerApp() {
                 if (prev.some((t) => t.id === tx.id)) return prev;
                 if (tx.direction === 'OUTGOING') {
                   playJbjNotificationSound();
+                  if ('Notification' in window && Notification.permission === 'granted') {
+                    try {
+                      new Notification(`📌 New Order Assigned: ${tx.item_name || 'JBJ Work'}`, {
+                        body: tx.notes || 'You have received a new work assignment from JBJ.',
+                        icon: tx.photos?.[0] || '/favicon.ico',
+                      });
+                    } catch (e) {}
+                  }
                   // Instantly mark read since Worker is currently actively looking at chat screen
                   fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
                     method: 'PUT',
@@ -160,6 +174,37 @@ export default function WorkerApp() {
                   }
                   return t;
                 });
+                saveCachedTransactions(worker.id, updated);
+                return updated;
+              });
+            }
+          } catch {}
+        });
+
+        eventSource.addEventListener('MESSAGE_EDITED', (event: any) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload && String(payload.worker_id) === String(worker.id)) {
+              setTransactions((prev) => {
+                const updated = prev.map((t) => {
+                  if (t.id === payload.id) {
+                    return { ...t, notes: payload.notes, edited_at_history: payload.edited_at_history };
+                  }
+                  return t;
+                });
+                saveCachedTransactions(worker.id, updated);
+                return updated;
+              });
+            }
+          } catch {}
+        });
+
+        eventSource.addEventListener('MESSAGE_DELETED', (event: any) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload && String(payload.worker_id) === String(worker.id)) {
+              setTransactions((prev) => {
+                const updated = prev.filter((t) => t.id !== payload.id);
                 saveCachedTransactions(worker.id, updated);
                 return updated;
               });
@@ -375,6 +420,8 @@ export default function WorkerApp() {
     weightGrams?: number;
     touchPercentage?: number;
     amountCash?: number;
+    cashMetalLink?: 'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH';
+    appliedRatePerGram?: number;
     notes: string;
     photos: File[];
   }) => {
@@ -387,6 +434,8 @@ export default function WorkerApp() {
         weightGrams: specData.weightGrams,
         touchPercentage: specData.touchPercentage,
         amountCash: specData.amountCash,
+        cashMetalLink: specData.cashMetalLink,
+        appliedRatePerGram: specData.appliedRatePerGram,
       });
       if (res.success) {
         setReplyTo(null);

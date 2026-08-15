@@ -591,16 +591,30 @@ body, html, #root {
 .wa-bubble-dropdown {
   position: absolute;
   top: 26px;
-  right: 8px;
   background: #ffffff;
   border: 1px solid var(--wa-border-color);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 1000;
   display: flex;
   flex-direction: column;
-  min-width: 180px;
+  min-width: 170px;
+  max-width: 85vw;
   overflow: hidden;
+}
+
+/* Inbound (left-aligned): position menu to left:0 so it expands rightward into the screen */
+.wa-bubble-in .wa-bubble-dropdown,
+.wa-bubble-row:not(.is-outbound) .wa-bubble-dropdown {
+  left: 0;
+  right: auto;
+}
+
+/* Outbound (right-aligned): position menu to right:0 so it expands leftward into the screen */
+.wa-bubble-out .wa-bubble-dropdown,
+.wa-bubble-row.is-outbound .wa-bubble-dropdown {
+  right: 0;
+  left: auto;
 }
 
 .wa-dropdown-item {

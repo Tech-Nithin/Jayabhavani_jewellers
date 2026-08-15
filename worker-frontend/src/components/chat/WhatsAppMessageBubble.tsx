@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WorkerTransaction, ReplyMessageData } from '../../types/worker';
 import { downloadImageAsJpeg } from '../../utils/imageUtils';
 
@@ -23,6 +23,17 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
 
+  // Close active dropdown menu when clicking anywhere outside
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setShowMenu(false);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => {
+      window.removeEventListener('click', handleOutsideClick);
+    };
+  }, []);
+
   const formattedTime = transaction.created_at
     ? new Date(transaction.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '';
@@ -30,6 +41,9 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
   const isDeleted = Boolean(transaction.is_deleted);
   const editHistory = Array.isArray(transaction.edited_at_history) ? transaction.edited_at_history : [];
   const isEdited = editHistory.length > 0;
+  const isWithin30Mins = transaction.created_at
+    ? Date.now() - new Date(transaction.created_at).getTime() <= 30 * 60 * 1000
+    : false;
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -94,7 +108,7 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
               </button>
             )}
 
-            {isWorkerSent && !isDeleted && (
+            {isWorkerSent && !isDeleted && isWithin30Mins && (
               <button
                 type="button"
                 className="wa-dropdown-item"
@@ -282,7 +296,7 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
                         "{transaction.notes}"
                       </div>
                     ) : (
-                      <p className="wa-bubble-text" style={{ margin: '2px 0 4px 0' }}>{transaction.notes}</p>
+                      <p className="wa-bubble-text" style={{ margin: '2px 0 4px 0', whiteSpace: 'pre-wrap' }}>{transaction.notes}</p>
                     )
                   )}
                 </>

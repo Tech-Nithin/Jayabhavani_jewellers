@@ -12,6 +12,7 @@ interface OrdersHistoryTableProps {
   onOpenSettlementModal: (order: OrderItem) => void;
   onUnassignOrder?: (order: OrderItem) => void;
   onToggleReturnStatus?: (order: OrderItem, status: 'yes' | 'no', customDateTime?: string | null) => void;
+  onToggleSubmittedStatus?: (order: OrderItem, submitted: 'yes' | 'no') => void;
   onViewDetail?: (order: OrderItem, showBill?: boolean) => void;
   onViewSeeBill?: (order: OrderItem) => void;
   onViewOrderDetails?: (order: OrderItem) => void;
@@ -36,6 +37,7 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
   onOpenSettlementModal,
   onUnassignOrder,
   onToggleReturnStatus,
+  onToggleSubmittedStatus,
   onViewDetail,
   onViewSeeBill,
   onViewOrderDetails,
@@ -397,15 +399,31 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
                 </div>
               </td>
               <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
-                {ord.submitted === 'yes' || ord.sold_status === 'SOLD' ? (
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', background: '#dcfce7', border: '1px solid #86efac', borderRadius: '6px', padding: '2px 6px', display: 'inline-block' }}>
-                    <i className="fa-solid fa-check" style={{ marginRight: '2px' }}></i> YES
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '6px', padding: '2px 6px', display: 'inline-block' }}>
-                    NO
-                  </span>
-                )}
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <select
+                    value={ord.submitted === 'yes' ? 'yes' : 'no'}
+                    onChange={(e) => {
+                      const val = e.target.value as 'yes' | 'no';
+                      if (onToggleSubmittedStatus) {
+                        onToggleSubmittedStatus(ord, val);
+                      }
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      border: ord.submitted === 'yes' ? '1px solid #86efac' : '1px solid #fde68a',
+                      background: ord.submitted === 'yes' ? '#dcfce7' : '#fef3c7',
+                      color: ord.submitted === 'yes' ? '#15803d' : '#b45309',
+                      fontWeight: 800,
+                      fontSize: '0.68rem',
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="no" style={{ background: '#ffffff', color: '#b45309', fontWeight: 700 }}>NO</option>
+                    <option value="yes" style={{ background: '#ffffff', color: '#15803d', fontWeight: 700 }}>YES</option>
+                  </select>
+                </div>
               </td>
 
               {/* Info Column: See Bill Icon & Order Details Drawer Button */}

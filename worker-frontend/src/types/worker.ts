@@ -35,6 +35,10 @@ export interface WorkerTransaction {
   edited_at_history?: string[];
   is_deleted?: boolean;
   reply_to?: ReplyMessageData | null;
+  cash_metal_link?: 'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH';
+  applied_rate_per_gram?: number;
+  equivalent_metal_grams?: number;
+  fine_weight_grams?: number;
   status_state?: 'SENDING' | 'FAILED' | 'SENT' | 'DELIVERED' | 'READ';
   is_seen?: 'YES' | 'NO';
   read_at?: string;

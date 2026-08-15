@@ -93,21 +93,108 @@ const generateOrderId = () => `ORD-${new Date().toISOString().split('T')[0].repl
 
 // ── ORDERS ENDPOINTS ──
 
-// GET /api/orders
+// GET /api/orders (Supports server-side pagination & filtering)
 router.get('/orders', async (req: Request, res: Response) => {
   try {
-    const { data: dbOrders, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-    if (!error && dbOrders && dbOrders.length > 0) {
-      return res.json({ success: true, orders: dbOrders, total: dbOrders.length });
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Number(req.query.limit) || 10);
+    const status = req.query.status as string;
+    const search = (req.query.search as string || '').trim().toLowerCase();
+    const dateRange = req.query.dateRange as string;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+
+    let query = supabase.from('orders').select('*', { count: 'estimated' });
+
+    if (status && status !== 'ALL') {
+      if (status === 'PENDING') query = query.eq('status', 'PENDING');
+      else if (status === 'ASSIGNED') query = query.eq('status', 'ASSIGNED');
+      else if (status === 'COMPLETED') query = query.eq('status', 'COMPLETED');
+    }
+
+    if (search) {
+      query = query.or(`customer_name.ilike.%${search}%,customer_phone.ilike.%${search}%,item_name.ilike.%${search}%,id.ilike.%${search}%`);
+    }
+
+    if (dateRange && dateRange !== 'ALL') {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+      if (dateRange === 'TODAY') {
+        query = query.gte('created_at', todayStart);
+      } else if (dateRange === 'YESTERDAY') {
+        const yestStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+        query = query.gte('created_at', yestStart).lt('created_at', todayStart);
+      } else if (dateRange === 'THIS_WEEK') {
+        const dayOfWeek = now.getDay();
+        const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).toISOString();
+        query = query.gte('created_at', weekStart);
+      } else if (dateRange === 'THIS_MONTH') {
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        query = query.gte('created_at', monthStart);
+      } else if (dateRange === 'LAST_30_DAYS') {
+        const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toISOString();
+        query = query.gte('created_at', thirtyDaysAgo);
+      } else if (dateRange === 'CUSTOM') {
+        if (startDate) query = query.gte('created_at', new Date(startDate).toISOString());
+        if (endDate) {
+          const e = new Date(endDate);
+          e.setHours(23, 59, 59, 999);
+          query = query.lte('created_at', e.toISOString());
+        }
+      }
+    }
+
+    const from = (page - 1) * limit;
+    const to = page * limit - 1;
+
+    const { data: dbOrders, error, count } = await query.order('created_at', { ascending: false }).range(from, to);
+
+    if (!error && dbOrders) {
+      const totalCount = count !== null ? count : dbOrders.length;
+      return res.json({
+        success: true,
+        orders: dbOrders,
+        total: totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit) || 1,
+      });
     }
   } catch (e) {
-    // fallback to mock
+    console.warn('⚠️ Supabase GET /orders error, falling back to mockOrders:', e);
   }
+
+  // Fallback to in-memory mockOrders with JavaScript pagination
+  let filtered = [...mockOrders];
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.max(1, Number(req.query.limit) || 10);
+  const status = req.query.status as string;
+  const search = (req.query.search as string || '').trim().toLowerCase();
+
+  if (status && status !== 'ALL') {
+    filtered = filtered.filter((o) => o.status === status);
+  }
+  if (search) {
+    filtered = filtered.filter(
+      (o) =>
+        o.customer_name.toLowerCase().includes(search) ||
+        o.customer_phone.includes(search) ||
+        o.item_name.toLowerCase().includes(search) ||
+        o.id.toLowerCase().includes(search)
+    );
+  }
+
+  const totalCount = filtered.length;
+  const sliced = filtered.slice((page - 1) * limit, page * limit);
 
   res.json({
     success: true,
-    orders: mockOrders,
-    total: mockOrders.length,
+    orders: sliced,
+    total: totalCount,
+    page,
+    limit,
+    totalPages: Math.ceil(totalCount / limit) || 1,
   });
 });
 
@@ -280,11 +367,93 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
       });
     }
 
+    // Automatically record & broadcast plain text work assignment chat message to worker
+    let createdTxn: any = null;
+    if (workerIdVal) {
+      try {
+        let targetOrder: any = order;
+        if (!targetOrder || !targetOrder.customer_name) {
+          const { data: dbOrd } = await supabase.from('orders').select('*').eq('id', id).single();
+          if (dbOrd) targetOrder = dbOrd;
+        }
+
+        if (targetOrder) {
+          const custName = targetOrder.customer_name || 'Customer';
+          const itemName = targetOrder.item_name || 'Custom Order Item';
+          const weightStr = targetOrder.gross_weight_grams ? `${targetOrder.gross_weight_grams} g` : '';
+          const qtyVal = targetOrder.quantity_value || 1;
+          const qtyUnit = targetOrder.quantity_unit === 'PAIRS' ? 'Pairs' : targetOrder.quantity_unit === 'GRAMS' ? 'g' : 'Pcs';
+          const qtyStr = `${qtyVal} ${qtyUnit}`;
+          const lenStr = targetOrder.item_length_inches ? (targetOrder.item_length_inches.toString().endsWith('"') ? targetOrder.item_length_inches : `${targetOrder.item_length_inches} in`) : '';
+          let rawNotes = targetOrder.notes || '';
+          if (!rawNotes || rawNotes.startsWith('JBJ-Order Item:')) {
+            const itemNotes = targetOrder.receipt_json_data?.items?.[0]?.item_notes || targetOrder.receipt_json_data?.items?.[0]?.notes || targetOrder.receipt_json_data?.item_notes;
+            rawNotes = itemNotes || '';
+          }
+          const notesStr = rawNotes.trim();
+
+          const lines = [
+            `customer name : ${custName}`,
+            `new order : Do ${itemName} for ${custName}${weightStr ? ` within ${weightStr}` : ''}`,
+            `Quantity & Unit: ${qtyStr}`,
+          ];
+          if (lenStr) lines.push(`Length: ${lenStr}`);
+          if (notesStr) lines.push(`Notes: ${notesStr}`);
+
+          const formattedMessage = lines.join('\n');
+          const imgUrl = targetOrder.image_url || targetOrder.receipt_json_data?.image_url || targetOrder.receipt_json_data?.items?.[0]?.image_url || '';
+          const photosList = imgUrl ? [imgUrl] : [];
+
+          const newTxn: any = {
+            id: `TXN-${Date.now()}`,
+            worker_id: workerIdVal,
+            order_id: id,
+            direction: 'OUTGOING',
+            category: 'GENERAL',
+            amount_cash: 0,
+            weight_grams: 0,
+            touch_percentage: 0,
+            fine_weight_grams: 0,
+            item_name: '',
+            photos: photosList,
+            notes: formattedMessage,
+            status_state: 'DELIVERED',
+            is_seen: 'NO',
+            read_at: null,
+            seen_at: null,
+            created_at: new Date().toISOString(),
+          };
+
+          saveLocalTransaction(newTxn);
+          mockTransactions.push(newTxn);
+
+          let { data: insertedDb } = await supabase.from('worker_transactions').insert([newTxn]).select().single();
+          createdTxn = insertedDb || newTxn;
+
+          // Trigger FCM Push Notification
+          try {
+            const { triggerFcmPushNotification } = require('../../routes/workerAuthRoutes');
+            triggerFcmPushNotification(workerIdVal, 'Jaya Bhavani Admin', formattedMessage, {
+              transaction_id: createdTxn.id,
+              direction: 'OUTGOING',
+              category: 'GENERAL',
+            });
+          } catch (fcmErr) {}
+
+          // Broadcast SSE Realtime Event (Uppercase 'NEW_TRANSACTION')
+          broadcastToWorker(workerIdVal, 'NEW_TRANSACTION', createdTxn);
+        }
+      } catch (errAssignMsg) {
+        console.error('⚠️ Failed to auto-send worker assignment message:', errAssignMsg);
+      }
+    }
+
     res.json({
       success: true,
-      message: worker_id ? `Order assigned to ${worker_name}` : 'Order status updated',
+      message: worker_id ? `Order assigned to ${worker_name} & plain chat message sent` : 'Order status updated',
       order: order || { id, assigned_worker_id: workerIdVal, assigned_worker_name: workerNameVal, status: statusVal, assigned_at: assignedAtVal },
       assigned_at: assignedAtVal,
+      transaction: createdTxn,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message || 'Failed to assign order' });
@@ -359,13 +528,12 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       order.due_amount = Math.max(0, Number(remaining_due));
     }
 
-    const newSubmitted = submitted === 'yes' || order.due_amount === 0 ? 'yes' : (submitted || order.submitted || 'no');
+    const newSubmitted = (submitted === 'yes' || submitted === 'no') ? submitted : (order.submitted || 'no');
     const newSoldStatus = (sold_status === 'SOLD' || newSubmitted === 'yes' || order.due_amount === 0) ? 'SOLD' : 'DUE';
     
     order.submitted = newSubmitted;
     order.sold_status = newSoldStatus;
     if (newSoldStatus === 'SOLD') {
-      order.status = 'COMPLETED';
       order.due_amount = 0;
     }
 
@@ -506,6 +674,34 @@ router.get('/workers', async (req: Request, res: Response) => {
     console.warn('Workers fetch from Supabase fallback:', e);
   }
 
+  // Fetch transactions to compute unread_messages_count & last_message_at per worker
+  let allTxns: any[] = [];
+  try {
+    const { data: dbTxns } = await supabase.from('worker_transactions').select('worker_id, direction, status_state, is_seen, created_at').order('created_at', { ascending: false }).limit(100);
+    if (dbTxns && dbTxns.length > 0) {
+      allTxns = dbTxns;
+    } else {
+      allTxns = getLocalTransactions();
+    }
+  } catch {
+    allTxns = getLocalTransactions();
+  }
+
+  const unreadMap: Record<string, number> = {};
+  const lastMessageTimeMap: Record<string, string> = {};
+
+  allTxns.forEach((tx: any) => {
+    const wId = String(tx.worker_id);
+    if (!lastMessageTimeMap[wId] && tx.created_at) {
+      lastMessageTimeMap[wId] = tx.created_at;
+    }
+    const isIncoming = tx.direction === 'INCOMING';
+    const isUnread = isIncoming && tx.status_state !== 'READ' && tx.is_seen !== 'YES';
+    if (isUnread) {
+      unreadMap[wId] = (unreadMap[wId] || 0) + 1;
+    }
+  });
+
   const enrichedWorkers = workerList.map((worker) => {
     const assignedOrders = mockOrders.filter((o) => o.assigned_worker_id === worker.id);
     const pendingOrders = assignedOrders.filter((o) => o.status !== 'COMPLETED');
@@ -516,6 +712,8 @@ router.get('/workers', async (req: Request, res: Response) => {
       assigned_orders_count: assignedOrders.length,
       pending_orders_count: pendingOrders.length,
       completed_orders_count: completedOrders.length,
+      unread_messages_count: unreadMap[String(worker.id)] || 0,
+      last_message_at: lastMessageTimeMap[String(worker.id)] || null,
     };
   });
 
@@ -666,17 +864,22 @@ const saveLocalTransaction = (txn: WorkerTransactionItem) => {
 const sseClientsMap = new Map<string, Set<Response>>();
 
 const broadcastToWorker = (workerId: string, eventType: string, payload: any) => {
-  const clients = sseClientsMap.get(String(workerId));
-  if (clients && clients.size > 0) {
-    const dataStr = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
-    clients.forEach((res) => {
-      try {
-        res.write(dataStr);
-      } catch (err) {
-        clients.delete(res);
-      }
-    });
-  }
+  const dispatchToClients = (targetId: string) => {
+    const clients = sseClientsMap.get(targetId);
+    if (clients && clients.size > 0) {
+      const dataStr = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
+      clients.forEach((res) => {
+        try {
+          res.write(dataStr);
+        } catch (err) {
+          clients.delete(res);
+        }
+      });
+    }
+  };
+
+  dispatchToClients(String(workerId));
+  dispatchToClients('ALL_ADMINS');
 };
 
 /**
@@ -985,16 +1188,31 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       }
     }
 
-    // 2. Process any JSON base64 string photos if passed
+    // 2. Process any JSON base64 string photos or single image URL strings if passed
     if (photos) {
-      const parsedPhotos = typeof photos === 'string' ? JSON.parse(photos) : photos;
-      if (Array.isArray(parsedPhotos)) {
-        for (const p of parsedPhotos) {
-          if (typeof p === 'string' && p.startsWith('data:image/')) {
-            const cUrl = await uploadToCloudinaryAsWebP(p, 'jewellery_product_images');
-            uploadedPhotos.push(cUrl);
-          } else if (typeof p === 'string' && p.startsWith('http')) {
-            uploadedPhotos.push(p);
+      let parsedPhotos: any[] = [];
+      if (typeof photos === 'string') {
+        try {
+          const res = JSON.parse(photos);
+          parsedPhotos = Array.isArray(res) ? res : [res];
+        } catch (e) {
+          parsedPhotos = [photos];
+        }
+      } else if (Array.isArray(photos)) {
+        parsedPhotos = photos;
+      }
+      for (const p of parsedPhotos) {
+        if (typeof p === 'string' && p.trim()) {
+          const str = p.trim();
+          if (str.startsWith('data:image/')) {
+            try {
+              const cUrl = await uploadToCloudinaryAsWebP(str, 'jewellery_product_images');
+              uploadedPhotos.push(cUrl);
+            } catch (errUpload) {
+              uploadedPhotos.push(str);
+            }
+          } else if (str.startsWith('http') || str.startsWith('/')) {
+            uploadedPhotos.push(str);
           }
         }
       }
@@ -1115,6 +1333,19 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Notes field is required for editing' });
     }
 
+    // 0. Enforce 30-minute edit window restriction
+    let targetTx: any = mockTransactions.find((t: any) => t.id === id);
+    if (!targetTx) {
+      const local = getLocalTransactions();
+      targetTx = local.find((t: any) => t.id === id);
+    }
+    if (targetTx && targetTx.created_at) {
+      const createdTime = new Date(targetTx.created_at).getTime();
+      if (Date.now() - createdTime > 30 * 60 * 1000) {
+        return res.status(400).json({ success: false, message: 'Editing is restricted to within 30 minutes of sending' });
+      }
+    }
+
     const editTimestamp = new Date().toISOString();
 
     // 1. Update local disk file backup
@@ -1154,6 +1385,18 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
       console.warn('Supabase update worker_transactions warning:', dbErr);
     }
 
+    // 4. Broadcast SSE live stream event for instant edit (< 10ms)
+    const localForEdit = getLocalTransactions();
+    const targetWorkerId = mockIdx !== -1 ? mockTransactions[mockIdx]?.worker_id : (localForEdit.find((t: any) => t.id === id)?.worker_id);
+    if (targetWorkerId) {
+      broadcastToWorker(String(targetWorkerId), 'MESSAGE_EDITED', {
+        id,
+        worker_id: String(targetWorkerId),
+        notes,
+        edited_at_history: currentHistory,
+      });
+    }
+
     res.json({
       success: true,
       message: 'Message edited successfully',
@@ -1172,10 +1415,12 @@ router.delete('/worker-transactions/:id', async (req: Request, res: Response) =>
     const { id } = req.params;
 
     // 1. Update local disk file backup
+    let targetWorkerId: string | null = null;
     try {
       const local = getLocalTransactions();
       const idx = local.findIndex((t: any) => t.id === id);
       if (idx !== -1) {
+        targetWorkerId = local[idx].worker_id;
         local[idx].is_deleted = true;
         fs.writeFileSync(txFilePath, JSON.stringify(local, null, 2));
       }
@@ -1186,6 +1431,7 @@ router.delete('/worker-transactions/:id', async (req: Request, res: Response) =>
     // 2. Update mock array
     const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
     if (mockIdx !== -1) {
+      targetWorkerId = targetWorkerId || mockTransactions[mockIdx].worker_id;
       mockTransactions[mockIdx].is_deleted = true;
     }
 
@@ -1197,6 +1443,14 @@ router.delete('/worker-transactions/:id', async (req: Request, res: Response) =>
         .eq('id', id);
     } catch (dbErr) {
       console.warn('Supabase delete worker_transactions warning:', dbErr);
+    }
+
+    // 4. Broadcast SSE live stream event for instant delete (< 10ms)
+    if (targetWorkerId) {
+      broadcastToWorker(String(targetWorkerId), 'MESSAGE_DELETED', {
+        id,
+        worker_id: String(targetWorkerId),
+      });
     }
 
     res.json({

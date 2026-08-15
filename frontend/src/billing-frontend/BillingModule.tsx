@@ -9,205 +9,11 @@ import { FullImagePreviewModal } from '../inventory-frontend/components/FullImag
 import { API_BASE } from '../config/apiConfig';
 import { getTeluguTransliteration } from '../utils/transliterate';
 
-/** Converts any string to Start Case (Title Case) — frontend-only display formatting */
-const toStartCase = (str: string): string =>
-  str.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
-
-const formatMax3Decimals = (val: number | string | undefined | null): string => {
-  if (val === undefined || val === null || val === '') return '0';
-  const num = Number(val);
-  if (isNaN(num)) return '0';
-  const rounded = Math.round((num + Number.EPSILON) * 1000) / 1000;
-  return String(rounded);
-};
-
-/** Formats text input dynamically into Indian currency format (e.g., 1,00,000) while typing */
-const formatIndianCurrencyInput = (val: string): string => {
-  const clean = val.replace(/[^0-9.]/g, '');
-  if (!clean) return '';
-  const parts = clean.split('.');
-  const intStr = parts[0];
-  const decimalStr = parts.length > 1 ? '.' + parts[1] : '';
-  if (!intStr) return '0' + decimalStr;
-  const formattedInt = Number(intStr).toLocaleString('en-IN');
-  return formattedInt + decimalStr;
-};
-
-const parseIndianCurrencyNumber = (val: string | number | undefined | null): number => {
-  const clean = String(val ?? '').replace(/,/g, '');
-  return Number(clean) || 0;
-};
-
-interface CreatablePresetSelectProps {
-  value: string;
-  onChange: (val: string) => void;
-  options: string[];
-  placeholder: string;
-  categoryName: string;
-  onAddNewPreset: (name: string, category: string) => void;
-  style?: React.CSSProperties;
-}
-
-const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
-  value,
-  onChange,
-  options = [],
-  placeholder,
-  categoryName,
-  onAddNewPreset,
-  style,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const wrapperRef = React.useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setQuery(value || '');
-    }
-  }, [value, isOpen]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const filteredOptions = options.filter((opt) =>
-    opt.toLowerCase().includes(query.trim().toLowerCase())
-  );
-
-  const exactMatchExists = options.some(
-    (opt) => opt.toLowerCase() === query.trim().toLowerCase()
-  );
-
-  const handleSelectOption = (optName: string) => {
-    onChange(optName);
-    setQuery(optName);
-    setIsOpen(false);
-  };
-
-  const handleCreateNew = (newName: string) => {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-    onChange(trimmed);
-    setQuery(trimmed);
-    setIsOpen(false);
-    onAddNewPreset(trimmed, categoryName);
-  };
-
-  return (
-    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
-      <input
-        type="text"
-        placeholder={placeholder}
-        value={isOpen ? query : (value || '')}
-        onFocus={() => {
-          setIsOpen(true);
-          setQuery(value || '');
-        }}
-        onChange={(e) => {
-          const val = e.target.value;
-          setQuery(val);
-          onChange(val);
-          if (!isOpen) setIsOpen(true);
-        }}
-        style={{
-          width: '100%',
-          padding: '0.55rem 2.2rem 0.55rem 0.75rem',
-          borderRadius: '6px',
-          border: '1px solid #cbd5e1',
-          fontSize: '0.85rem',
-          color: '#0f172a',
-          background: '#ffffff',
-          ...style,
-        }}
-      />
-      <i
-        className="fa-solid fa-chevron-down"
-        onClick={() => setIsOpen((prev) => !prev)}
-        style={{
-          position: 'absolute',
-          right: '10px',
-          top: '50%',
-          transform: isOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
-          color: '#64748b',
-          fontSize: '0.70rem',
-          pointerEvents: 'none',
-          transition: 'transform 0.2s ease, color 0.2s ease',
-        }}
-      ></i>
-      {isOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: '4px',
-            background: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '8px',
-            boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
-            maxHeight: '140px',
-            overflowY: 'auto',
-            zIndex: 30,
-          }}
-        >
-          {query.trim() !== '' && !exactMatchExists && (
-            <div
-              onClick={() => handleCreateNew(query)}
-              style={{
-                padding: '0.5rem 0.75rem',
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                color: '#2563eb',
-                background: '#eff6ff',
-                cursor: 'pointer',
-                borderBottom: '1px solid #e2e8f0',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <i className="fa-solid fa-plus-circle"></i> + Add "{query.trim()}"
-            </div>
-          )}
-
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((opt) => (
-              <div
-                key={opt}
-                onClick={() => handleSelectOption(opt)}
-                style={{
-                  padding: '0.45rem 0.75rem',
-                  fontSize: '0.82rem',
-                  color: opt === value ? '#2563eb' : '#334155',
-                  fontWeight: opt === value ? 700 : 500,
-                  background: opt === value ? '#f0f9ff' : 'transparent',
-                  cursor: 'pointer',
-                  borderBottom: '1px solid #f1f5f9',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = opt === value ? '#f0f9ff' : 'transparent')}
-              >
-                {opt}
-              </div>
-            ))
-          ) : query.trim() === '' ? (
-            <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#94a3b8', textAlign: 'center' }}>
-              Start typing to search or add new...
-            </div>
-          ) : null}
-        </div>
-      )}
-    </div>
-  );
-};
+import { SellModeForm } from './components/modes/SellModeForm';
+import { BuyModeForm } from './components/modes/BuyModeForm';
+import { ExchangeModeForm } from './components/modes/ExchangeModeForm';
+import { OrderModeForm } from './components/modes/OrderModeForm';
+import { toStartCase, formatIndianCurrencyInput, parseIndianCurrencyNumber } from './components/modes/modeUtils';
 
 import { translations } from '../utils/translations';
 import type { Language } from '../utils/translations';
@@ -871,6 +677,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
         const orderReceiptPayload = {
           ...receiptPayload,
+          mode: 'ORDER',
+          transaction_type: 'ORDER',
           paymentType,
           advancePaidAmount: effPaid,
           balanceDueAmount: effDue,
@@ -909,7 +717,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
             additional_charge_value: Number(primaryItem?.additional_charges_amount) || 0,
             return_purity_percentage: Number(primaryItem?.return_purity_percentage) || 0,
             return_pure_gold: Number(primaryItem?.return_pure_gold) || (primaryItem?.return_purity_percentage ? Number((totalNetW * (Number(primaryItem.return_purity_percentage) / 100)).toFixed(3)) : 0),
-            notes: `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
+            notes: primaryItem?.item_notes || primaryItem?.notes || `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
           }),
         });
 
@@ -1441,636 +1249,82 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   </div>
                 </div>
 
-                {/* Item Rows */}
-                <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.15rem' }}>
-                  {items.map((it) => (
-                    <div key={it.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem', position: 'relative' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <span style={{
-                          fontSize: '0.65rem',
-                          fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          background: it.item_type === 'SELL' ? '#fef3c7' : '#e0f2fe',
-                          color: it.item_type === 'SELL' ? '#b45309' : '#0369a1',
-                        }}>
-                          {it.item_type === 'SELL'
-                            ? (mode === 'ORDER' ? 'JBJ - ORDER ITEM' : 'JBJ - SELLING ITEM')
-                            : 'JBJ - BUYING ITEM'}
-                        </span>
+                {/* Render Mode-Specific Item Form Components */}
+                {mode === 'SELL' && (
+                  <SellModeForm
+                    items={items}
+                    handleUpdateItem={handleUpdateItem}
+                    handleUpdateItemMultiple={handleUpdateItemMultiple}
+                    handleAddItem={handleAddItem}
+                    handleRemoveItem={handleRemoveItem}
+                    calcResults={calcResults}
+                    presets={presets}
+                    handleAddNewPreset={handleAddNewPreset}
+                    rates={rates}
+                    lang={lang}
+                    t={t}
+                    showValidationErrors={showValidationErrors}
+                    setShowValidationErrors={setShowValidationErrors}
+                  />
+                )}
+                {mode === 'BUY' && (
+                  <BuyModeForm
+                    items={items}
+                    handleUpdateItem={handleUpdateItem}
+                    handleUpdateItemMultiple={handleUpdateItemMultiple}
+                    handleAddItem={handleAddItem}
+                    handleRemoveItem={handleRemoveItem}
+                    calcResults={calcResults}
+                    presets={presets}
+                    handleAddNewPreset={handleAddNewPreset}
+                    rates={rates}
+                    lang={lang}
+                    t={t}
+                    showValidationErrors={showValidationErrors}
+                    setShowValidationErrors={setShowValidationErrors}
+                  />
+                )}
+                {mode === 'EXCHANGE' && (
+                  <ExchangeModeForm
+                    items={items}
+                    handleUpdateItem={handleUpdateItem}
+                    handleUpdateItemMultiple={handleUpdateItemMultiple}
+                    handleAddItem={handleAddItem}
+                    handleRemoveItem={handleRemoveItem}
+                    calcResults={calcResults}
+                    presets={presets}
+                    handleAddNewPreset={handleAddNewPreset}
+                    rates={rates}
+                    lang={lang}
+                    t={t}
+                    showValidationErrors={showValidationErrors}
+                    setShowValidationErrors={setShowValidationErrors}
+                  />
+                )}
+                {mode === 'ORDER' && (
+                  <OrderModeForm
+                    items={items}
+                    handleUpdateItem={handleUpdateItem}
+                    handleUpdateItemMultiple={handleUpdateItemMultiple}
+                    handleAddItem={handleAddItem}
+                    handleRemoveItem={handleRemoveItem}
+                    calcResults={calcResults}
+                    presets={presets}
+                    handleAddNewPreset={handleAddNewPreset}
+                    rates={rates}
+                    lang={lang}
+                    t={t}
+                    showValidationErrors={showValidationErrors}
+                    setShowValidationErrors={setShowValidationErrors}
+                    uploadingImageItemId={uploadingImageItemId}
+                    handleItemImageUpload={handleItemImageUpload}
+                    setPreviewImage={setPreviewImage}
+                  />
+                )}
 
-                        {items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(it.id)}
-                            style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}
-                          >
-                            <i className="fa-solid fa-trash-can"></i> Remove
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Helper calculations for live row rendering */}
-                      {(() => {
-                        const grossW = Number(it.weight_grams) || 0;
-                        const dedW = Number(it.deduction_weight_grams) || 0;
-                        const netW = Math.max(0, grossW - dedW);
-
-                        const isGold = it.metal_type === 'GOLD';
-                        const netWeightLabel = isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel;
-
-                        const wastagePct = Number(it.wastage_percent) || 0;
-                        const totalWWithHmw = Number((netW + (netW * (wastagePct / 100))).toFixed(3));
-
-                        const itemLineTotal = calcResults.itemDetails[it.id]?.lineTotal || 0;
-
-                        return (
-                          <>
-                            {/* Row 1 (2 fields): Metal Category & Rate */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.metalCategoryLabel}</label>
-                                <select
-                                  value={it.metal_type}
-                                  onChange={(e) => {
-                                    const newMetal = e.target.value as 'GOLD' | 'SILVER';
-                                    const defaultR = newMetal === 'GOLD'
-                                      ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
-                                      : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value);
-                                    handleUpdateItemMultiple(it.id, {
-                                      metal_type: newMetal,
-                                      custom_rate_per_gram: defaultR || 0,
-                                    });
-                                  }}
-                                  style={{ width: '100%', padding: '0.55rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#ffffff' }}
-                                >
-                                  <option value="GOLD">🥇 {t.goldMetal}</option>
-                                  <option value="SILVER">🥈 {t.silverMetal}</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px', whiteSpace: 'nowrap' }}>
-                                  {t.rateLabel}
-                                </label>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="Rate"
-                                  onFocus={(e) => e.target.select()}
-                                  value={it.custom_rate_per_gram !== undefined && it.custom_rate_per_gram !== '' ? it.custom_rate_per_gram : (
-                                    it.metal_type === 'GOLD'
-                                      ? (it.item_type === 'SELL' ? rates?.gold_sell_value : rates?.gold_buy_value)
-                                      : (it.item_type === 'SELL' ? rates?.silver_sell_value : rates?.silver_buy_value)
-                                  ) || ''}
-                                  onChange={(e) => handleUpdateItem(it.id, 'custom_rate_per_gram', e.target.value)}
-                                  style={{ width: '100%', padding: '0.55rem 0.6rem', borderRadius: '6px', border: '1px solid #6366f1', background: '#eef2ff', fontWeight: 700, color: '#4338ca', fontSize: '0.85rem' }}
-                                  required
-                                />
-                              </div>
-                            </div>
-
-                            {/* Row 2 (2 fields): Item Name & Item Weight */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                              <div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && (!it.product_name || !it.product_name.trim()) ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
-                                    {t.itemNameLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
-                                  </label>
-                                  {showValidationErrors && (!it.product_name || !it.product_name.trim()) && (
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#dc2626' }}>* Required</span>
-                                  )}
-                                </div>
-                                <CreatablePresetSelect
-                                  value={it.product_name}
-                                  onChange={(val) => {
-                                    handleUpdateItem(it.id, 'product_name', toStartCase(val));
-                                    if (showValidationErrors) setShowValidationErrors(false);
-                                  }}
-                                  options={presets.item_name || []}
-                                  placeholder={t.itemNamePlaceholder}
-                                  categoryName="item_name"
-                                  onAddNewPreset={handleAddNewPreset}
-                                  style={showValidationErrors && (!it.product_name || !it.product_name.trim()) ? { border: '2px solid #dc2626', background: '#fef2f2', boxShadow: '0 0 0 4px rgba(220, 38, 38, 0.25)' } : {}}
-                                />
-                                {showValidationErrors && (!it.product_name || !it.product_name.trim()) && (
-                                  <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                    <i className="fa-solid fa-triangle-exclamation"></i> Please select or enter Item Name
-                                  </div>
-                                )}
-                              </div>
-
-                              <div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
-                                    {t.itemWeightLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
-                                  </label>
-                                  {showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) && (
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#dc2626' }}>* &gt; 0g Req</span>
-                                  )}
-                                </div>
-                                <div style={{ position: 'relative' }}>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    placeholder="e.g. 10.000"
-                                    onFocus={(e) => e.target.select()}
-                                    value={it.weight_grams ?? ''}
-                                    onChange={(e) => {
-                                      handleUpdateItem(it.id, 'weight_grams', e.target.value);
-                                      if (showValidationErrors) setShowValidationErrors(false);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.55rem 2.2rem 0.55rem 0.75rem',
-                                      borderRadius: '6px',
-                                      border: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '2px solid #dc2626' : '1px solid #cbd5e1',
-                                      background: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '#fef2f2' : '#ffffff',
-                                      boxShadow: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
-                                      fontSize: '0.85rem',
-                                      fontWeight: 600
-                                    }}
-                                    required
-                                  />
-                                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) ? '#dc2626' : '#64748b', pointerEvents: 'none' }}>
-                                    g
-                                  </span>
-                                </div>
-                                {showValidationErrors && (!it.weight_grams || Number(it.weight_grams) <= 0) && (
-                                  <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                    <i className="fa-solid fa-triangle-exclamation"></i> Please enter Item Weight (&gt; 0g)
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Item Reference Photo / Design Image Picker */}
-                            <div style={{ marginBottom: '0.75rem', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                                {uploadingImageItemId === it.id ? (
-                                  <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#fef3c7', border: '1.5px solid #d97706', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
-                                    <i className="fa-solid fa-spinner fa-spin" />
-                                  </div>
-                                ) : it.image_url ? (
-                                  <img
-                                    src={it.image_url}
-                                    alt="Ornament Design"
-                                    onClick={() => setPreviewImage({ url: it.image_url!, title: it.product_name || 'Ornament Design' })}
-                                    title="Click to enlarge image"
-                                    style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer', transition: 'transform 0.15s ease' }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
-                                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                  />
-                                ) : (
-                                  <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
-                                    <i className="fa-solid fa-camera" />
-                                  </div>
-                                )}
-                                <div>
-                                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f172a' }}>
-                                    {lang === 'TE' ? 'ఆర్డర్ నమూనా ఫోటో (Design Photo)' : 'Item Reference Photo / Design Image'}
-                                  </div>
-                                  <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
-                                    {uploadingImageItemId === it.id
-                                      ? 'Converting & loading preview...'
-                                      : it.image_url
-                                      ? 'Photo attached (Will store on Sale Done)'
-                                      : 'Optional reference image for craftsmen'}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <label
-                                  style={{
-                                    padding: '5px 12px',
-                                    borderRadius: '6px',
-                                    background: it.image_url ? '#fef3c7' : '#ffffff',
-                                    border: '1px solid #d97706',
-                                    color: '#b45309',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    opacity: uploadingImageItemId === it.id ? 0.7 : 1,
-                                    pointerEvents: uploadingImageItemId === it.id ? 'none' : 'auto',
-                                  }}
-                                >
-                                  {uploadingImageItemId === it.id ? (
-                                    <span><i className="fa-solid fa-spinner fa-spin"></i> Processing...</span>
-                                  ) : (
-                                    <>
-                                      <i className="fa-solid fa-upload"></i>
-                                      {it.image_url ? 'Change Photo' : 'Upload Image'}
-                                    </>
-                                  )}
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    style={{ display: 'none' }}
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        handleItemImageUpload(it.id, file);
-                                      }
-                                    }}
-                                  />
-                                </label>
-                                {it.image_url && !uploadingImageItemId && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateItem(it.id, 'image_url', '')}
-                                    style={{ padding: '5px 8px', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
-                                    title="Remove Photo"
-                                  >
-                                    <i className="fa-solid fa-trash-can"></i>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Row 2.5 (2 main columns): Left Unit Type | Right Sub-Grid (Quantity Count & Length in inches) */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                              {/* Left Side: Unit Type */}
-                              <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
-                                  Unit Type (Pairs / Pcs)
-                                </label>
-                                <select
-                                  value={it.quantity_unit || 'PIECES'}
-                                  onChange={(e) => handleUpdateItem(it.id, 'quantity_unit', e.target.value)}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.55rem 0.6rem',
-                                    borderRadius: '6px',
-                                    border: '1px solid #cbd5e1',
-                                    fontSize: '0.85rem',
-                                    background: '#ffffff',
-                                    fontWeight: 700,
-                                    color: '#0f172a',
-                                  }}
-                                >
-                                  <option value="PIECES">🧩 Pieces (Pcs)</option>
-                                  <option value="PAIRS">👥 Pairs (Prs)</option>
-                                </select>
-                              </div>
-
-                              {/* Right Side Sub-Grid: Quantity Count & Length in Inches */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                                <div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0))) ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
-                                      Quantity <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
-                                    </label>
-                                    {(showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0))) && (
-                                      <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#dc2626' }}>* Req</span>
-                                    )}
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    placeholder="e.g. 1"
-                                    onFocus={(e) => e.target.select()}
-                                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                    value={it.quantity_value !== undefined ? it.quantity_value : ''}
-                                    onChange={(e) => {
-                                      handleUpdateItem(it.id, 'quantity_value', e.target.value);
-                                      if (showValidationErrors) setShowValidationErrors(false);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.55rem 0.5rem',
-                                      borderRadius: '6px',
-                                      border: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0)))
-                                        ? '2px solid #dc2626'
-                                        : '1px solid #cbd5e1',
-                                      background: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0)))
-                                        ? '#fef2f2'
-                                        : '#ffffff',
-                                      boxShadow: (showValidationErrors || (it.quantity_value !== undefined && (it.quantity_value === '' || Number(it.quantity_value) <= 0)))
-                                        ? '0 0 0 4px rgba(220, 38, 38, 0.25)'
-                                        : 'none',
-                                      fontSize: '0.85rem',
-                                      fontWeight: 700,
-                                      color: '#0f172a',
-                                    }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
-                                    Length (inches)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder='e.g. 18", 22"'
-                                    onFocus={(e) => e.target.select()}
-                                    value={it.item_length_inches ?? ''}
-                                    onChange={(e) => handleUpdateItem(it.id, 'item_length_inches', e.target.value)}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.55rem 0.5rem',
-                                      borderRadius: '6px',
-                                      border: '1px solid #cbd5e1',
-                                      fontSize: '0.85rem',
-                                      fontWeight: 700,
-                                      color: '#0f172a',
-                                      background: '#ffffff',
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Row 3: Deduction Name on left, Deduction Weight & Net Metal Weight on right */}
-                            {(() => {
-                              const isDeductionTooHigh = dedW > grossW && grossW > 0;
-                              return (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                  {/* Left Side: Deduction Name */}
-                                  <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.deductionNameLabel}</label>
-                                    <CreatablePresetSelect
-                                      value={it.deduction_name ?? ''}
-                                      onChange={(val) => handleUpdateItem(it.id, 'deduction_name', toStartCase(val))}
-                                      options={presets.deduction_name || []}
-                                      placeholder={t.deductionNamePlaceholder}
-                                      categoryName="deduction_name"
-                                      onAddNewPreset={handleAddNewPreset}
-                                    />
-                                  </div>
-
-                                  {/* Right Side Sub-Grid: Deduction Weight & Net Metal Weight */}
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                                    <div>
-                                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: isDeductionTooHigh ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
-                                        {t.deductionWeightLabel}
-                                      </label>
-                                      <div style={{ position: 'relative' }}>
-                                        <input
-                                          type="text"
-                                          inputMode="decimal"
-                                          placeholder="e.g. 2.000"
-                                          onFocus={(e) => e.target.select()}
-                                          value={it.deduction_weight_grams ? it.deduction_weight_grams : ''}
-                                          onChange={(e) => handleUpdateItem(it.id, 'deduction_weight_grams', e.target.value)}
-                                          style={{
-                                            width: '100%',
-                                            padding: '0.55rem 2rem 0.55rem 0.65rem',
-                                            borderRadius: '6px',
-                                            border: isDeductionTooHigh ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
-                                            background: isDeductionTooHigh ? '#fef2f2' : '#ffffff',
-                                            color: isDeductionTooHigh ? '#dc2626' : '#1e293b',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 600
-                                          }}
-                                        />
-                                        <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: isDeductionTooHigh ? '#dc2626' : '#64748b', pointerEvents: 'none' }}>
-                                          g
-                                        </span>
-                                      </div>
-                                      {isDeductionTooHigh && (
-                                        <div style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 600, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                          <i className="fa-solid fa-circle-exclamation"></i>
-                                          Exceeds Gross Weight ({grossW} g)
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div>
-                                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#15803d', display: 'block', marginBottom: '3px' }}>
-                                        {netWeightLabel}
-                                      </label>
-                                      <div style={{ position: 'relative' }}>
-                                        <input
-                                          type="text"
-                                          readOnly
-                                          placeholder="0.000"
-                                          value={grossW > 0 ? formatMax3Decimals(netW) : ''}
-                                          style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.65rem', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', fontWeight: 700, color: '#15803d', fontSize: '0.85rem' }}
-                                        />
-                                        <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#15803d', pointerEvents: 'none' }}>
-                                          g
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-
-                            {/* Row 4 (2 fields for SELL): HMW (%) & Total Weight after HMW */}
-                            {it.item_type === 'SELL' && (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.hmwLabel}</label>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    placeholder="e.g. 3"
-                                    onFocus={(e) => e.target.select()}
-                                    value={it.wastage_percent ? it.wastage_percent : ''}
-                                    onChange={(e) => handleUpdateItem(it.id, 'wastage_percent', e.target.value)}
-                                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b45309', display: 'block', marginBottom: '3px' }}>{t.totalWeightAfterHmwLabel}</label>
-                                  <div style={{ position: 'relative' }}>
-                                    <input
-                                      type="text"
-                                      readOnly
-                                      placeholder="0.000"
-                                      value={grossW > 0 ? formatMax3Decimals(totalWWithHmw) : ''}
-                                      style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fef3c7', fontWeight: 700, color: '#b45309', fontSize: '0.85rem' }}
-                                    />
-                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#b45309', pointerEvents: 'none' }}>
-                                      g
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Row 4 (2 fields for BUY): Item Quality (%) & Pure Metal Weight */}
-                            {it.item_type === 'BUY' && (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
-                                    {t.itemQualityLabel}
-                                  </label>
-                                  <div style={{ position: 'relative' }}>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      placeholder="e.g. 90"
-                                      onFocus={(e) => e.target.select()}
-                                      value={it.purity_percentage ? it.purity_percentage : ''}
-                                      onChange={(e) => handleUpdateItem(it.id, 'purity_percentage', e.target.value)}
-                                      style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}
-                                    />
-                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>
-                                      %
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  {(() => {
-                                    const purityPct = Number(it.purity_percentage) || 0;
-                                    const pureW = purityPct > 0 ? Number((netW * (purityPct / 100)).toFixed(3)) : 0;
-                                    const pureLabel = isGold ? t.pureGoldWeightLabel : t.pureSilverWeightLabel;
-                                    return (
-                                      <>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#d97706', display: 'block', marginBottom: '3px' }}>
-                                          {pureLabel}
-                                        </label>
-                                        <div style={{ position: 'relative' }}>
-                                          <input
-                                            type="text"
-                                            readOnly
-                                            placeholder="0.000"
-                                            value={grossW > 0 && purityPct > 0 ? formatMax3Decimals(pureW) : ''}
-                                            style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fffbeb', fontWeight: 700, color: '#d97706', fontSize: '0.85rem' }}
-                                          />
-                                          <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#d97706', pointerEvents: 'none' }}>
-                                            g
-                                          </span>
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Row 6 (2 fields for SELL): Making Charges & Total Item Value */}
-                            {it.item_type === 'SELL' && (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>{t.makingChargesLabel}</label>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    placeholder="e.g. 200"
-                                    onFocus={(e) => e.target.select()}
-                                    value={it.making_charges_per_gram ? it.making_charges_per_gram : ''}
-                                    onChange={(e) => handleUpdateItem(it.id, 'making_charges_per_gram', e.target.value)}
-                                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', display: 'block', marginBottom: '3px' }}>{t.itemTotalLabel}</label>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    placeholder="₹0"
-                                    value={grossW > 0 && itemLineTotal > 0 ? `₹${itemLineTotal.toLocaleString('en-IN')}` : ''}
-                                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #86efac', background: '#f0fdf4', fontWeight: 800, color: '#15803d', fontSize: '0.88rem' }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Row 7 (SELL only): Return Purity (%) & Return Pure Gold — not shown for BUY items */}
-                            {it.item_type === 'SELL' && (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6d28d9', margin: 0 }}>
-                                      {t.returnPurityLabel}
-                                    </label>
-                                    <button
-                                      type="button"
-                                      onClick={() => alert('ℹ️ Return Purity (%) — How It Is Calculated:\n\nThis % is applied on the "Only Gold Weight" (Net Weight) — i.e., after removing all stone/bead/wax deductions from the Gross Weight.\n\n📌 Example:\n  Gross Weight       = 52.000 g\n  Deduction (Stones) = 3.000 g\n  Net Gold Weight    = 49.000 g\n  Return Purity %    = 91.6%\n\n  Return Pure Gold   = 49 × 91.6 ÷ 100 = 44.884 g')}
-                                      title="Click to see how Return Purity is calculated"
-                                      style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', padding: 0, fontSize: '0.75rem' }}
-                                    >
-                                      <i className="fa-solid fa-circle-info"></i>
-                                    </button>
-                                  </div>
-                                  <div style={{ position: 'relative' }}>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      placeholder="e.g. 91.6"
-                                      onFocus={(e) => e.target.select()}
-                                      value={it.return_purity_percentage ?? ''}
-                                      onChange={(e) => {
-                                        const retPurityVal = e.target.value;
-                                        const retPurityNum = Number(retPurityVal) || 0;
-                                        const retPureG = retPurityNum > 0 ? Number((netW * (retPurityNum / 100)).toFixed(3)) : '';
-                                        handleUpdateItemMultiple(it.id, {
-                                          return_purity_percentage: retPurityVal,
-                                          return_pure_gold: retPureG,
-                                        });
-                                      }}
-                                      style={{ width: '100%', padding: '0.55rem 2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #c4b5fd', background: '#f5f3ff', fontSize: '0.85rem', fontWeight: 600, color: '#6d28d9' }}
-                                    />
-                                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', pointerEvents: 'none' }}>
-                                      %
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  {(() => {
-                                    const retPurityPct = Number(it.return_purity_percentage) || 0;
-                                    const calculatedRetPureG = retPurityPct > 0 ? Number((netW * (retPurityPct / 100)).toFixed(3)) : 0;
-                                    const pureRetLabel = isGold ? t.returnPureGoldLabel : t.returnPureSilverLabel;
-                                    return (
-                                      <>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
-                                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6d28d9', margin: 0 }}>
-                                            {pureRetLabel}
-                                          </label>
-                                          <button
-                                            type="button"
-                                            onClick={() => alert('ℹ️ Return Pure Gold Weight — How It Is Calculated:\n\nFormula: Return Pure Gold = Net Weight × (Return Purity % ÷ 100)\n\nNet Weight = Gross Weight − All Deductions (stones, beads, wax, etc.)\n\n📌 Example:\n  Gross Weight       = 52.000 g\n  Deduction (Stones) = 3.000 g\n  Net Gold Weight    = 49.000 g\n  Return Purity %    = 91.6%\n\n  Return Pure Gold   = 49 × 91.6 ÷ 100 = 44.884 g')}
-                                            title="Click to see how Return Pure Weight is calculated"
-                                            style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', padding: 0, fontSize: '0.75rem' }}
-                                          >
-                                            <i className="fa-solid fa-circle-info"></i>
-                                          </button>
-                                        </div>
-                                        <div style={{ position: 'relative' }}>
-                                          <input
-                                            type="text"
-                                            readOnly
-                                            placeholder="0.000"
-                                            value={grossW > 0 && retPurityPct > 0 ? formatMax3Decimals(calculatedRetPureG) : (it.return_pure_gold || '')}
-                                            style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #ddd6fe', background: '#f5f3ff', fontWeight: 700, color: '#6d28d9', fontSize: '0.85rem' }}
-                                          />
-                                          <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', pointerEvents: 'none' }}>
-                                            g
-                                          </span>
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0' }}>
-                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                          {t.calculatedSubtotal} <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>₹{(calcResults.itemDetails[it.id]?.lineTotal || 0).toLocaleString('en-IN')}</strong>
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Payment Breakdown Box: Full Payment vs Partial Payment (Only shown when customer owes money) */}
+                {/* Payment Breakdown Box: Full Payment vs Partial Payment (Only shown when customer owes money or in ORDER mode) */}
                 {(() => {
-                  const isCustomerPaying = (mode as string) !== 'BUY' && totalSellValue >= totalBuyCredit;
+                  const isCustomerPaying = mode === 'ORDER' || ((mode as string) !== 'BUY' && totalSellValue >= totalBuyCredit);
                   if (!isCustomerPaying) return null;
 
                   const grandTotalAmount = mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);

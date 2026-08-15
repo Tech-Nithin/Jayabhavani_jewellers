@@ -7,19 +7,11 @@ interface Props {
 }
 
 export const WorkerLoginForm: React.FC<Props> = ({ onLoginSuccess }) => {
-  const testId = (import.meta as any).env?.VITE_TEST_WORKER_ID || '';
-  const testPass = (import.meta as any).env?.VITE_TEST_WORKER_PASSCODE || '';
-
-  const [identifier, setIdentifier] = useState(testId);
-  const [passcode, setPasscode] = useState(testPass);
+  const [identifier, setIdentifier] = useState('');
+  const [passcode, setPasscode] = useState('');
+  const [showPasscode, setShowPasscode] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  const handleQuickFill = () => {
-    setIdentifier(testId || '9876543210');
-    setPasscode(testPass || '1234');
-    setLoginError('');
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,13 +66,36 @@ export const WorkerLoginForm: React.FC<Props> = ({ onLoginSuccess }) => {
 
           <div className="wa-input-group">
             <label className="wa-label">Passcode:</label>
-            <input
-              type="password"
-              placeholder="Enter passcode"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              className="wa-input"
-            />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                type={showPasscode ? 'text' : 'password'}
+                placeholder="Enter passcode"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                className="wa-input"
+                style={{ width: '100%', paddingRight: '2.5rem' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPasscode(!showPasscode)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                title={showPasscode ? 'Hide passcode' : 'Show passcode'}
+              >
+                <i className={`fa-solid ${showPasscode ? 'fa-eye-slash' : 'fa-eye'}`} />
+              </button>
+            </div>
           </div>
 
           <button
@@ -88,25 +103,7 @@ export const WorkerLoginForm: React.FC<Props> = ({ onLoginSuccess }) => {
             disabled={isLoggingIn}
             className="wa-login-btn"
           >
-            {isLoggingIn ? 'Signing in...' : 'Sign In to WhatsApp Portal'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleQuickFill}
-            style={{
-              background: 'transparent',
-              border: '1px dashed var(--wa-amber-accent)',
-              color: 'var(--wa-amber-accent)',
-              borderRadius: '10px',
-              padding: '0.55rem',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              marginTop: '0.25rem',
-            }}
-          >
-            <i className="fa-solid fa-bolt" /> Auto-Fill Test Credentials
+            {isLoggingIn ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
       </div>

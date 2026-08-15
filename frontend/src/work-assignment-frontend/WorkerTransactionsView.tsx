@@ -3,7 +3,7 @@ import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
 import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
 import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
-import { convertImageToWebP, convertImageToWebPBlob } from '../utils/imageUtils';
+import { convertImageToWebP, convertImageToWebPBlob, downloadImageAsJpeg } from '../utils/imageUtils';
 import { playJbjNotificationSound } from '../utils/soundUtils';
 
 interface WorkerTransactionItem {
@@ -37,6 +37,13 @@ interface WorkerTransactionItem {
   } | null;
 }
 
+export interface ReplyMessageData {
+  id: string;
+  senderName: string;
+  notes: string;
+  photos?: string[];
+}
+
 interface WorkerTransactionsViewProps {
   worker: any;
   workers?: any[];
@@ -45,9 +52,9 @@ interface WorkerTransactionsViewProps {
   lang?: Language;
 }
 
-const toStartCase = (str?: string | null): string => {
+const toSentenceCase = (str?: string | null): string => {
   if (!str) return '';
-  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
 export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
@@ -61,6 +68,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   // Active Selected Worker State (Supports internal switching)
   const [worker, setWorker] = useState(initialWorker);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [lastMessageTimes, setLastMessageTimes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setWorker(initialWorker);
@@ -68,8 +77,48 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
   const handleWorkerChange = (w: any) => {
     setWorker(w);
+    if (w?.id) {
+      setUnreadCounts((prev) => ({ ...prev, [w.id]: 0 }));
+      fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worker_id: w.id, direction: 'INCOMING' }),
+      }).catch(() => {});
+    }
     if (onSelectWorker) onSelectWorker(w);
   };
+
+  // Periodically refresh workers' unread counts & latest message timestamps
+  useEffect(() => {
+    const refreshWorkerUnreadCounts = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/work-assignment/workers`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.workers)) {
+          const counts: Record<string, number> = {};
+          const times: Record<string, string> = {};
+          data.workers.forEach((w: any) => {
+            if (worker?.id && String(w.id) === String(worker.id)) {
+              counts[w.id] = 0;
+            } else {
+              counts[w.id] = w.unread_messages_count || 0;
+            }
+            if (w.last_message_at) {
+              times[w.id] = w.last_message_at;
+            }
+          });
+          setUnreadCounts((prev) => ({ ...prev, ...counts }));
+          setLastMessageTimes((prev) => ({ ...prev, ...times }));
+        }
+      } catch (err) {
+        // silent catch
+      }
+    };
+
+    refreshWorkerUnreadCounts();
+    const interval = setInterval(refreshWorkerUnreadCounts, 4000);
+    return () => clearInterval(interval);
+  }, [worker?.id]);
 
   const [transactions, setTransactions] = useState<WorkerTransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,6 +148,15 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [activeMenuTxId, setActiveMenuTxId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<'down' | 'up'>('down');
+  const [replyTo, setReplyTo] = useState<ReplyMessageData | null>(null);
+
+  // Edit Message & Edit History Modal State
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [editText, setEditText] = useState<string>('');
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [historyTx, setHistoryTx] = useState<WorkerTransactionItem | null>(null);
 
   const isSendingRef = useRef(isSending);
   const searchQueryRef = useRef(searchQuery);
@@ -110,6 +168,17 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   useEffect(() => {
     searchQueryRef.current = searchQuery;
   }, [searchQuery]);
+
+  // Close active message dropdown menu when clicking anywhere outside
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActiveMenuTxId(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => {
+      window.removeEventListener('click', handleOutsideClick);
+    };
+  }, []);
 
   // Full-Screen Image Lightbox Preview & WhatsApp Share State
   const [previewImageData, setPreviewImageData] = useState<{ url: string; title: string } | null>(null);
@@ -296,6 +365,31 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                   return t;
                 })
               );
+            }
+          } catch {}
+        });
+
+        eventSource.addEventListener('MESSAGE_EDITED', (event: any) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload && String(payload.worker_id) === String(worker.id)) {
+              setTransactions((prev) =>
+                prev.map((t) => {
+                  if (t.id === payload.id) {
+                    return { ...t, notes: payload.notes, edited_at_history: payload.edited_at_history };
+                  }
+                  return t;
+                })
+              );
+            }
+          } catch {}
+        });
+
+        eventSource.addEventListener('MESSAGE_DELETED', (event: any) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload && String(payload.worker_id) === String(worker.id)) {
+              setTransactions((prev) => prev.filter((t) => t.id !== payload.id));
             }
           } catch {}
         });
@@ -487,6 +581,10 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         alert('⚠️ Validation Error: Please enter cash amount or attach photos.');
         return;
       }
+      if (category === 'CASH' && (cashMetalLink === 'FOR_GOLD' || cashMetalLink === 'FOR_SILVER') && !appliedRatePerGram) {
+        alert(`⚠️ Validation Error: Please enter Rate per Gram (₹) for ${cashMetalLink === 'FOR_GOLD' ? 'Gold' : 'Silver'} purpose.`);
+        return;
+      }
       if (category !== 'CASH' && category !== 'CHAT' && !weightGrams) {
         alert('⚠️ Validation Error: Please enter gold/ornament/silver weight or attach photos.');
         return;
@@ -507,8 +605,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
               ? 'Raw Silver Bar'
               : 'Ornament Item';
 
-      const formattedItemName = toStartCase(itemName.trim()) || defaultName;
-      const formattedNotes = toStartCase(notes.trim());
+      const formattedItemName = toSentenceCase(itemName.trim()) || defaultName;
+      const formattedNotes = toSentenceCase(notes.trim());
 
       const defaultTouch = category === 'SILVER' ? 80.0 : 91.6;
 
@@ -526,6 +624,10 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       }
       if (itemName.trim()) formData.append('item_name', formattedItemName);
       formData.append('notes', formattedNotes);
+
+      if (replyTo) {
+        formData.append('reply_to', JSON.stringify(replyTo));
+      }
 
       // Attach binary WebP Blobs directly without Base64 strings!
       photoFiles.forEach((file) => {
@@ -554,6 +656,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         setNotes('');
         setPhotos([]);
         setPhotoFiles([]);
+        setReplyTo(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
 
         if (data.warning) {
@@ -574,6 +677,56 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     }
   };
 
+  const handleDeleteMessage = async (txId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/work-assignment/worker-transactions/${txId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === txId ? { ...t, is_deleted: true } : t))
+        );
+      } else {
+        alert(`❌ Failed to delete message: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      console.error('Error deleting message:', err);
+      alert(`❌ Network error deleting message: ${err.message || 'Server did not respond'}`);
+    }
+  };
+
+  const handleSaveEditMessage = async () => {
+    if (!editingTxId) return;
+    try {
+      setIsSavingEdit(true);
+      const res = await fetch(`${API_BASE}/work-assignment/worker-transactions/${editingTxId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: editText }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTransactions((prev) =>
+          prev.map((t) =>
+            t.id === editingTxId
+              ? { ...t, notes: editText, edited_at_history: data.edited_at_history || t.edited_at_history }
+              : t
+          )
+        );
+        setEditingTxId(null);
+        setEditText('');
+      } else {
+        alert(`❌ Failed to edit message: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      console.error('Error editing message:', err);
+      alert(`❌ Error editing message: ${err.message || 'Server did not respond'}`);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   // ── STRICT 100% PURE FINE METAL BALANCES CALCULATION ──
   let totalGoldSentFine = 0;
   let totalGoldReceivedFine = 0;
@@ -589,12 +742,32 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
     if (t.direction === 'OUTGOING') {
       if (t.category === 'GOLD' || t.category === 'ORNAMENT') totalGoldSentFine += fine;
-      if (t.category === 'SILVER') totalSilverSentFine += fine;
-      if (t.category === 'CASH') totalCashSent += Number(t.amount_cash) || 0;
+      else if (t.category === 'SILVER') totalSilverSentFine += fine;
+      else if (t.category === 'CASH') {
+        if (t.cash_metal_link === 'FOR_GOLD') {
+          const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
+          totalGoldSentFine += equiv;
+        } else if (t.cash_metal_link === 'FOR_SILVER') {
+          const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
+          totalSilverSentFine += equiv;
+        } else {
+          totalCashSent += Number(t.amount_cash) || 0;
+        }
+      }
     } else {
       if (t.category === 'GOLD' || t.category === 'ORNAMENT') totalGoldReceivedFine += fine;
-      if (t.category === 'SILVER') totalSilverReceivedFine += fine;
-      if (t.category === 'CASH') totalCashReceived += Number(t.amount_cash) || 0;
+      else if (t.category === 'SILVER') totalSilverReceivedFine += fine;
+      else if (t.category === 'CASH') {
+        if (t.cash_metal_link === 'FOR_GOLD') {
+          const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
+          totalGoldReceivedFine += equiv;
+        } else if (t.cash_metal_link === 'FOR_SILVER') {
+          const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
+          totalSilverReceivedFine += equiv;
+        } else {
+          totalCashReceived += Number(t.amount_cash) || 0;
+        }
+      }
     }
   });
 
@@ -629,10 +802,18 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     }
   }, [searchQuery, activeMatchIdx]);
 
-  const filteredSidebarWorkers = workers.filter((w) =>
-    w.name?.toLowerCase().includes(sidebarSearchQuery.toLowerCase()) ||
-    w.specialization?.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
-  );
+  const filteredSidebarWorkers = [...workers]
+    .filter((w) =>
+      w.name?.toLowerCase().includes(sidebarSearchQuery.toLowerCase()) ||
+      w.specialization?.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      const timeA = lastMessageTimes[a.id] || a.last_message_at || a.updated_at || a.created_at || '';
+      const timeB = lastMessageTimes[b.id] || b.last_message_at || b.updated_at || b.created_at || '';
+      const dateA = timeA ? new Date(timeA).getTime() : 0;
+      const dateB = timeB ? new Date(timeB).getTime() : 0;
+      return dateB - dateA;
+    });
 
   return (
     <div className="tablet-dense-view worker-chat-view" style={{ background: '#f0f2f5', borderRadius: '18px', border: '1px solid #cbd5e1', boxShadow: '0 8px 30px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'row', height: 'calc(97vh - 45px)', overflow: 'hidden' }}>
@@ -656,8 +837,9 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
               const params = new URLSearchParams(window.location.search);
               params.set('module', 'work-assignment');
               params.set('view', 'work-history');
-              params.set('workerId', worker?.id || 'ALL');
-              window.location.search = params.toString();
+              params.set('workerId', 'ALL');
+              window.history.pushState({}, '', `?${params.toString()}`);
+              window.dispatchEvent(new Event('popstate'));
             }}
             style={{
               width: '100%',
@@ -707,6 +889,17 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 0' }}>
           {filteredSidebarWorkers.map((w: any) => {
             const isSelected = w.id === worker?.id;
+            const unreadCount = unreadCounts[w.id] ?? w.unread_messages_count ?? 0;
+            const rawLastTime = lastMessageTimes[w.id] || w.last_message_at;
+
+            let formattedTime = '';
+            if (rawLastTime) {
+              const d = new Date(rawLastTime);
+              if (!isNaN(d.getTime())) {
+                formattedTime = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+              }
+            }
+
             return (
               <div
                 key={w.id}
@@ -714,48 +907,81 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.5rem 0.75rem',
+                  justifyContent: 'space-between',
+                  gap: '0.4rem',
+                  padding: '0.55rem 0.75rem',
                   cursor: 'pointer',
-                  background: isSelected ? '#e0f2fe' : 'transparent',
-                  borderLeft: isSelected ? '4px solid #0284c7' : '4px solid transparent',
+                  background: isSelected ? '#e0f2fe' : unreadCount > 0 ? '#fffbeb' : 'transparent',
+                  borderLeft: isSelected ? '4px solid #0284c7' : unreadCount > 0 ? '4px solid #d97706' : '4px solid transparent',
                   transition: 'all 0.15s ease',
                 }}
-                title={`Switch to ${w.name}`}
+                title={`Switch to ${w.name}${unreadCount > 0 ? ` (${unreadCount} unread messages)` : ''}`}
               >
-                {w.photo_url ? (
-                  <img
-                    src={w.photo_url}
-                    alt={w.name}
-                    style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '2px solid #0284c7' : '1px solid #cbd5e1', flexShrink: 0 }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: '30px',
-                      height: '30px',
-                      borderRadius: '50%',
-                      background: isSelected ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 800,
-                      fontSize: '0.82rem',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {w.name.charAt(0)}
-                  </div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+                  {w.photo_url ? (
+                    <img
+                      src={w.photo_url}
+                      alt={w.name}
+                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '2px solid #0284c7' : '1px solid #cbd5e1', flexShrink: 0 }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: isSelected ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 800,
+                        fontSize: '0.82rem',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {w.name ? w.name.charAt(0) : '?'}
+                    </div>
+                  )}
 
-                <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                  <div style={{ fontWeight: isSelected ? 800 : 700, fontSize: '0.78rem', color: isSelected ? '#0369a1' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {w.name}
+                  <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flex: 1 }}>
+                    <div style={{ fontWeight: isSelected || unreadCount > 0 ? 800 : 700, fontSize: '0.78rem', color: isSelected ? '#0369a1' : unreadCount > 0 ? '#b45309' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {w.name}
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: isSelected ? '#0284c7' : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {w.specialization || 'Goldsmith'}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.62rem', color: isSelected ? '#0284c7' : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {w.specialization || 'Goldsmith'}
-                  </div>
+                </div>
+
+                {/* Right Side: Timestamp + Vibrant Orange Unread Badge */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0, marginLeft: '4px' }}>
+                  {formattedTime && (
+                    <span style={{ fontSize: '0.60rem', fontWeight: unreadCount > 0 ? 800 : 600, color: unreadCount > 0 ? '#d97706' : '#94a3b8' }}>
+                      {formattedTime}
+                    </span>
+                  )}
+                  {unreadCount > 0 && (
+                    <span
+                      style={{
+                        background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                        color: '#ffffff',
+                        fontSize: '0.65rem',
+                        fontWeight: 900,
+                        minWidth: '18px',
+                        height: '18px',
+                        borderRadius: '9px',
+                        padding: '0 5px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 6px rgba(180, 83, 9, 0.35)',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -764,7 +990,20 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       </div>
 
       {/* ── MAIN CHAT PANEL (RIGHT SIDE) ── */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      {!worker ? (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '2rem', textAlign: 'center' }}>
+          <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.25rem', border: '2px dashed #fde68a', boxShadow: '0 4px 12px rgba(217, 119, 6, 0.15)' }}>
+            <i className="fa-solid fa-comments" style={{ fontSize: '2.5rem', color: '#d97706' }} />
+          </div>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>
+            Select a Worker to View Chat
+          </h3>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', maxWidth: '380px', lineHeight: 1.5 }}>
+            Choose a goldsmith or artisan from the left sidebar to view their transaction history, send raw gold/silver entries, or send messages.
+          </p>
+        </div>
+      ) : (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
 
         {/* ── CHAT HEADER ── */}
         <div style={{ background: '#ffffff', padding: '0.6rem 1rem', borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
@@ -1009,7 +1248,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
               loadOlderTransactions();
             }
           }}
-          style={{ flex: 1, minHeight: 0, padding: '1rem 1.25rem', overflowY: 'auto', background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)', backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '18px 18px' }}
+          style={{ flex: 1, minHeight: 0, padding: '1rem 1.25rem', overflowY: 'auto', overflowX: 'hidden', background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)', backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '18px 18px' }}
         >
           {/* Scroll-Up Loading Indicator */}
           {loadingOlderMessages && (
@@ -1097,8 +1336,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                       transition: 'all 0.2s ease',
                     }}
                   >
-                    {/* Badge Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
+                    {/* Badge Header with Options Dropdown Trigger */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '6px', position: 'relative' }}>
                       <span
                         style={{
                           fontSize: '0.60rem',
@@ -1110,28 +1349,153 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                           textTransform: 'uppercase',
                         }}
                       >
-                        {isOutgoing ? 'OUTGOING (STORE → WORKER)' : 'INCOMING (WORKER → STORE)'}
+                        {isOutgoing ? 'YOU' : 'WORKER'}
                       </span>
 
-                      <span style={{ fontSize: '0.58rem', color: '#64748b', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        {new Date(t.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        {isOutgoing && (
-                          <span className="wa-status-ticks">
-                            {t.status_state === 'FAILED' ? (
-                              <span className="wa-failed-badge" title="Sending failed">
-                                <i className="fa-solid fa-triangle-exclamation" style={{ color: '#ef4444', fontSize: '0.70rem' }} />
-                              </span>
-                            ) : t.status_state === 'SENDING' ? (
-                              <i className="fa-solid fa-clock" style={{ color: '#94a3b8', fontSize: '0.70rem' }} title="Sending..." />
-                            ) : t.status_state === 'READ' || t.is_seen === 'YES' || t.read_at || t.seen_at ? (
-                              <i className="fa-solid fa-check-double" style={{ color: '#0284c7', fontSize: '0.75rem' }} title="Seen by Worker (Blue tick)" />
-                            ) : (
-                              <i className="fa-solid fa-check-double" style={{ color: '#94a3b8', fontSize: '0.75rem' }} title="Delivered to Worker" />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
+                        {/* Options Dropdown Trigger */}
+                        <button
+                          type="button"
+                          className="wa-menu-trigger"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (activeMenuTxId === t.id) {
+                              setActiveMenuTxId(null);
+                            } else {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const spaceBelow = window.innerHeight - rect.bottom;
+                              setMenuPosition(spaceBelow < 220 ? 'up' : 'down');
+                              setActiveMenuTxId(t.id);
+                            }
+                          }}
+                          style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.72rem', padding: '0 3px' }}
+                          title="Message options"
+                        >
+                          <i className="fa-solid fa-caret-down" />
+                        </button>
+
+                        {/* Dropdown Options Menu */}
+                        {activeMenuTxId === t.id && (
+                          <div
+                            className={`wa-bubble-dropdown ${isOutgoing ? 'wa-bubble-out' : 'wa-bubble-in'}`}
+                            style={{
+                              top: menuPosition === 'up' ? 'auto' : '100%',
+                              bottom: menuPosition === 'up' ? '100%' : 'auto',
+                              right: isOutgoing ? 0 : 'auto',
+                              left: isOutgoing ? 'auto' : 0,
+                              marginTop: menuPosition === 'down' ? '4px' : undefined,
+                              marginBottom: menuPosition === 'up' ? '4px' : undefined,
+                              whiteSpace: 'nowrap',
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {!t.is_deleted && (
+                              <button
+                                type="button"
+                                className="wa-dropdown-item"
+                                onClick={() => {
+                                  setActiveMenuTxId(null);
+                                  setReplyTo({
+                                    id: t.id,
+                                    senderName: isOutgoing ? 'YOU' : worker.name,
+                                    notes: t.notes || (t.category === 'CASH' ? `₹${t.amount_cash}` : `${t.weight_grams}g ${t.category}`),
+                                    photos: t.photos,
+                                  });
+                                }}
+                              >
+                                <i className="fa-solid fa-reply" /> Reply
+                              </button>
                             )}
-                          </span>
+
+                            {t.notes && !t.is_deleted && (
+                              <button
+                                type="button"
+                                className="wa-dropdown-item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigator.clipboard.writeText(t.notes);
+                                  alert('📋 Message text copied to clipboard!');
+                                  setActiveMenuTxId(null);
+                                }}
+                              >
+                                <i className="fa-solid fa-copy" /> Copy Text
+                              </button>
+                            )}
+
+                            {isOutgoing && !t.is_deleted && (Date.now() - new Date(t.created_at).getTime() <= 30 * 60 * 1000) && (
+                              <button
+                                type="button"
+                                className="wa-dropdown-item"
+                                onClick={() => {
+                                  setActiveMenuTxId(null);
+                                  setEditingTxId(t.id);
+                                  setEditText(t.notes || '');
+                                }}
+                              >
+                                <i className="fa-solid fa-pen-to-square" /> Edit Message
+                              </button>
+                            )}
+
+                            {t.edited_at_history && t.edited_at_history.length > 0 && (
+                              <button
+                                type="button"
+                                className="wa-dropdown-item"
+                                onClick={() => {
+                                  setActiveMenuTxId(null);
+                                  setHistoryTx(t);
+                                }}
+                              >
+                                <i className="fa-solid fa-clock-rotate-left" /> View Edit History ({t.edited_at_history.length})
+                              </button>
+                            )}
+
+                            {t.photos && t.photos.length > 0 && (
+                              <button
+                                type="button"
+                                className="wa-dropdown-item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadImageAsJpeg(t.photos[0], `jbj_image_${t.id}.jpeg`);
+                                  setActiveMenuTxId(null);
+                                }}
+                              >
+                                <i className="fa-solid fa-download" /> Download Image (JPEG)
+                              </button>
+                            )}
+
+                            {isOutgoing && !t.is_deleted && (
+                              <button
+                                type="button"
+                                className="wa-dropdown-item text-danger"
+                                onClick={() => {
+                                  setActiveMenuTxId(null);
+                                  if (confirm('Delete this message for everyone?')) {
+                                    handleDeleteMessage(t.id);
+                                  }
+                                }}
+                              >
+                                <i className="fa-solid fa-trash-can" /> Delete Message
+                              </button>
+                            )}
+                          </div>
                         )}
-                      </span>
+                      </div>
                     </div>
+
+                    {/* Deleted Message Placeholder vs Normal Message */}
+                    {t.is_deleted ? (
+                      <div style={{ fontStyle: 'italic', color: '#94a3b8', fontSize: '0.78rem', padding: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="fa-solid fa-ban" style={{ color: '#94a3b8' }} /> This message was deleted
+                      </div>
+                    ) : (
+                      <>
+                        {/* Quoted Message Reply Display inside Bubble */}
+                        {t.reply_to && (
+                          <div style={{ background: 'rgba(0,0,0,0.04)', borderLeft: '3px solid #0284c7', padding: '4px 8px', borderRadius: '4px', marginBottom: '6px', fontSize: '0.72rem' }}>
+                            <div style={{ fontWeight: 800, color: '#0284c7', fontSize: '0.65rem' }}>Replying to {t.reply_to.senderName}</div>
+                            <div style={{ color: '#475569', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{t.reply_to.notes}</div>
+                          </div>
+                        )}
 
                     {/* Transaction Category & Detailed Breakdown */}
                     {t.photos && t.photos.length > 0 && Number(t.amount_cash) === 0 && Number(t.weight_grams) === 0 ? (
@@ -1140,7 +1504,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                           <i className="fa-solid fa-camera" style={{ color: '#0284c7' }}></i> PHOTO ATTACHMENT
                         </div>
                         <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', margin: '2px 0 2px 0' }}>
-                          {toStartCase(t.item_name || 'Photo Attachment')}
+                          {toSentenceCase(t.item_name || 'Photo Attachment')}
                         </div>
                       </div>
                     ) : t.category === 'CASH' ? (
@@ -1170,7 +1534,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         {/* Item Name */}
                         <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>{t.category === 'GOLD' ? '🥇' : t.category === 'SILVER' ? '🥈' : '👑'}</span>
-                          <span>{toStartCase(t.item_name || (t.category === 'GOLD' ? 'Raw Gold Bar' : t.category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item'))}</span>
+                          <span>{toSentenceCase(t.item_name || (t.category === 'GOLD' ? 'Raw Gold Bar' : t.category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item'))}</span>
                         </div>
 
                         {/* Detailed Metrics Grid (Strict 100% Fine Metal) */}
@@ -1228,6 +1592,36 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         ))}
                       </div>
                     )}
+                    </>
+                    )}
+                    {/* Message Footer: Timestamp, Edit Badge, Status Ticks at Bottom Right */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', marginTop: '4px', fontSize: '0.60rem', color: '#64748b' }}>
+                      {t.edited_at_history && t.edited_at_history.length > 0 && !t.is_deleted && (
+                        <span
+                          style={{ fontStyle: 'italic', color: '#94a3b8', cursor: 'pointer' }}
+                          onClick={() => setHistoryTx(t)}
+                          title="Click to view edit history"
+                        >
+                          (edited)
+                        </span>
+                      )}
+                      <span>{new Date(t.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                      {isOutgoing && (
+                        <span className="wa-status-ticks" style={{ marginLeft: '2px', display: 'inline-flex', alignItems: 'center' }}>
+                          {t.status_state === 'FAILED' ? (
+                            <span className="wa-failed-badge" title="Sending failed">
+                              <i className="fa-solid fa-triangle-exclamation" style={{ color: '#ef4444', fontSize: '0.70rem' }} />
+                            </span>
+                          ) : t.status_state === 'SENDING' ? (
+                            <i className="fa-solid fa-clock" style={{ color: '#94a3b8', fontSize: '0.70rem' }} title="Sending..." />
+                          ) : t.status_state === 'READ' || t.is_seen === 'YES' || t.read_at || t.seen_at ? (
+                            <i className="fa-solid fa-check-double" style={{ color: '#0284c7', fontSize: '0.75rem' }} title="Seen by Worker (Blue tick)" />
+                          ) : (
+                            <i className="fa-solid fa-check-double" style={{ color: '#94a3b8', fontSize: '0.75rem' }} title="Delivered to Worker" />
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1269,6 +1663,28 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
           {isAccordionExpanded && (
             <form onSubmit={handleSendTransaction} style={{ padding: '0.85rem 1.25rem' }}>
 
+              {/* Quoted Message Reply Preview Banner */}
+              {replyTo && (
+                <div style={{ background: '#f1f5f9', borderLeft: '4px solid #0284c7', padding: '8px 12px', borderRadius: '8px', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <i className="fa-solid fa-reply"></i> Replying to {replyTo.senderName}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#334155', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', marginTop: '2px' }}>
+                      {replyTo.notes || (replyTo.photos && replyTo.photos.length > 0 ? '📷 Photo Attachment' : 'Message')}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReplyTo(null)}
+                    style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.9rem', padding: '4px' }}
+                    title="Cancel reply"
+                  >
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+              )}
+
               {/* Live Message Preview Banner (Toggleable ON/OFF) */}
               {isMessagePreviewEnabled && (
                 <div className="worker-chat-live-preview" style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '12px', border: '1px dashed #0284c7', marginBottom: '0.75rem' }}>
@@ -1302,7 +1718,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                             <i className="fa-solid fa-camera" style={{ color: '#0284c7' }}></i> PHOTO ATTACHMENT
                           </div>
                           <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', margin: '2px 0' }}>
-                            {toStartCase(itemName.trim()) || 'Photo Attachment'}
+                            {toSentenceCase(itemName.trim()) || 'Photo Attachment'}
                           </div>
                         </div>
                       ) : category === 'CASH' ? (
@@ -1327,7 +1743,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         <div style={{ margin: '4px 0', padding: '6px 10px', background: category === 'GOLD' ? '#fffbe8' : category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '8px', border: category === 'GOLD' ? '1px solid #fde68a' : category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
                           <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
                             {category === 'GOLD' ? '🥇' : category === 'SILVER' ? '🥈' : '👑'}{' '}
-                            {toStartCase(itemName.trim()) || (category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item')}
+                            {toSentenceCase(itemName.trim()) || (category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item')}
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '4px', fontSize: '0.72rem', background: '#ffffff', padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
                             <div>
@@ -1510,7 +1926,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         type="text"
                         placeholder={category === 'ORNAMENT' ? 'Ornament Name...' : 'Gold Item...'}
                         value={itemName}
-                        onChange={(e) => setItemName(e.target.value)}
+                        autoCapitalize="sentences"
+                        onChange={(e) => setItemName(toSentenceCase(e.target.value))}
                         style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
                       />
                     </div>
@@ -1553,7 +1970,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     type="text"
                     placeholder="Add notes..."
                     value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                    autoCapitalize="sentences"
+                    onChange={(e) => setNotes(toSentenceCase(e.target.value))}
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
                   />
                 </div>
@@ -1632,6 +2050,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* ── WORKER PROFILE INFORMATION DIALOG MODAL (WITH EDIT & PHOTO UPLOAD) ── */}
       {showWorkerModal && (
@@ -1850,6 +2269,83 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT MESSAGE MODAL ── */}
+      {editingTxId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#ffffff', borderRadius: '16px', maxWidth: '440px', width: '100%', padding: '1.25rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #cbd5e1' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <i className="fa-solid fa-pen-to-square" style={{ color: '#0284c7' }} /> Edit Message
+              </h4>
+              <button type="button" onClick={() => setEditingTxId(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.1rem' }}>
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+            <textarea
+              rows={3}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              placeholder="Edit message notes..."
+              style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none', resize: 'vertical', marginBottom: '1rem' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setEditingTxId(null)}
+                style={{ padding: '0.55rem 1rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingEdit || !editText.trim()}
+                onClick={handleSaveEditMessage}
+                style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', border: 'none', background: '#0284c7', color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.8rem', opacity: isSavingEdit || !editText.trim() ? 0.6 : 1 }}
+              >
+                {isSavingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT HISTORY MODAL ── */}
+      {historyTx && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#ffffff', borderRadius: '16px', maxWidth: '440px', width: '100%', padding: '1.25rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #cbd5e1' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <i className="fa-solid fa-clock-rotate-left" style={{ color: '#0284c7' }} /> Edit History
+              </h4>
+              <button type="button" onClick={() => setHistoryTx(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.1rem' }}>
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '250px', overflowY: 'auto', marginBottom: '1rem' }}>
+              {historyTx.edited_at_history && historyTx.edited_at_history.length > 0 ? (
+                historyTx.edited_at_history.map((ts: string, idx: number) => (
+                  <div key={idx} style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.78rem' }}>
+                    <div style={{ color: '#64748b', fontWeight: 600, fontSize: '0.7rem' }}>Edit #{idx + 1}</div>
+                    <div style={{ color: '#0f172a', fontWeight: 700 }}>{new Date(ts).toLocaleString()}</div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ color: '#64748b', fontSize: '0.8rem', textAlign: 'center', padding: '1rem' }}>No edit history available</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setHistoryTx(null)}
+                style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

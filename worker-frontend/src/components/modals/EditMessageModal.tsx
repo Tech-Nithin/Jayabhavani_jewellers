@@ -8,6 +8,11 @@ interface Props {
   onSave: (transactionId: string, newNotes: string) => Promise<void>;
 }
 
+const toSentenceCase = (str?: string | null): string => {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
 export const EditMessageModal: React.FC<Props> = ({ transaction, isOpen, onClose, onSave }) => {
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -26,7 +31,7 @@ export const EditMessageModal: React.FC<Props> = ({ transaction, isOpen, onClose
 
     setIsSaving(true);
     try {
-      await onSave(transaction.id, notes.trim());
+      await onSave(transaction.id, toSentenceCase(notes.trim()));
       onClose();
     } finally {
       setIsSaving(false);
@@ -44,7 +49,8 @@ export const EditMessageModal: React.FC<Props> = ({ transaction, isOpen, onClose
         <form onSubmit={handleSubmit}>
           <textarea
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            autoCapitalize="sentences"
+            onChange={(e) => setNotes(toSentenceCase(e.target.value))}
             className="wa-dialog-textarea"
             rows={4}
             placeholder="Type updated message notes..."
