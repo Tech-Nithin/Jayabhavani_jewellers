@@ -67,8 +67,11 @@ app.use((req: Request, res: Response, next) => {
   next();
 });
 
+import workerAuthRoutes from './routes/workerAuthRoutes';
+
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/worker-auth', workerAuthRoutes);
 app.use('/api', productRoutes);
 app.use('/api/product-card', productCardRoutes);
 

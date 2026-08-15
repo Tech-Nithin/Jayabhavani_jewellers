@@ -39,8 +39,8 @@ interface GoldPageProps {
 
 export default function GoldPage({ onBackToStore: _onBackToStore, initialCategory = 'all' }: GoldPageProps) {
   const [_rates, setRates] = useState({
-    gold_buy_value: 14200,
-    gold_sell_value: 14700,
+    gold_buy_value: 0,
+    gold_sell_value: 0,
   });
 
   useEffect(() => {
@@ -49,16 +49,48 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
         const res = await fetch(`${API_BASE}/billing/rates`);
         const data = await res.json();
         if (data.success && data.rates) {
-          setRates({
-            gold_buy_value: Number(data.rates.gold_buy_value) || 14200,
-            gold_sell_value: Number(data.rates.gold_sell_value) || 14700,
-          });
+          setRates((prev) => ({
+            gold_buy_value: data.rates.gold_buy_value !== undefined ? Number(data.rates.gold_buy_value) : prev.gold_buy_value,
+            gold_sell_value: data.rates.gold_sell_value !== undefined ? Number(data.rates.gold_sell_value) : prev.gold_sell_value,
+          }));
         }
       } catch (err) {
         // Fallback
       }
     }
+
     fetchRates();
+
+    const handleLocalUpdate = (e: any) => {
+      if (e.detail) {
+        setRates((prev) => ({
+          gold_buy_value: e.detail.gold_buy_value !== undefined ? Number(e.detail.gold_buy_value) : prev.gold_buy_value,
+          gold_sell_value: e.detail.gold_sell_value !== undefined ? Number(e.detail.gold_sell_value) : prev.gold_sell_value,
+        }));
+      } else {
+        fetchRates();
+      }
+    };
+    window.addEventListener('jbj_metal_rates_updated', handleLocalUpdate);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('jbj_rates_channel');
+      channel.onmessage = (msg) => {
+        if (msg.data?.type === 'RATES_UPDATED' && msg.data?.rates) {
+          const r = msg.data.rates;
+          setRates((prev) => ({
+            gold_buy_value: r.gold_buy_value !== undefined ? Number(r.gold_buy_value) : prev.gold_buy_value,
+            gold_sell_value: r.gold_sell_value !== undefined ? Number(r.gold_sell_value) : prev.gold_sell_value,
+          }));
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener('jbj_metal_rates_updated', handleLocalUpdate);
+      if (channel) channel.close();
+    };
   }, []);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);

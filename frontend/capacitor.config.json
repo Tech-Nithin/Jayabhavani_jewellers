@@ -1,0 +1,9 @@
+{
+  "appId": "com.jayabhavani.admin",
+  "appName": "Jaya Bhavani Admin",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

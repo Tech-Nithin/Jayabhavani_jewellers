@@ -76,6 +76,9 @@ export interface WorkerTransactionItem {
   photos: string[]; // Multiple image URLs/base64
   notes: string;
   created_at: string;
+  edited_at_history?: string[];
+  is_deleted?: boolean;
+  reply_to?: any;
 }
 
 // Initial state (Empty for production)
@@ -659,6 +662,58 @@ const saveLocalTransaction = (txn: WorkerTransactionItem) => {
   }
 };
 
+// ── SERVER-SENT EVENTS (SSE) REALTIME STREAM MANAGER ──
+const sseClientsMap = new Map<string, Set<Response>>();
+
+const broadcastToWorker = (workerId: string, eventType: string, payload: any) => {
+  const clients = sseClientsMap.get(String(workerId));
+  if (clients && clients.size > 0) {
+    const dataStr = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
+    clients.forEach((res) => {
+      try {
+        res.write(dataStr);
+      } catch (err) {
+        clients.delete(res);
+      }
+    });
+  }
+};
+
+/**
+ * GET /api/work-assignment/worker-transactions/stream?workerId=WRKR-1
+ * Subscribes to real-time chat SSE stream for workerId (< 10ms live push)
+ */
+router.get('/worker-transactions/stream', (req: Request, res: Response) => {
+  const { workerId } = req.query;
+  if (!workerId) {
+    return res.status(400).json({ success: false, message: 'workerId is required for live stream' });
+  }
+
+  const cleanWorkerId = String(workerId);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  res.write(': ping\n\n');
+
+  if (!sseClientsMap.has(cleanWorkerId)) {
+    sseClientsMap.set(cleanWorkerId, new Set());
+  }
+  sseClientsMap.get(cleanWorkerId)!.add(res);
+
+  req.on('close', () => {
+    const clients = sseClientsMap.get(cleanWorkerId);
+    if (clients) {
+      clients.delete(res);
+      if (clients.size === 0) {
+        sseClientsMap.delete(cleanWorkerId);
+      }
+    }
+  });
+});
+
 // GET /api/worker-transactions?workerId=WRK-101&days=7&beforeDate=...&search=...
 router.get('/worker-transactions', async (req: Request, res: Response) => {
   const { workerId, days, beforeDate, search, fullHistory } = req.query;
@@ -673,7 +728,22 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
     const { data: dbTxns, error: dbErr } = await query;
 
     if (!dbErr && dbTxns) {
-      let filtered = dbTxns;
+      // Merge local disk transactions so newly sent messages never flicker or disappear
+      const localTxns = getLocalTransactions();
+      const map = new Map<string, any>();
+      if (Array.isArray(dbTxns)) {
+        dbTxns.forEach((t: any) => map.set(t.id, t));
+      }
+      localTxns.forEach((t: any) => {
+        if (workerId && String(t.worker_id) !== String(workerId)) return;
+        if (!map.has(t.id)) {
+          map.set(t.id, t);
+        }
+      });
+      let combinedTxns = Array.from(map.values());
+      combinedTxns.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      let filtered = combinedTxns;
 
       // 🔍 SEARCH MODE: Search 100% full database history across all fields
       if (search && String(search).trim() !== '') {
@@ -761,11 +831,109 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
     }
   }
 
+  const formattedCombined = combined.map((t: any) => ({
+    ...t,
+    status_state: t.status_state || (t.read_at ? 'READ' : 'DELIVERED'),
+  }));
+
   res.json({
     success: true,
-    transactions: combined,
+    transactions: formattedCombined,
     source: 'local_disk_fallback',
   });
+});
+
+/**
+ * PUT /api/work-assignment/worker-transactions/mark-read
+ * Marks messages for worker_id as READ & is_seen = 'YES' (Double Sky-Blue Ticks)
+ * Supports direction filter ('INCOMING' for Admin reading, 'OUTGOING' for Worker reading)
+ * EXCLUDES 'FAILED' messages.
+ */
+router.put('/worker-transactions/mark-read', async (req: Request, res: Response) => {
+  try {
+    const { worker_id, direction } = req.body;
+    if (!worker_id) {
+      return res.status(400).json({ success: false, message: 'worker_id is required to mark messages as read' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const targetDirection = direction ? String(direction).toUpperCase() : null;
+
+    // 1. Update Supabase PostgreSQL
+    try {
+      let query = supabase
+        .from('worker_transactions')
+        .update({ status_state: 'READ', is_seen: 'YES', read_at: nowIso, seen_at: nowIso })
+        .eq('worker_id', String(worker_id))
+        .neq('status_state', 'FAILED');
+
+      if (targetDirection) {
+        query = query.eq('direction', targetDirection);
+      }
+
+      await query;
+    } catch (err) {
+      console.warn('Supabase mark-read exception:', err);
+    }
+
+    // 2. Update Local Disk fallback
+    const local = getLocalTransactions();
+    let updatedCount = 0;
+    const updatedLocal = local.map((tx: any) => {
+      const matchWorker = String(tx.worker_id) === String(worker_id);
+      const matchDirection = targetDirection ? tx.direction === targetDirection : true;
+      const isNotFailed = tx.status_state !== 'FAILED';
+      const isNotYetSeen = !tx.read_at || tx.status_state !== 'READ' || tx.is_seen !== 'YES';
+
+      if (matchWorker && matchDirection && isNotFailed && isNotYetSeen) {
+        updatedCount++;
+        return {
+          ...tx,
+          status_state: 'READ',
+          is_seen: 'YES',
+          read_at: nowIso,
+          seen_at: nowIso,
+        };
+      }
+      return tx;
+    });
+
+    if (updatedCount > 0) {
+      ensureTxFileExists();
+      fs.writeFileSync(txFilePath, JSON.stringify(updatedLocal, null, 2));
+    }
+
+    // 3. Update mockTransactions array in memory ONLY for this specific worker_id
+    mockTransactions.forEach((tx: any) => {
+      const matchWorker = String(tx.worker_id) === String(worker_id);
+      const matchDirection = targetDirection ? tx.direction === targetDirection : true;
+      const isNotFailed = tx.status_state !== 'FAILED';
+      if (matchWorker && matchDirection && isNotFailed) {
+        tx.status_state = 'READ';
+        tx.is_seen = 'YES';
+        tx.read_at = tx.read_at || nowIso;
+        tx.seen_at = tx.seen_at || nowIso;
+      }
+    });
+
+    // 4. Broadcast SSE live stream event for instant sky-blue ticks (< 10ms)
+    broadcastToWorker(String(worker_id), 'MARK_READ', {
+      worker_id: String(worker_id),
+      direction: targetDirection,
+      read_at: nowIso,
+      seen_at: nowIso,
+    });
+
+    res.json({
+      success: true,
+      message: `Marked ${updatedCount} transactions as READ / SEEN for worker ${worker_id}`,
+      worker_id: String(worker_id),
+      read_at: nowIso,
+      seen_at: nowIso,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // POST /api/worker-transactions (Supports both JSON & FormData Binary WebP Uploads)
@@ -848,6 +1016,10 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       equivalent_metal_grams: eqGrams,
       photos: uploadedPhotos,
       notes: notes || '',
+      status_state: 'DELIVERED',
+      is_seen: 'NO',
+      read_at: null,
+      seen_at: null,
       created_at: new Date().toISOString(),
     };
 
@@ -896,6 +1068,28 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       }
     }
 
+    // Trigger FCM Event-Driven Push Webhook on transaction submission
+    try {
+      const { triggerFcmPushNotification } = require('../../routes/workerAuthRoutes');
+      if (newTxn.worker_id) {
+        const notifTitle = newTxn.direction === 'OUTGOING' ? 'Jaya Bhavani Admin' : `Worker Update (${newTxn.worker_id})`;
+        const notifBody = newTxn.notes || (newTxn.item_name ? `Item: ${newTxn.item_name}` : `New transaction recorded (${newTxn.category})`);
+        console.log(`📡 [FCM Event Trigger] Dispatching notification to ${newTxn.worker_id}: "${notifTitle} - ${notifBody}"`);
+        triggerFcmPushNotification(newTxn.worker_id, notifTitle, notifBody, {
+          transaction_id: finalInserted.id,
+          direction: newTxn.direction,
+          category: newTxn.category,
+        });
+      }
+    } catch (fcmErr: any) {
+      console.warn('⚠️ FCM Webhook trigger notice:', fcmErr.message);
+    }
+
+    // Broadcast instant Server-Sent Event (SSE) live stream to all connected screens in < 10ms
+    if (newTxn.worker_id) {
+      broadcastToWorker(newTxn.worker_id, 'NEW_TRANSACTION', finalInserted);
+    }
+
     res.json({
       success: true,
       message: 'Transaction recorded and saved to database successfully!',
@@ -908,6 +1102,110 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       message: `Backend Execution Error: ${err.message || 'Failed to record transaction'}`,
       error_details: err.stack,
     });
+  }
+});
+
+// PUT /api/worker-transactions/:id (Edit message notes & track edit timestamps array)
+router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    if (notes === undefined) {
+      return res.status(400).json({ success: false, message: 'Notes field is required for editing' });
+    }
+
+    const editTimestamp = new Date().toISOString();
+
+    // 1. Update local disk file backup
+    try {
+      const local = getLocalTransactions();
+      const idx = local.findIndex((t: any) => t.id === id);
+      if (idx !== -1) {
+        const history = Array.isArray(local[idx].edited_at_history) ? local[idx].edited_at_history : [];
+        history.push(editTimestamp);
+        local[idx].notes = notes;
+        local[idx].edited_at_history = history;
+        fs.writeFileSync(txFilePath, JSON.stringify(local, null, 2));
+      }
+    } catch (e) {
+      console.warn('Failed to update local JSON file for edit:', e);
+    }
+
+    // 2. Update in-memory mock
+    const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
+    let currentHistory: string[] = [];
+    if (mockIdx !== -1) {
+      currentHistory = Array.isArray(mockTransactions[mockIdx].edited_at_history) ? mockTransactions[mockIdx].edited_at_history : [];
+      currentHistory.push(editTimestamp);
+      mockTransactions[mockIdx].notes = notes;
+      mockTransactions[mockIdx].edited_at_history = currentHistory;
+    } else {
+      currentHistory = [editTimestamp];
+    }
+
+    // 3. Update in Supabase
+    try {
+      await supabase
+        .from('worker_transactions')
+        .update({ notes, edited_at_history: currentHistory })
+        .eq('id', id);
+    } catch (dbErr) {
+      console.warn('Supabase update worker_transactions warning:', dbErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'Message edited successfully',
+      transaction_id: id,
+      notes,
+      edited_at_history: currentHistory,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to edit transaction' });
+  }
+});
+
+// DELETE /api/worker-transactions/:id (Soft-delete transaction)
+router.delete('/worker-transactions/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Update local disk file backup
+    try {
+      const local = getLocalTransactions();
+      const idx = local.findIndex((t: any) => t.id === id);
+      if (idx !== -1) {
+        local[idx].is_deleted = true;
+        fs.writeFileSync(txFilePath, JSON.stringify(local, null, 2));
+      }
+    } catch (e) {
+      console.warn('Failed to update local JSON file for delete:', e);
+    }
+
+    // 2. Update mock array
+    const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
+    if (mockIdx !== -1) {
+      mockTransactions[mockIdx].is_deleted = true;
+    }
+
+    // 3. Update Supabase
+    try {
+      await supabase
+        .from('worker_transactions')
+        .update({ is_deleted: true })
+        .eq('id', id);
+    } catch (dbErr) {
+      console.warn('Supabase delete worker_transactions warning:', dbErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'Message deleted successfully',
+      transaction_id: id,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to delete transaction' });
   }
 });
 

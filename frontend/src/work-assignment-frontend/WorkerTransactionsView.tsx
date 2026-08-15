@@ -4,13 +4,14 @@ import { translations, type Language } from '../utils/translations';
 import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
 import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
 import { convertImageToWebP, convertImageToWebPBlob } from '../utils/imageUtils';
+import { playJbjNotificationSound } from '../utils/soundUtils';
 
 interface WorkerTransactionItem {
   id: string;
   worker_id: string;
   order_id?: string | null;
   direction: 'OUTGOING' | 'INCOMING';
-  category: 'CASH' | 'GOLD' | 'SILVER' | 'ORNAMENT';
+  category: 'CASH' | 'GOLD' | 'SILVER' | 'ORNAMENT' | 'CHAT';
   amount_cash?: number;
   weight_grams?: number;
   touch_percentage?: number;
@@ -22,6 +23,18 @@ interface WorkerTransactionItem {
   photos: string[];
   notes: string;
   created_at: string;
+  status_state?: 'PENDING' | 'SENDING' | 'DELIVERED' | 'READ' | 'FAILED' | string;
+  is_seen?: 'YES' | 'NO' | string;
+  read_at?: string | null;
+  seen_at?: string | null;
+  is_deleted?: boolean;
+  edited_at_history?: any[];
+  reply_to?: {
+    id: string;
+    senderName: string;
+    notes: string;
+    photos?: string[];
+  } | null;
 }
 
 interface WorkerTransactionsViewProps {
@@ -75,7 +88,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
   // New Transaction Form State
   const [direction, setDirection] = useState<'OUTGOING' | 'INCOMING'>('OUTGOING');
-  const [category, setCategory] = useState<'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT'>('GOLD');
+  const [category, setCategory] = useState<'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT'>('GOLD');
   const [itemName, setItemName] = useState('');
   const [amountCash, setAmountCash] = useState('');
   const [cashMetalLink, setCashMetalLink] = useState<'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH'>('FOR_GOLD');
@@ -86,6 +99,17 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
+
+  const isSendingRef = useRef(isSending);
+  const searchQueryRef = useRef(searchQuery);
+
+  useEffect(() => {
+    isSendingRef.current = isSending;
+  }, [isSending]);
+
+  useEffect(() => {
+    searchQueryRef.current = searchQuery;
+  }, [searchQuery]);
 
   // Full-Screen Image Lightbox Preview & WhatsApp Share State
   const [previewImageData, setPreviewImageData] = useState<{ url: string; title: string } | null>(null);
@@ -217,7 +241,108 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   useEffect(() => {
     setTransactions([]);
     setHasMoreOlderMessages(true);
-    fetchInitialTransactions();
+
+    // Mark ONLY this active worker's inbound messages as READ when Admin opens their chat screen
+    if (worker?.id) {
+      fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worker_id: worker.id, direction: 'INCOMING' }),
+      })
+        .then(() => fetchInitialTransactions())
+        .catch(() => fetchInitialTransactions());
+    }
+
+    // ── SERVER-SENT EVENTS (SSE) LIVE CHAT STREAM (< 10ms REAL-TIME BRIDGE) ──
+    let eventSource: EventSource | null = null;
+    if (worker?.id) {
+      try {
+        eventSource = new EventSource(`${API_BASE}/work-assignment/worker-transactions/stream?workerId=${worker.id}`);
+
+        eventSource.addEventListener('NEW_TRANSACTION', (event: any) => {
+          try {
+            const tx = JSON.parse(event.data);
+            if (tx && String(tx.worker_id) === String(worker.id)) {
+              setTransactions((prev) => {
+                if (prev.some((t) => t.id === tx.id)) return prev;
+                if (tx.direction === 'INCOMING') {
+                  playJbjNotificationSound();
+                  // Instantly mark read since Admin is currently actively looking at chat screen
+                  fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ worker_id: worker.id, direction: 'INCOMING' }),
+                  }).catch(() => {});
+                }
+                return [...prev, tx];
+              });
+              scrollToBottom(true);
+            }
+          } catch (err) {
+            console.warn('SSE parse error:', err);
+          }
+        });
+
+        eventSource.addEventListener('MARK_READ', (event: any) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload && String(payload.worker_id) === String(worker.id)) {
+              setTransactions((prev) =>
+                prev.map((t) => {
+                  const matchDir = payload.direction ? t.direction === payload.direction : true;
+                  if (matchDir) {
+                    return { ...t, status_state: 'READ', is_seen: 'YES', read_at: payload.read_at || t.read_at };
+                  }
+                  return t;
+                })
+              );
+            }
+          } catch {}
+        });
+      } catch (err) {
+        console.warn('EventSource connection exception:', err);
+      }
+    }
+
+    const handleLocalMsg = (e: any) => {
+      if (e.detail && worker?.id && String(e.detail.worker_id) === String(worker.id)) {
+        setTransactions((prev) => {
+          if (prev.some((t) => t.id === e.detail.id)) return prev;
+          if (e.detail.direction === 'INCOMING') {
+            playJbjNotificationSound();
+          }
+          return [...prev, e.detail];
+        });
+        scrollToBottom(true);
+      }
+    };
+    window.addEventListener('jbj_chat_message_sent', handleLocalMsg);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('jbj_chat_channel');
+      channel.onmessage = (msg) => {
+        if (msg.data?.type === 'NEW_MESSAGE' && msg.data?.transaction) {
+          const tx = msg.data.transaction;
+          if (worker?.id && String(tx.worker_id) === String(worker.id)) {
+            setTransactions((prev) => {
+              if (prev.some((t) => t.id === tx.id)) return prev;
+              if (tx.direction === 'INCOMING') {
+                playJbjNotificationSound();
+              }
+              return [...prev, tx];
+            });
+            scrollToBottom(true);
+          }
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener('jbj_chat_message_sent', handleLocalMsg);
+      if (channel) channel.close();
+      if (eventSource) eventSource.close();
+    };
   }, [worker?.id]);
 
   const scrollToBottom = (smooth = true) => {
@@ -354,11 +479,15 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     const hasPhotos = photos && photos.length > 0;
 
     if (!hasPhotos) {
+      if (category === 'CHAT' && !notes.trim()) {
+        alert('⚠️ Please enter a message to send.');
+        return;
+      }
       if (category === 'CASH' && !amountCash) {
         alert('⚠️ Validation Error: Please enter cash amount or attach photos.');
         return;
       }
-      if (category !== 'CASH' && !weightGrams) {
+      if (category !== 'CASH' && category !== 'CHAT' && !weightGrams) {
         alert('⚠️ Validation Error: Please enter gold/ornament/silver weight or attach photos.');
         return;
       }
@@ -387,12 +516,15 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       formData.append('worker_id', worker.id);
       formData.append('direction', direction);
       formData.append('category', category);
-      formData.append('amount_cash', String(Number(amountCash) || 0));
+      
+      if (amountCash) formData.append('amount_cash', String(Number(amountCash) || 0));
       if (category === 'CASH' && cashMetalLink) formData.append('cash_metal_link', cashMetalLink);
       if (category === 'CASH' && appliedRatePerGram) formData.append('applied_rate_per_gram', String(Number(appliedRatePerGram) || 0));
-      formData.append('weight_grams', String(Number(weightGrams) || 0));
-      formData.append('touch_percentage', String(Number(touchPercentage) || defaultTouch));
-      formData.append('item_name', formattedItemName);
+      if (weightGrams) {
+        formData.append('weight_grams', String(Number(weightGrams) || 0));
+        formData.append('touch_percentage', String(Number(touchPercentage) || defaultTouch));
+      }
+      if (itemName.trim()) formData.append('item_name', formattedItemName);
       formData.append('notes', formattedNotes);
 
       // Attach binary WebP Blobs directly without Base64 strings!
@@ -407,7 +539,11 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
       const data = await res.json();
       if (data.success && data.transaction) {
-        setTransactions((prev) => [...prev, data.transaction]);
+        const newTx = data.transaction;
+        setTransactions((prev) => {
+          if (prev.some((t) => t.id === newTx.id)) return prev;
+          return [...prev, newTx];
+        });
         scrollToBottom(true);
         // Reset form inputs
         setAmountCash('');
@@ -977,8 +1113,23 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         {isOutgoing ? 'OUTGOING (STORE → WORKER)' : 'INCOMING (WORKER → STORE)'}
                       </span>
 
-                      <span style={{ fontSize: '0.58rem', color: '#64748b', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.58rem', color: '#64748b', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         {new Date(t.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        {isOutgoing && (
+                          <span className="wa-status-ticks">
+                            {t.status_state === 'FAILED' ? (
+                              <span className="wa-failed-badge" title="Sending failed">
+                                <i className="fa-solid fa-triangle-exclamation" style={{ color: '#ef4444', fontSize: '0.70rem' }} />
+                              </span>
+                            ) : t.status_state === 'SENDING' ? (
+                              <i className="fa-solid fa-clock" style={{ color: '#94a3b8', fontSize: '0.70rem' }} title="Sending..." />
+                            ) : t.status_state === 'READ' || t.is_seen === 'YES' || t.read_at || t.seen_at ? (
+                              <i className="fa-solid fa-check-double" style={{ color: '#0284c7', fontSize: '0.75rem' }} title="Seen by Worker (Blue tick)" />
+                            ) : (
+                              <i className="fa-solid fa-check-double" style={{ color: '#94a3b8', fontSize: '0.75rem' }} title="Delivered to Worker" />
+                            )}
+                          </span>
+                        )}
                       </span>
                     </div>
 
@@ -1014,7 +1165,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                           </div>
                         ) : null}
                       </div>
-                    ) : (
+                    ) : Number(t.weight_grams) > 0 ? (
                       <div style={{ margin: '4px 0', padding: '5px 8px', background: t.category === 'GOLD' ? '#fffbe8' : t.category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '8px', border: t.category === 'GOLD' ? '1px solid #fde68a' : t.category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
                         {/* Item Name */}
                         <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1040,14 +1191,20 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                           </div>
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
-                    {/* Notes */}
-                    {t.notes && (
-                      <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#334155', fontStyle: 'italic', background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: '4px' }}>
-                        "{t.notes}"
-                      </p>
-                    )}
+                      {/* Notes / Plain Text Message */}
+                      {t.notes && (
+                        Number(t.weight_grams) > 0 ? (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#334155', fontStyle: 'italic', background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: '4px' }}>
+                            "{t.notes}"
+                          </p>
+                        ) : (
+                          <div style={{ fontSize: '0.88rem', color: '#0f172a', fontWeight: 600, marginTop: '2px', wordBreak: 'break-word' }}>
+                            {t.notes}
+                          </div>
+                        )
+                      )}
 
                     {/* Photo Thumbnails with Full-Screen Expand & Share */}
                     {t.photos && t.photos.length > 0 && (
@@ -1166,7 +1323,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                             </div>
                           )}
                         </div>
-                      ) : (
+                      ) : Number(weightGrams) > 0 ? (
                         <div style={{ margin: '4px 0', padding: '6px 10px', background: category === 'GOLD' ? '#fffbe8' : category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '8px', border: category === 'GOLD' ? '1px solid #fde68a' : category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
                           <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
                             {category === 'GOLD' ? '🥇' : category === 'SILVER' ? '🥈' : '👑'}{' '}
@@ -1189,11 +1346,11 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                             </div>
                           </div>
                         </div>
-                      )}
+                      ) : null}
 
                       {notes && (
-                        <div style={{ fontSize: '0.72rem', color: '#475569', fontStyle: 'italic', marginTop: '4px', background: '#f1f5f9', padding: '3px 6px', borderRadius: '4px' }}>
-                          "{toStartCase(notes)}"
+                        <div style={{ fontSize: '0.88rem', color: '#0f172a', fontWeight: 600, marginTop: '2px', wordBreak: 'break-word' }}>
+                          {notes}
                         </div>
                       )}
 
@@ -1292,14 +1449,15 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     <option value="SILVER">🥈 Silver</option>
                     <option value="CASH">💵 Cash</option>
                     <option value="ORNAMENT">👑 Ornament</option>
+                    <option value="CHAT">💬 Plain Message</option>
                   </select>
                 </div>
               </div>
 
               {/* Dynamic Parameter Inputs with Field Labels in Start Case */}
-              <div style={{ display: 'grid', gridTemplateColumns: category === 'CASH' ? '1.2fr 1.4fr 1.2fr 1.5fr auto' : '1.2fr 1fr 1fr 1.5fr auto', gap: '0.65rem', alignItems: 'flex-end' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: category === 'CHAT' ? '1fr auto' : category === 'CASH' ? '1.2fr 1.4fr 1.2fr 1.5fr auto' : '1.2fr 1fr 1fr 1.5fr auto', gap: '0.65rem', alignItems: 'flex-end' }}>
 
-                {category === 'CASH' ? (
+                {category === 'CHAT' ? null : category === 'CASH' ? (
                   <>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>

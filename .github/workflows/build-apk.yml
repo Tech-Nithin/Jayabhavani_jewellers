@@ -1,0 +1,111 @@
+name: Build Standalone Mobile APKs (Worker & Admin)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-worker-apk:
+    name: Build Worker App APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: worker-frontend/package-lock.json
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Worker Dependencies
+        run: |
+          cd worker-frontend
+          npm ci || npm install
+
+      - name: Build Worker Web App Assets
+        run: |
+          cd worker-frontend
+          npm run build
+
+      - name: Add & Sync Capacitor Android
+        run: |
+          cd worker-frontend
+          npx @capacitor/cli install @capacitor/android
+          npx @capacitor/cli add android || true
+          npx @capacitor/cli sync android
+
+      - name: Build Android Debug APK (Gradle)
+        run: |
+          cd worker-frontend/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Worker Standalone APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JayaBhavaniWorker-Standalone-APK
+          path: worker-frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+  build-admin-apk:
+    name: Build Admin App APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Admin Dependencies
+        run: |
+          cd frontend
+          npm ci || npm install
+
+      - name: Build Admin Web App Assets
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Add & Sync Capacitor Android
+        run: |
+          cd frontend
+          npx @capacitor/cli install @capacitor/android
+          npx @capacitor/cli add android || true
+          npx @capacitor/cli sync android
+
+      - name: Build Android Debug APK (Gradle)
+        run: |
+          cd frontend/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Admin Standalone APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JayaBhavaniAdmin-Standalone-APK
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

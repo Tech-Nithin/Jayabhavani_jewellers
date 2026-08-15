@@ -589,6 +589,13 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     const data = await res.json();
     if (data.success) {
       setRates(data.rates);
+      // Forceful instant live update across all open pages & tabs (Groww stock app style)
+      window.dispatchEvent(new CustomEvent('jbj_metal_rates_updated', { detail: data.rates }));
+      try {
+        const channel = new BroadcastChannel('jbj_rates_channel');
+        channel.postMessage({ type: 'RATES_UPDATED', rates: data.rates });
+        channel.close();
+      } catch {}
     }
   };
 
