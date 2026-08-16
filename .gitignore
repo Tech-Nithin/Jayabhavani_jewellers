@@ -38,4 +38,6 @@ Thumbs.db
 # Runtime data & backups
 data/
 backend/data/
+.vite/
+*.vite/
 

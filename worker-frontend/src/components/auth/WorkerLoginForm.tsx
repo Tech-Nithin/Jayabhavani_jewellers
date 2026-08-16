@@ -41,7 +41,7 @@ export const WorkerLoginForm: React.FC<Props> = ({ onLoginSuccess }) => {
     <div className="wa-login-container">
       <div className="wa-login-card">
         <div className="wa-login-logo-ring">
-          <img src="/JB_logo.png" alt="JBJ Logo" className="wa-login-logo" />
+          <img src="/JB_logo_mobile.png" alt="JBJ Logo" className="wa-login-logo" />
         </div>
         <h2 className="wa-login-title">Jaya Bhavani Jewellers</h2>
         <p className="wa-login-subtitle">Goldsmith & Worker Portal</p>

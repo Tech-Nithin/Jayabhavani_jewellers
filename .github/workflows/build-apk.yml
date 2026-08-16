@@ -2,9 +2,9 @@ name: Build Standalone Mobile APKs (Worker & Admin)
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, nikhil-branch ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, nikhil-branch ]
   workflow_dispatch:
 
 jobs:

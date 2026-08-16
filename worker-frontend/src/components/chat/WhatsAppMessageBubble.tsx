@@ -68,17 +68,19 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
         {/* Context Menu Action Button */}
         <div className="wa-bubble-header">
           <span className="wa-sender-name">{isWorkerSent ? 'You' : 'Admin'}</span>
-          <button
-            type="button"
-            className="wa-menu-trigger"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMenu(!showMenu);
-            }}
-            title="Message options"
-          >
-            <i className="fa-solid fa-caret-down" />
-          </button>
+          {!isDeleted && (
+            <button
+              type="button"
+              className="wa-menu-trigger"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+              title="Message options"
+            >
+              <i className="fa-solid fa-caret-down" />
+            </button>
+          )}
         </div>
 
         {/* Dropdown Options Menu */}

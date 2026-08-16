@@ -141,7 +141,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.1rem', width: '100%' }}>
             {/* Top Brand Logo */}
             <img
-              src="/JB_logo.png"
+              src="/JB_logo_mobile.png"
               alt="JB Logo"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               style={{
@@ -334,7 +334,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingLeft: '0.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <img
-                src="/JB_logo.png"
+                src="/JB_logo_mobile.png"
                 alt="Jaya Bhavani Jewellers Logo"
                 style={{
                   width: '46px',

@@ -102,16 +102,10 @@ export default function WorkerApp() {
     }
   };
 
-  // Initial load: 1. Try 0-ms LocalStorage Cache -> 2. Background Revalidate Server Data (7 Days) & Mark Read
+  // Initial load: Fetch fresh server database transactions & mark read
   useEffect(() => {
     if (worker?.id) {
-      const cached = getCachedTransactions(worker.id);
-      if (cached && cached.length > 0) {
-        console.log(`⚡ [Fast 0-ms Load] Loaded ${cached.length} cached transactions from LocalStorage for ${worker.id}`);
-        setTransactions(cached);
-      } else {
-        setLoading(true);
-      }
+      setLoading(true);
 
       // Mark Admin messages as READ when worker opens chat screen
       fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {

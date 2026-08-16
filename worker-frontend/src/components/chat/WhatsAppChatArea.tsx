@@ -15,6 +15,50 @@ interface Props {
   isLoadingEarlier?: boolean;
 }
 
+const formatDateDivider = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const msgDate = new Date(dateStr);
+  if (isNaN(msgDate.getTime())) return '';
+
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  // Check if Today
+  if (
+    msgDate.getDate() === today.getDate() &&
+    msgDate.getMonth() === today.getMonth() &&
+    msgDate.getFullYear() === today.getFullYear()
+  ) {
+    return 'Today';
+  }
+
+  // Check if Yesterday
+  if (
+    msgDate.getDate() === yesterday.getDate() &&
+    msgDate.getMonth() === yesterday.getMonth() &&
+    msgDate.getFullYear() === yesterday.getFullYear()
+  ) {
+    return 'Yesterday';
+  }
+
+  // Same year -> "Wed, 4 Jun"
+  if (msgDate.getFullYear() === today.getFullYear()) {
+    return msgDate.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+  }
+
+  // Different year -> "4 Jun 2025"
+  return msgDate.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
 export const WhatsAppChatArea: React.FC<Props> = ({
   transactions,
   loading,
@@ -77,22 +121,36 @@ export const WhatsAppChatArea: React.FC<Props> = ({
             <i className="fa-solid fa-lock" /> Messages are secured & recorded directly with Jaya Bhavani Jewellers Admin
           </div>
 
-          {transactions.map((tx) => {
-            const isWorkerSent = tx.direction === 'INCOMING';
+          {(() => {
+            let lastDateHeader = '';
+            return transactions.map((tx) => {
+              const isWorkerSent = tx.direction === 'INCOMING';
+              const currentDateHeader = formatDateDivider(tx.created_at);
+              const showDateHeader = currentDateHeader && currentDateHeader !== lastDateHeader;
+              if (showDateHeader) {
+                lastDateHeader = currentDateHeader;
+              }
 
-            return (
-              <WhatsAppMessageBubble
-                key={tx.id}
-                transaction={tx}
-                isWorkerSent={isWorkerSent}
-                onReply={onReply}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onViewEditHistory={onViewEditHistory}
-                onPreviewImage={onPreviewImage}
-              />
-            );
-          })}
+              return (
+                <React.Fragment key={tx.id}>
+                  {showDateHeader && (
+                    <div className="wa-date-divider-container">
+                      <span className="wa-date-divider-pill">{currentDateHeader}</span>
+                    </div>
+                  )}
+                  <WhatsAppMessageBubble
+                    transaction={tx}
+                    isWorkerSent={isWorkerSent}
+                    onReply={onReply}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onViewEditHistory={onViewEditHistory}
+                    onPreviewImage={onPreviewImage}
+                  />
+                </React.Fragment>
+              );
+            });
+          })()}
           <div ref={bottomRef} />
         </>
       )}

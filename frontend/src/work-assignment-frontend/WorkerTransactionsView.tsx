@@ -52,6 +52,46 @@ interface WorkerTransactionsViewProps {
   lang?: Language;
 }
 
+const formatDateDivider = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const msgDate = new Date(dateStr);
+  if (isNaN(msgDate.getTime())) return '';
+
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (
+    msgDate.getDate() === today.getDate() &&
+    msgDate.getMonth() === today.getMonth() &&
+    msgDate.getFullYear() === today.getFullYear()
+  ) {
+    return 'Today';
+  }
+
+  if (
+    msgDate.getDate() === yesterday.getDate() &&
+    msgDate.getMonth() === yesterday.getMonth() &&
+    msgDate.getFullYear() === yesterday.getFullYear()
+  ) {
+    return 'Yesterday';
+  }
+
+  if (msgDate.getFullYear() === today.getFullYear()) {
+    return msgDate.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+  }
+
+  return msgDate.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
 const toSentenceCase = (str?: string | null): string => {
   if (!str) return '';
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -736,6 +776,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   let totalCashReceived = 0;
 
   transactions.forEach((t) => {
+    if (t.is_deleted) return;
     const weight = Number(t.weight_grams) || 0;
     const touch = Number(t.touch_percentage) || (t.category === 'SILVER' ? 80.0 : 91.6);
     const fine = t.fine_weight_grams ? Number(t.fine_weight_grams) : (weight * touch / 100);
@@ -1303,19 +1344,48 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
               <span style={{ fontSize: '0.75rem' }}>Use the input bar below to log outgoing cash/gold or incoming return ornaments.</span>
             </div>
           ) : (
-            transactions.map((t) => {
-              const isOutgoing = t.direction === 'OUTGOING'; // Right aligned (Store to Worker)
-              const isMatched = matchedTxIds.includes(t.id);
-              const isCurrentActiveMatch = matchedTxIds[activeMatchIdx] === t.id;
+            (() => {
+              let lastDateHeader = '';
+              return transactions.map((t) => {
+                const isOutgoing = t.direction === 'OUTGOING'; // Right aligned (Store to Worker)
+                const isMatched = matchedTxIds.includes(t.id);
+                const isCurrentActiveMatch = matchedTxIds[activeMatchIdx] === t.id;
 
-              const weight = Number(t.weight_grams) || 0;
-              const touch = Number(t.touch_percentage) || (t.category === 'SILVER' ? 80.0 : 91.6);
-              const fineGold = t.fine_weight_grams ? Number(t.fine_weight_grams) : (weight * touch / 100);
+                const weight = Number(t.weight_grams) || 0;
+                const touch = Number(t.touch_percentage) || (t.category === 'SILVER' ? 80.0 : 91.6);
+                const fineGold = t.fine_weight_grams ? Number(t.fine_weight_grams) : (weight * touch / 100);
 
-              return (
-                <div
-                  key={t.id}
-                  id={`tx-bubble-${t.id}`}
+                const currentDateHeader = formatDateDivider(t.created_at);
+                const showDateHeader = currentDateHeader && currentDateHeader !== lastDateHeader;
+                if (showDateHeader) {
+                  lastDateHeader = currentDateHeader;
+                }
+
+                return (
+                  <React.Fragment key={t.id}>
+                    {showDateHeader && (
+                      <div style={{ display: 'flex', justifyContent: 'center', margin: '14px 0 10px 0', width: '100%' }}>
+                        <span
+                          style={{
+                            background: '#ffffff',
+                            color: '#54656f',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '4px 12px',
+                            borderRadius: '8px',
+                            boxShadow: '0 1px 3px rgba(11, 20, 26, 0.12)',
+                            border: '1px solid #e2e8f0',
+                            letterSpacing: '0.01em',
+                            textTransform: 'capitalize',
+                            userSelect: 'none',
+                          }}
+                        >
+                          {currentDateHeader}
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      id={`tx-bubble-${t.id}`}
                   style={{
                     display: 'flex',
                     justifyContent: isOutgoing ? 'flex-end' : 'flex-start',
@@ -1354,25 +1424,27 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
                         {/* Options Dropdown Trigger */}
-                        <button
-                          type="button"
-                          className="wa-menu-trigger"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (activeMenuTxId === t.id) {
-                              setActiveMenuTxId(null);
-                            } else {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const spaceBelow = window.innerHeight - rect.bottom;
-                              setMenuPosition(spaceBelow < 220 ? 'up' : 'down');
-                              setActiveMenuTxId(t.id);
-                            }
-                          }}
-                          style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.72rem', padding: '0 3px' }}
-                          title="Message options"
-                        >
-                          <i className="fa-solid fa-caret-down" />
-                        </button>
+                        {!t.is_deleted && (
+                          <button
+                            type="button"
+                            className="wa-menu-trigger"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (activeMenuTxId === t.id) {
+                                setActiveMenuTxId(null);
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const spaceBelow = window.innerHeight - rect.bottom;
+                                setMenuPosition(spaceBelow < 220 ? 'up' : 'down');
+                                setActiveMenuTxId(t.id);
+                              }
+                            }}
+                            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.72rem', padding: '0 3px' }}
+                            title="Message options"
+                          >
+                            <i className="fa-solid fa-caret-down" />
+                          </button>
+                        )}
 
                         {/* Dropdown Options Menu */}
                         {activeMenuTxId === t.id && (
@@ -1624,9 +1696,11 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     </div>
                   </div>
                 </div>
-              );
-            })
-          )}
+              </React.Fragment>
+            );
+          });
+        })()
+      )}
           <div ref={chatBottomRef} />
         </div>
 
