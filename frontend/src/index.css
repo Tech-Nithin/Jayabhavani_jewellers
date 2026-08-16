@@ -2950,7 +2950,7 @@ textarea::placeholder {
 @media (max-width: 1024px) {
   .showcase-banner-gold {
     display: block;
-    min-height: 75vh;
+    min-height: 60vh;
     max-height: none;
   }
 
@@ -2969,7 +2969,7 @@ textarea::placeholder {
   }
 
   .showcase-banner-gold-content {
-    min-height: 75vh;
+    min-height: 60vh;
     text-align: center;
     align-items: center;
     max-width: 800px;
@@ -2980,11 +2980,11 @@ textarea::placeholder {
 
 @media (max-width: 768px) {
   .showcase-banner-gold {
-    min-height: 65vh;
+    min-height: 50vh;
   }
 
   .showcase-banner-gold-content {
-    min-height: 65vh;
+    min-height: 50vh;
     padding: 24px 16px;
   }
 }
