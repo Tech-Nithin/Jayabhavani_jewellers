@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Jaya Bhavani Admin POS</string>
+    <string name="title_activity_main">Jaya Bhavani Admin POS</string>
+    <string name="package_name">com.jayabhavani.adminpos</string>
+    <string name="custom_url_scheme">com.jayabhavani.adminpos</string>
+</resources>

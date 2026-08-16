@@ -1,0 +1,8 @@
+{
+  "appId": "com.jayabhavani.adminpos",
+  "appName": "Jaya Bhavani Admin POS",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

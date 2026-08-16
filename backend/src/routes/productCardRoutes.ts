@@ -24,8 +24,8 @@ router.get('/rates', async (req: Request, res: Response) => {
     }
 
     const rates = {
-      gold_sell_value: Number(data.gold_sell_value) || 14700,
-      silver_sell_value: Number(data.silver_sell_value) || 270,
+      gold_sell_value: data ? Number(data.gold_sell_value) || 0 : 0,
+      silver_sell_value: data ? Number(data.silver_sell_value) || 0 : 0,
     };
 
     return res.json({

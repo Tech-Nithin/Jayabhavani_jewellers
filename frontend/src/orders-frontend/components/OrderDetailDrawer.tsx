@@ -87,7 +87,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
   const t = getOrdersTranslation(lang);
   const isAssigned = !!(order.assigned_worker_id || order.assigned_worker_name);
   const isReturned = order.returned_from_worker === 'yes';
-  const isSubmitted = order.submitted === 'yes' || order.sold_status === 'SOLD';
+  const isSubmitted = order.submitted === 'yes';
   const isPaid = order.sold_status === 'SOLD';
   const totalAmount = (order.paid_amount || 0) + (order.due_amount || 0);
   const [showBill, setShowBill] = useState(initialShowBill);

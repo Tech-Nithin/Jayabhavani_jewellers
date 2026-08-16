@@ -39,8 +39,8 @@ interface GoldPageProps {
 
 export default function GoldPage({ onBackToStore: _onBackToStore, initialCategory = 'all' }: GoldPageProps) {
   const [_rates, setRates] = useState({
-    gold_buy_value: 14200,
-    gold_sell_value: 14700,
+    gold_buy_value: 0,
+    gold_sell_value: 0,
   });
 
   useEffect(() => {
@@ -49,16 +49,48 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
         const res = await fetch(`${API_BASE}/billing/rates`);
         const data = await res.json();
         if (data.success && data.rates) {
-          setRates({
-            gold_buy_value: Number(data.rates.gold_buy_value) || 14200,
-            gold_sell_value: Number(data.rates.gold_sell_value) || 14700,
-          });
+          setRates((prev) => ({
+            gold_buy_value: data.rates.gold_buy_value !== undefined ? Number(data.rates.gold_buy_value) : prev.gold_buy_value,
+            gold_sell_value: data.rates.gold_sell_value !== undefined ? Number(data.rates.gold_sell_value) : prev.gold_sell_value,
+          }));
         }
       } catch (err) {
         // Fallback
       }
     }
+
     fetchRates();
+
+    const handleLocalUpdate = (e: any) => {
+      if (e.detail) {
+        setRates((prev) => ({
+          gold_buy_value: e.detail.gold_buy_value !== undefined ? Number(e.detail.gold_buy_value) : prev.gold_buy_value,
+          gold_sell_value: e.detail.gold_sell_value !== undefined ? Number(e.detail.gold_sell_value) : prev.gold_sell_value,
+        }));
+      } else {
+        fetchRates();
+      }
+    };
+    window.addEventListener('jbj_metal_rates_updated', handleLocalUpdate);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('jbj_rates_channel');
+      channel.onmessage = (msg) => {
+        if (msg.data?.type === 'RATES_UPDATED' && msg.data?.rates) {
+          const r = msg.data.rates;
+          setRates((prev) => ({
+            gold_buy_value: r.gold_buy_value !== undefined ? Number(r.gold_buy_value) : prev.gold_buy_value,
+            gold_sell_value: r.gold_sell_value !== undefined ? Number(r.gold_sell_value) : prev.gold_sell_value,
+          }));
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener('jbj_metal_rates_updated', handleLocalUpdate);
+      if (channel) channel.close();
+    };
   }, []);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
@@ -238,13 +270,13 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
       >
         <div style={{ padding: '48px max(32px, calc((100vw - 1280px)/2 + 32px))', zIndex: 2, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <h1
+            className="shimmer-text-gold"
             style={{
               fontFamily: "'Cormorant Garamond', serif",
               fontSize: 'clamp(2.2rem, 4vw, 3.4rem)',
               fontWeight: 400,
               lineHeight: 1.15,
-              marginBottom: '16px',
-              color: '#fef8ee'
+              marginBottom: '16px'
             }}
           >
             Masterpieces in 22K Hallmarked Gold
@@ -297,7 +329,7 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
               display: 'flex',
               alignItems: 'center',
               background: '#ffffff',
-              border: isSearchFocused ? '2px solid #000000' : '1.5px solid #000000',
+              border: isSearchFocused ? '2px solid #b45309' : '1.5px solid #b45309',
               borderRadius: '99px',
               padding: '6px 8px 6px 20px',
               boxShadow: isSearchFocused ? '0 8px 30px rgba(180, 83, 9, 0.15)' : '0 6px 24px rgba(160, 100, 74, 0.08)',

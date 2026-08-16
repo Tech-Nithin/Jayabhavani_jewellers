@@ -188,6 +188,7 @@ const ModernWorkerSelect: React.FC<ModernSelectProps> = ({ value, onChange, work
 interface WorkerWorkHistoryViewProps {
   worker: any;
   onBack: () => void;
+  onOpenWorkersList?: () => void;
   lang?: Language;
 }
 
@@ -233,6 +234,7 @@ const getDurationText = (assignedAt?: string | null, returnedAt?: string | null,
 export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
   worker,
   onBack,
+  onOpenWorkersList,
   lang = 'EN',
 }) => {
   const t = getWorkAssignmentTranslation(lang);
@@ -370,6 +372,37 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (onOpenWorkersList) {
+              onOpenWorkersList();
+            } else {
+              const params = new URLSearchParams(window.location.search);
+              params.set('module', 'work-assignment');
+              params.set('view', 'workers');
+              window.history.pushState({}, '', `?${params.toString()}`);
+              window.dispatchEvent(new Event('popstate'));
+            }
+          }}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '10px',
+            border: '1px solid #d97706',
+            background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+            color: '#ffffff',
+            fontWeight: 800,
+            fontSize: '0.82rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 2px 8px rgba(217, 119, 6, 0.25)',
+          }}
+        >
+          <i className="fa-solid fa-users"></i> See Workers ({workersList.length})
+        </button>
       </div>
 
       {/* ── 4 INTERACTIVE CLICKABLE KPI SUMMARY CARDS (SINGLE ROW IN TABLET VIEW) ── */}

@@ -1,0 +1,15 @@
+{
+  "appId": "com.jayabhavani.worker",
+  "appName": "Jaya Bhavani Worker",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#f8fafc"
+    }
+  }
+}

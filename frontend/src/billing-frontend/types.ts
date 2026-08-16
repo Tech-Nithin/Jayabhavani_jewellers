@@ -34,6 +34,8 @@ export interface BillItem {
   return_purity_percentage?: number | string;
   return_pure_gold?: number | string;
   image_url?: string;
+  item_notes?: string;
+  notes?: string;
 }
 
 export interface InvoiceRecord {

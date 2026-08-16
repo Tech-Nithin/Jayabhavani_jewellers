@@ -26,6 +26,8 @@ import SilverPage       from './pages/SilverPage';
 
 import { rings, necklaces, earrings, nosepins } from './data/products';
 import { setupReveal } from './utils';
+import { API_BASE } from './config/apiConfig';
+import { playJbjNotificationSound } from './utils/soundUtils';
 
 const STORAGE_KEY_TOKEN = 'jbj_session_token';
 const STORAGE_KEY_TAB = 'jbj_active_tab';
@@ -53,6 +55,29 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<'store' | 'dashboard' | 'gold' | 'silver'>('store');
   const [goldCategory, setGoldCategory] = useState<string>('all');
   const [verifyingSession, setVerifyingSession] = useState(true);
+
+  // Global Realtime Notification Audio Listener for Store Admin (All Workers Incoming Stream)
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`${API_BASE}/work-assignment/worker-transactions/stream?workerId=ALL_ADMINS`);
+      eventSource.addEventListener('NEW_TRANSACTION', (event: any) => {
+        try {
+          const tx = JSON.parse(event.data);
+          if (tx && tx.direction === 'INCOMING') {
+            playJbjNotificationSound();
+          }
+        } catch (err) {
+          console.warn('Global notification SSE parse error:', err);
+        }
+      });
+    } catch (err) {
+      console.warn('Global notification stream exception:', err);
+    }
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, []);
 
   // Handle Chrome Swipe Back/Forward Gestures & Browser Back/Forward buttons (popstate)
   useEffect(() => {
@@ -327,7 +352,18 @@ function AppContent() {
         </main>
       )}
 
-      <Footer />
+      <Footer onNavigate={(view, href) => {
+        handleNavigateView(view);
+        if (href && href.startsWith('#')) {
+          const targetId = href.substring(1);
+          setTimeout(() => {
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+              targetEl.scrollIntoView({ behavior: 'smooth' });
+            }
+          }, 300);
+        }
+      }} />
       <CartDrawer />
       <Toast />
       <BackToTop />

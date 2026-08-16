@@ -95,10 +95,10 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
         setViewMode('ADD_WORKER');
       } else if (v === 'WORK_HISTORY' || v === 'WORK-HISTORY') {
         setViewMode('WORK_HISTORY');
-      } else if (v === 'TRANSACTIONS' || v === 'TRANSACTION-HISTORY') {
-        setViewMode('TRANSACTIONS');
-      } else {
+      } else if (v === 'LIST' || v === 'WORKERS-LIST') {
         setViewMode('LIST');
+      } else {
+        setViewMode('TRANSACTIONS');
       }
 
       if (wId) {
@@ -109,6 +109,8 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
           if (found) setSelectedWorker(found);
           else setSelectedWorker({ id: wId, name: wId });
         }
+      } else {
+        setSelectedWorker(null);
       }
     };
 
@@ -165,25 +167,29 @@ export const WorkAssignmentModule: React.FC<{ globalSearch?: string; lang?: Lang
         <WorkerWorkHistoryView
           worker={selectedWorker || { id: 'ALL', name: 'All Workers' }}
           onBack={() => {
+            setViewMode('TRANSACTIONS');
+            setSelectedWorker(null);
+            updateUrlView('workers', 'TRANSACTIONS');
+          }}
+          onOpenWorkersList={() => {
             setViewMode('LIST');
             setSelectedWorker(null);
             updateUrlView('workers', 'LIST');
           }}
           lang={lang}
         />
-      ) : viewMode === 'TRANSACTIONS' && selectedWorker ? (
+      ) : viewMode === 'TRANSACTIONS' ? (
         /* ── SUB-SCREEN 3: WORKER TRANSACTIONS (WhatsApp Chat UI) ── */
         <WorkerTransactionsView
           worker={selectedWorker}
           workers={workers}
           onSelectWorker={(w) => {
             setSelectedWorker(w);
-            updateUrlView('workers', 'TRANSACTIONS', w.id);
+            updateUrlView('workers', 'TRANSACTIONS', w?.id);
           }}
           onBack={() => {
-            setViewMode('LIST');
             setSelectedWorker(null);
-            updateUrlView('workers', 'LIST');
+            updateUrlView('workers', 'TRANSACTIONS');
           }}
           lang={lang}
         />
