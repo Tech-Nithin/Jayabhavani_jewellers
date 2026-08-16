@@ -17,17 +17,17 @@ export const silverProducts: Product[] = [
 const areCategoriesMatching = (selCat: string, prodCat: string): boolean => {
   const sel = selCat.toLowerCase().trim();
   const prod = prodCat.toLowerCase().trim();
-  
+
   if (sel === 'all') return true;
   if (sel === prod) return true;
-  
+
   const normalize = (str: string) => {
     return str.split(/\s+/).map(w => w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
   };
-  
+
   const selWords = normalize(sel);
   const prodWords = normalize(prod);
-  
+
   return selWords.some(selW => prodWords.some(prodW => prodW.includes(selW) || selW.includes(prodW)));
 };
 
@@ -83,7 +83,7 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
           }));
         }
       };
-    } catch {}
+    } catch { }
 
     return () => {
       window.removeEventListener('jbj_metal_rates_updated', handleLocalUpdate);
@@ -239,7 +239,7 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
       <div className="showcase-banner-silver">
         {/* Background Image Stretched Across */}
         <img
-          src="/silver_bg.png"
+          src="/silver_bg.webp"
           alt="Exclusive Pure Silver Pooja Ornaments & Utensils"
           className="showcase-banner-silver-img"
         />
