@@ -717,7 +717,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
             additional_charge_value: Number(primaryItem?.additional_charges_amount) || 0,
             return_purity_percentage: Number(primaryItem?.return_purity_percentage) || 0,
             return_pure_gold: Number(primaryItem?.return_pure_gold) || (primaryItem?.return_purity_percentage ? Number((totalNetW * (Number(primaryItem.return_purity_percentage) / 100)).toFixed(3)) : 0),
-            notes: primaryItem?.item_notes || primaryItem?.notes || `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
+            notes: primaryItem?.item_notes || (primaryItem as any)?.notes || `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
           }),
         });
 
@@ -1260,7 +1260,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     calcResults={calcResults}
                     presets={presets}
                     handleAddNewPreset={handleAddNewPreset}
-                    rates={rates}
+                    rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
                     t={t}
                     showValidationErrors={showValidationErrors}
@@ -1277,7 +1277,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     calcResults={calcResults}
                     presets={presets}
                     handleAddNewPreset={handleAddNewPreset}
-                    rates={rates}
+                    rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
                     t={t}
                     showValidationErrors={showValidationErrors}
@@ -1294,7 +1294,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     calcResults={calcResults}
                     presets={presets}
                     handleAddNewPreset={handleAddNewPreset}
-                    rates={rates}
+                    rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
                     t={t}
                     showValidationErrors={showValidationErrors}
@@ -1311,7 +1311,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     calcResults={calcResults}
                     presets={presets}
                     handleAddNewPreset={handleAddNewPreset}
-                    rates={rates}
+                    rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
                     t={t}
                     showValidationErrors={showValidationErrors}

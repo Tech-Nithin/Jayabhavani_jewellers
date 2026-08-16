@@ -1,8 +1,7 @@
 {
-  "appId": "com.jayabhavani.admin",
-  "appName": "Jaya Bhavani Admin",
+  "appId": "com.jayabhavani.adminpos",
+  "appName": "Jaya Bhavani Admin POS",
   "webDir": "dist",
-  "bundledWebRuntime": false,
   "server": {
     "androidScheme": "https"
   }

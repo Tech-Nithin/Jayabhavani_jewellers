@@ -26,6 +26,8 @@ const parseIndianCurrencyNumber = (val: string | number | undefined | null): num
   return Number(clean) || 0;
 };
 
+export type DateRangeOption = 'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_30_DAYS' | 'CUSTOM';
+
 export const OrdersModule: React.FC<{ lang?: Language }> = ({
   lang = 'EN',
 }) => {
@@ -127,7 +129,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       setSearchTerm((prev) => (prev !== searchParam ? searchParam : prev));
     }
     if (dateRangeParam && ['ALL', 'TODAY', 'YESTERDAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'CUSTOM'].includes(dateRangeParam)) {
-      setDateRange((prev) => (prev !== dateRangeParam ? dateRangeParam : prev));
+      setDateRange((prev: DateRangeOption) => (prev !== dateRangeParam ? dateRangeParam : prev));
     }
     if (startDateParam !== null) setCustomStartDate((prev) => (prev !== startDateParam ? startDateParam : prev));
     if (endDateParam !== null) setCustomEndDate((prev) => (prev !== endDateParam ? endDateParam : prev));
@@ -781,7 +783,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
               background: '#f8fafc',
               display: 'flex',
               alignItems: 'center',
-              justify: 'space-between',
+              justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: '0.75rem',
               fontSize: '0.78rem',
