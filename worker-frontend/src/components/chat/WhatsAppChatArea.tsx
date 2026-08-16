@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useLayoutEffect } from 'react';
 import { WorkerTransaction, ReplyMessageData } from '../../types/worker';
 import { WhatsAppMessageBubble } from './WhatsAppMessageBubble';
 
@@ -71,16 +71,33 @@ export const WhatsAppChatArea: React.FC<Props> = ({
   onLoadEarlier,
   isLoadingEarlier,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (transactions.length > 0 && !isLoadingEarlier) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (smooth = true) => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [transactions.length, isLoadingEarlier]);
+    setTimeout(() => {
+      if (bottomRef.current) {
+        bottomRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+      }
+      if (containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  useEffect(() => {
+    if (transactions.length > 0 && !isLoadingEarlier && !loading) {
+      scrollToBottom(true);
+      const t = setTimeout(() => scrollToBottom(false), 300);
+      return () => clearTimeout(t);
+    }
+  }, [transactions, isLoadingEarlier, loading]);
 
   return (
-    <div className="wa-chat-area">
+    <div className="wa-chat-area" ref={containerRef}>
       {loading ? (
         <div className="wa-chat-center">
           <div className="wa-spinner" />

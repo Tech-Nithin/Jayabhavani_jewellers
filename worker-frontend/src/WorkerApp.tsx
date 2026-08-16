@@ -20,7 +20,12 @@ import { EditHistoryModal } from './components/modals/EditHistoryModal';
 import { NewTransactionModal } from './components/modals/NewTransactionModal';
 
 import { API_BASE } from './config/apiConfig';
-import { getCachedTransactions, saveCachedTransactions, mergeTransactions } from './utils/chatCache';
+import { mergeTransactions } from './utils/chatCache';
+import {
+  getCachedTransactions,
+  saveCachedTransactions,
+  processPendingQueue,
+} from './utils/offlineQueue';
 import { playJbjNotificationSound } from './utils/soundUtils';
 import { initNativeNotifications, triggerDeviceNotification } from './utils/nativeNotification';
 
@@ -114,10 +119,41 @@ export default function WorkerApp() {
     };
   }, [worker?.id]);
 
+  // ── INDEXEDDB OFFLINE AUTO-SYNC LISTENER ──
+  useEffect(() => {
+    const handleOnline = async () => {
+      console.log('⚡ [Worker App Online] Connection restored! Auto-syncing pending queue...');
+      const { syncedCount } = await processPendingQueue(async (payload) => {
+        const formData = new FormData();
+        Object.keys(payload).forEach((k) => formData.append(k, payload[k]));
+        const res = await fetch(`${API_BASE}/work-assignment/worker-transactions`, {
+          method: 'POST',
+          body: formData,
+        });
+        return await res.json();
+      });
+      if (syncedCount > 0 && worker?.id) {
+        loadTransactions(7, '', false);
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [worker?.id]);
+
   // Load chat history with real-time merge & cache save
   const loadTransactions = async (daysToFetch = 7, query = '', appendEarlier = false) => {
     if (!worker?.id) return;
     const currentWorkerId = worker.id;
+
+    // 0ms instant cache load from IndexedDB
+    try {
+      const cached = await getCachedTransactions(currentWorkerId);
+      if (cached && cached.length > 0) {
+        setTransactions((prev) => mergeTransactions(prev, cached as WorkerTransaction[], currentWorkerId));
+      }
+    } catch {}
+
     try {
       const freshData = await fetchWorkerTransactions(currentWorkerId, daysToFetch, query);
       setIsOnline(true);
@@ -164,10 +200,7 @@ export default function WorkerApp() {
             const tx = JSON.parse(event.data);
             if (tx && String(tx.worker_id) === String(worker.id)) {
               notifyNewIncomingTransactions([tx]);
-              setTransactions((prev) => {
-                if (prev.some((t) => t.id === tx.id)) return prev;
-                return [...prev, tx];
-              });
+              setTransactions((prev) => mergeTransactions(prev, [tx], worker.id));
             }
           } catch {}
         });
@@ -293,8 +326,9 @@ export default function WorkerApp() {
         .finally(() => setLoading(false));
     } else {
       // Clear search, restore 7-day cache
-      const cached = getCachedTransactions(worker.id);
-      if (cached) setTransactions(cached);
+      getCachedTransactions(worker.id).then((cached) => {
+        if (cached && cached.length > 0) setTransactions(cached);
+      });
       loadTransactions(loadedDays, '', false);
     }
   };
@@ -311,13 +345,14 @@ export default function WorkerApp() {
     setWorker(profile);
     localStorage.setItem('jbj_worker_profile', JSON.stringify(profile));
 
-    // Try loading new worker's 8-hour cache or revalidate
-    const cached = getCachedTransactions(profile.id);
-    if (cached && cached.length > 0) {
-      setTransactions(cached);
-    } else {
-      setLoading(true);
-    }
+    // Try loading new worker's IndexedDB cache or revalidate
+    getCachedTransactions(profile.id).then((cached) => {
+      if (cached && cached.length > 0) {
+        setTransactions(cached);
+      } else {
+        setLoading(true);
+      }
+    });
 
     // Explicit fresh fetch targeting profile.id directly
     fetchWorkerTransactions(profile.id, 7)
@@ -352,42 +387,57 @@ export default function WorkerApp() {
     setLoadedDays(7);
   };
 
-  // Send message
+  // Send message with Optimistic UI updates (0ms perceived latency)
   const handleSendMessage = async (notes: string, photos: File[]) => {
     if (!worker?.id) return;
     setIsSending(true);
+
+    const currentReplyTo = replyTo;
+    setReplyTo(null);
+
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const tempTx: WorkerTransaction = {
+      id: tempId,
+      worker_id: worker.id,
+      direction: 'INCOMING',
+      category: 'CASH',
+      photos: photos.map((f) => URL.createObjectURL(f)),
+      notes,
+      created_at: new Date().toISOString(),
+      status_state: 'SENDING',
+      reply_to: currentReplyTo,
+    };
+
+    // Instant append (0ms) & scroll to bottom
+    setTransactions((prev) => {
+      const updated = [...prev, tempTx];
+      saveCachedTransactions(worker.id, updated);
+      return updated;
+    });
+
     try {
-      const res = await sendWorkerTransaction(worker.id, notes, photos, replyTo);
-      if (res.success) {
-        setReplyTo(null);
-        if (res.transaction) {
-          const newTx = res.transaction;
-          setTransactions((prev) => {
-            if (prev.some((t) => t.id === newTx.id)) return prev;
-            const updated = [...prev, newTx];
-            saveCachedTransactions(worker.id, updated);
-            return updated;
-          });
-        } else {
-          await loadTransactions(loadedDays, searchQuery, false);
-        }
+      const res = await sendWorkerTransaction(worker.id, notes, photos, currentReplyTo);
+      if (res.success && res.transaction) {
+        const confirmedTx = { ...res.transaction, status_state: res.transaction.status_state || 'DELIVERED' };
+        setTransactions((prev) => {
+          const filtered = prev.filter((t) => t.id !== tempId);
+          const merged = mergeTransactions(filtered, [confirmedTx], worker.id);
+          saveCachedTransactions(worker.id, merged);
+          return merged;
+        });
       } else {
-        alert(`❌ Failed to send: ${res.message || 'Error'}`);
+        setTransactions((prev) => {
+          const updated = prev.map((t) => (t.id === tempId ? { ...t, status_state: 'FAILED' as const } : t));
+          saveCachedTransactions(worker.id, updated);
+          return updated;
+        });
       }
     } catch (err: any) {
-      // Append temporary local failed message to allow tap to retry
-      const failedTx: WorkerTransaction = {
-        id: `failed_${Date.now()}`,
-        worker_id: worker.id,
-        direction: 'INCOMING',
-        category: 'CASH',
-        photos: [],
-        notes,
-        created_at: new Date().toISOString(),
-        status_state: 'FAILED',
-      };
-      setTransactions((prev) => [...prev, failedTx]);
-      alert(`❌ Connection error: ${err.message}`);
+      setTransactions((prev) => {
+        const updated = prev.map((t) => (t.id === tempId ? { ...t, status_state: 'FAILED' as const } : t));
+        saveCachedTransactions(worker.id, updated);
+        return updated;
+      });
     } finally {
       setIsSending(false);
     }

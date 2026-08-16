@@ -35,9 +35,18 @@
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch((err) => {
-          console.warn('PWA SW Registration Notice:', err);
-        });
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          // On local dev, unregister any stale old Service Worker instances to prevent console errors
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              registration.unregister();
+            }
+          });
+        } else {
+          navigator.serviceWorker.register('/sw.js').then((reg) => reg.update()).catch((err) => {
+            console.warn('PWA SW Registration Notice:', err);
+          });
+        }
       });
     }
   </script>

@@ -437,7 +437,7 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
               direction: 'OUTGOING',
               category: 'GENERAL',
             });
-          } catch (fcmErr) {}
+          } catch (fcmErr) { }
 
           // Broadcast SSE Realtime Event (Uppercase 'NEW_TRANSACTION')
           broadcastToWorker(workerIdVal, 'NEW_TRANSACTION', createdTxn);
@@ -486,7 +486,7 @@ router.put('/orders/:id/return-status', async (req: Request, res: Response) => {
       if (return_pure_gold !== undefined) updateData.return_pure_gold = Number(return_pure_gold);
 
       await supabase.from('orders').update(updateData).eq('id', id);
-    } catch (e) {}
+    } catch (e) { }
 
     res.json({
       success: true,
@@ -512,7 +512,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       try {
         const { data: fetchDbOrder } = await supabase.from('orders').select('*').eq('id', id).single();
         if (fetchDbOrder) order = fetchDbOrder;
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (!order) {
@@ -529,7 +529,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
 
     const newSubmitted = (submitted === 'yes' || submitted === 'no') ? submitted : (order.submitted || 'no');
     const newSoldStatus = (sold_status === 'SOLD' || newSubmitted === 'yes' || order.due_amount === 0) ? 'SOLD' : 'DUE';
-    
+
     order.submitted = newSubmitted;
     order.sold_status = newSoldStatus;
     if (newSoldStatus === 'SOLD') {
@@ -542,7 +542,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       : (order.receipt_json_data || {});
 
     const historyList: any[] = Array.isArray(existingJSON.payment_history) ? [...existingJSON.payment_history] : [];
-    
+
     const currentPaid = Number(order.paid_amount) || 0;
     const currentDue = Number(order.due_amount) || 0;
     const finalAmt = Number(order.final_amount) || (currentPaid + currentDue);
@@ -832,10 +832,27 @@ router.post('/register-fcm-token', async (req: Request, res: Response) => {
   try {
     const { userId, role, fcmToken } = req.body;
     if (userId && fcmToken) {
-      fcmTokensMap.set(String(userId), String(fcmToken));
-      console.log(`[FCM Push] Token registered for ${role} (${userId}):`, fcmToken);
+      const targetId = role === 'ADMIN' ? 'ADMIN' : String(userId);
+      fcmTokensMap.set(targetId, String(fcmToken));
+      console.log(`[FCM Push] Token registered for ${role} (${targetId}):`, fcmToken);
 
-      // Persist token in Supabase workers database table
+      // Save token to local JSON file for persistent backup
+      try {
+        const tokensFilePath = path.join(__dirname, '../../../../data/worker_push_tokens.json');
+        let currentTokens: Record<string, string> = {};
+        if (fs.existsSync(tokensFilePath)) {
+          currentTokens = JSON.parse(fs.readFileSync(tokensFilePath, 'utf8') || '{}');
+        } else {
+          const dir = path.dirname(tokensFilePath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        }
+        currentTokens[targetId] = String(fcmToken);
+        fs.writeFileSync(tokensFilePath, JSON.stringify(currentTokens, null, 2), 'utf8');
+      } catch (fErr) {
+        console.warn('Local push token save notice:', fErr);
+      }
+
+      // Persist worker token in Supabase workers database table
       if (role === 'WORKER') {
         try {
           const { error } = await supabase
@@ -1178,7 +1195,7 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       .single();
 
     if (!dbErr && insertedDb) {
-      finalInserted = insertedDb;
+      finalInserted = { ...newTxn, ...insertedDb, status_state: insertedDb?.status_state || 'DELIVERED' };
     } else if (dbErr) {
       console.warn('⚠️ Primary Supabase insert notice:', dbErr.message);
       // Fallback: Retry with standard schema payload if extra cash columns don't exist in Supabase table yet
@@ -1205,7 +1222,7 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
         .single();
 
       if (!retryErr && retryDb) {
-        finalInserted = { ...retryDb, ...newTxn };
+        finalInserted = { ...newTxn, ...retryDb, status_state: 'DELIVERED' };
         dbErr = null; // Suppress warning because fallback insert succeeded!
       }
     }
@@ -1213,16 +1230,29 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
     // Trigger FCM Event-Driven Push Webhook on transaction submission
     try {
       const { triggerFcmPushNotification } = require('../../routes/workerAuthRoutes');
-      if (newTxn.worker_id) {
-        const notifTitle = newTxn.direction === 'OUTGOING' ? 'Jaya Bhavani Admin' : `Worker Update (${newTxn.worker_id})`;
-        const notifBody = newTxn.notes || (newTxn.item_name ? `Item: ${newTxn.item_name}` : `New transaction recorded (${newTxn.category})`);
-        console.log(`📡 [FCM Event Trigger] Dispatching notification to ${newTxn.worker_id}: "${notifTitle} - ${notifBody}"`);
-        triggerFcmPushNotification(newTxn.worker_id, notifTitle, notifBody, {
-          transaction_id: finalInserted.id,
-          direction: newTxn.direction,
-          category: newTxn.category,
-        });
+      const recipientId = newTxn.direction === 'OUTGOING' ? newTxn.worker_id : 'ADMIN';
+
+      let workerName = newTxn.worker_id;
+      if (newTxn.direction === 'INCOMING') {
+        try {
+          const { data: wData } = await supabase.from('workers').select('name').eq('id', newTxn.worker_id).single();
+          if (wData?.name) {
+            workerName = wData.name;
+          }
+        } catch (wErr) {
+          // fallback to worker_id
+        }
       }
+
+      const notifTitle = newTxn.direction === 'OUTGOING' ? '👑 Jaya Bhavani Admin' : `${workerName} (Worker)`;
+      const notifBody = newTxn.notes || (newTxn.item_name ? `Item: ${newTxn.item_name}` : `New transaction recorded (${newTxn.category})`);
+
+      console.log(`📡 [FCM Event Trigger] Dispatching push notification to target [${recipientId}]: "${notifTitle} - ${notifBody}"`);
+      triggerFcmPushNotification(recipientId, notifTitle, notifBody, {
+        transaction_id: finalInserted.id,
+        direction: newTxn.direction,
+        category: newTxn.category,
+      });
     } catch (fcmErr: any) {
       console.warn('⚠️ FCM Webhook trigger notice:', fcmErr.message);
     }

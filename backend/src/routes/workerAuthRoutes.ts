@@ -124,10 +124,19 @@ export const triggerFcmPushNotification = async (
   }
 
   const pushTokens = loadPushTokens();
-  const deviceToken = pushTokens[targetWorkerId];
+  let deviceToken = pushTokens[targetWorkerId];
+
+  if (!deviceToken && targetWorkerId !== 'ADMIN') {
+    try {
+      const { data: wData } = await supabase.from('workers').select('fcm_token').eq('id', targetWorkerId).single();
+      if (wData?.fcm_token) {
+        deviceToken = wData.fcm_token;
+      }
+    } catch {}
+  }
 
   if (!deviceToken) {
-    console.log(`ℹ️ No device push token registered for worker ID ${targetWorkerId}. Message saved to database.`);
+    console.log(`ℹ️ No device push token registered for target ID [${targetWorkerId}]. Message saved to database.`);
     return;
   }
 

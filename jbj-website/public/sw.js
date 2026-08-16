@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jbj-pwa-cache-v1';
+const CACHE_NAME = 'jbj-website-cache-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -29,15 +29,33 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
+  try {
+    const url = new URL(event.request.url);
+
+    // Bypass API calls, SSE streams, cross-origin backend ports, non-GET requests
+    if (
+      url.origin !== self.location.origin ||
+      url.pathname.startsWith('/api/') ||
+      url.pathname.includes('/stream') ||
+      event.request.method !== 'GET' ||
+      !url.protocol.startsWith('http')
+    ) {
+      return;
+    }
+
+    if (event.request.mode === 'navigate') {
+      event.respondWith(
+        fetch(event.request).catch(() => caches.match('/index.html'))
+      );
+      return;
+    }
+
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html'))
+      caches.match(event.request).then((response) => {
+        return response || fetch(event.request);
+      })
     );
-    return;
+  } catch (err) {
+    // If URL parsing fails, allow standard browser fetch
   }
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
-  );
 });

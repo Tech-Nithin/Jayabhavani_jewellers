@@ -30,6 +30,16 @@ body, html, #root {
   color: var(--wa-text-primary);
 }
 
+.wa-app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
 /* ── LOGIN FORM STYLES ── */
 .wa-login-container {
   min-height: 100vh;
