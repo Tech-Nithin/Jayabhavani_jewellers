@@ -5,6 +5,7 @@ import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
 import { FullImagePreviewModal } from '../inventory-frontend/components/FullImagePreviewModal';
 import { convertImageToWebP, convertImageToWebPBlob, downloadImageAsJpeg } from '../utils/imageUtils';
 import { playJbjNotificationSound } from '../utils/soundUtils';
+import { triggerDeviceNotification } from '../utils/nativeNotification';
 
 interface WorkerTransactionItem {
   id: string;
@@ -376,6 +377,9 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                 if (prev.some((t) => t.id === tx.id)) return prev;
                 if (tx.direction === 'INCOMING') {
                   playJbjNotificationSound();
+                  const senderTitle = `📩 ${worker?.name || 'Worker'} (Goldsmith Worker)`;
+                  const summaryText = tx.notes || (tx.amount_cash ? `Cash Sent: ₹${tx.amount_cash.toLocaleString('en-IN')}` : tx.weight_grams ? `Metal Sent: ${tx.weight_grams}g` : 'New transaction message');
+                  triggerDeviceNotification(senderTitle, summaryText);
                   // Instantly mark read since Admin is currently actively looking at chat screen
                   fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
                     method: 'PUT',

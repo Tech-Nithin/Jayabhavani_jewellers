@@ -5,12 +5,12 @@ export default function IntroLoader() {
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
-    // Hold splash screen then start fade-out transition after 3.8s (1s additional delay)
+    // Hold splash screen then start fade-out transition after 3.8s
     const fadeTimer = setTimeout(() => {
       setFadeOut(true);
     }, 3800);
 
-    // Unmount splash screen after fade-out finishes (4.8s total)
+    // Unmount splash screen after fade-out finishes (4.2s total)
     const unmountTimer = setTimeout(() => {
       setLoading(false);
     }, 4200);

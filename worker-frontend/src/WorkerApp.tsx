@@ -19,6 +19,7 @@ import { NewTransactionModal } from './components/modals/NewTransactionModal';
 import { API_BASE } from './config/apiConfig';
 import { getCachedTransactions, saveCachedTransactions, mergeTransactions } from './utils/chatCache';
 import { playJbjNotificationSound } from './utils/soundUtils';
+import { initNativeNotifications, triggerDeviceNotification } from './utils/nativeNotification';
 
 export default function WorkerApp() {
   const [worker, setWorker] = useState<WorkerProfile | null>(() => {
@@ -57,9 +58,7 @@ export default function WorkerApp() {
   }, [loadedDays]);
 
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
+    initNativeNotifications();
   }, []);
 
   // Modal States
@@ -82,11 +81,13 @@ export default function WorkerApp() {
         // Strictly merge transactions belonging only to currentWorkerId
         const merged = mergeTransactions(prev, freshData, currentWorkerId);
 
-        // Chime notification trigger on new inbound Admin messages
+        // Chime & native device notification trigger on new inbound Admin messages
         if (prev.length > 0 && freshData.length > prev.length) {
           const latest = freshData[freshData.length - 1];
           if (latest && latest.direction === 'OUTGOING') {
             playJbjNotificationSound();
+            const summaryText = latest.notes || (latest.amount_cash ? `Cash Update: ₹${latest.amount_cash.toLocaleString('en-IN')}` : latest.weight_grams ? `Metal Update: ${latest.weight_grams}g` : 'New transaction update');
+            triggerDeviceNotification('👑 Jaya Bhavani Admin', summaryText);
           }
         }
 
@@ -131,14 +132,8 @@ export default function WorkerApp() {
                 if (prev.some((t) => t.id === tx.id)) return prev;
                 if (tx.direction === 'OUTGOING') {
                   playJbjNotificationSound();
-                  if ('Notification' in window && Notification.permission === 'granted') {
-                    try {
-                      new Notification(`📌 New Order Assigned: ${tx.item_name || 'JBJ Work'}`, {
-                        body: tx.notes || 'You have received a new work assignment from JBJ.',
-                        icon: tx.photos?.[0] || '/favicon.ico',
-                      });
-                    } catch (e) {}
-                  }
+                  const summaryText = tx.notes || (tx.amount_cash ? `Cash Update: ₹${tx.amount_cash.toLocaleString('en-IN')}` : tx.weight_grams ? `Metal Update: ${tx.weight_grams}g` : 'New work assignment received');
+                  triggerDeviceNotification('👑 Jaya Bhavani Admin', summaryText);
                   // Instantly mark read since Worker is currently actively looking at chat screen
                   fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
                     method: 'PUT',
