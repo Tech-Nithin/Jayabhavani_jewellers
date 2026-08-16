@@ -10,8 +10,6 @@ import { PaymentSettlementModal } from './components/PaymentSettlementModal';
 import { OrderDetailView } from './components/OrderDetailDrawer';
 import { ReceiptPreview, downloadReceiptAsPNG } from '../billing-frontend/components/ReceiptPreview';
 
-type DateRangeOption = 'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_30_DAYS' | 'CUSTOM';
-
 const formatIndianCurrencyInput = (val: string): string => {
   const clean = val.replace(/[^0-9.]/g, '');
   if (!clean) return '';
@@ -131,11 +129,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       setSearchTerm(searchParam);
     }
     if (dateRangeParam && ['ALL', 'TODAY', 'YESTERDAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'CUSTOM'].includes(dateRangeParam)) {
-<<<<<<< Updated upstream
       setDateRange((prev: DateRangeOption) => (prev !== dateRangeParam ? dateRangeParam : prev));
-=======
-      setDateRange(dateRangeParam);
->>>>>>> Stashed changes
     }
     if (startDateParam !== null) setCustomStartDate(startDateParam);
     if (endDateParam !== null) setCustomEndDate(endDateParam);
