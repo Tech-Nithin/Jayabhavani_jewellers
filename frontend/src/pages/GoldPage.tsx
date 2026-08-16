@@ -253,22 +253,9 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
   return (
     <div style={{ background: '#fdf9f4', minHeight: '100vh', paddingBottom: '80px' }}>
       {/* Featured Full-Bleed Showcase Banner */}
-      <div
-        style={{
-          position: 'relative',
-          width: '100%',
-          minHeight: '380px',
-          maxHeight: '420px',
-          overflow: 'hidden',
-          marginBottom: '48px',
-          boxShadow: '0 20px 44px rgba(154, 122, 58, 0.22)',
-          background: '#1a1614',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-          alignItems: 'stretch'
-        }}
-      >
-        <div style={{ padding: '48px max(32px, calc((100vw - 1280px)/2 + 32px))', zIndex: 2, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <div className="showcase-banner-gold">
+        {/* Foreground Content */}
+        <div className="showcase-banner-gold-content">
           <h1
             className="shimmer-text-gold"
             style={{
@@ -276,42 +263,49 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
               fontSize: 'clamp(2.2rem, 4vw, 3.4rem)',
               fontWeight: 400,
               lineHeight: 1.15,
-              marginBottom: '16px'
+              marginBottom: '16px',
+              textShadow: '0 2px 10px rgba(0, 0, 0, 0.75)'
             }}
           >
             Masterpieces in 22K Hallmarked Gold
           </h1>
-          <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, marginBottom: '22px', maxWidth: '540px' }}>
+          <p
+            style={{
+              fontSize: '1rem',
+              color: 'rgba(255,255,255,0.85)',
+              lineHeight: 1.6,
+              marginBottom: '22px',
+              textShadow: '0 2px 8px rgba(0, 0, 0, 0.85)'
+            }}
+          >
             Discover timeless antique gold necklaces, handcrafted Lakshmi temple pendants, royal kadas, and emerald jhumkas forged by master artisans.
           </p>
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', fontSize: '0.86rem', color: '#e8d4c0' }}>
+          <div
+            className="showcase-banner-gold-badges"
+            style={{
+              display: 'flex',
+              gap: '20px',
+              flexWrap: 'wrap',
+              fontSize: '0.86rem',
+              color: '#e8d4c0',
+              textShadow: '0 2px 6px rgba(0, 0, 0, 0.9)',
+              fontWeight: 600
+            }}
+          >
             <span>✔ 100% BIS 916 Hallmarked</span>
             <span>✔ Zero Deduction Guarantee</span>
             <span>✔ Certified Gold Assurance</span>
           </div>
         </div>
 
-        <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '380px', maxHeight: '420px', overflow: 'hidden' }}>
+        {/* Right side Image block in Desktop grid flow / absolute background in mobile */}
+        <div className="showcase-banner-gold-img-container">
           <img
             src="/final_gold_ornament2.png"
             alt="Exclusive 22K Gold Antique Temple Ornaments"
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: 'top center',
-              display: 'block',
-              filter: 'brightness(1.05) contrast(1.05)',
-              transition: 'transform 0.6s ease'
-            }}
+            className="showcase-banner-gold-img"
           />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(to right, #1a1614 0%, transparent 40%, transparent 100%)'
-            }}
-          />
+          <div className="showcase-banner-gold-overlay" />
         </div>
       </div>
 
@@ -325,16 +319,10 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
         {/* ── Unified Search & Category Pill Bar ── */}
         <div style={{ maxWidth: '960px', margin: '0 auto 36px auto', position: 'relative' }}>
           <div
+            className="search-bar-container"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: '#ffffff',
               border: isSearchFocused ? '2px solid #b45309' : '1.5px solid #b45309',
-              borderRadius: '99px',
-              padding: '6px 8px 6px 20px',
               boxShadow: isSearchFocused ? '0 8px 30px rgba(180, 83, 9, 0.15)' : '0 6px 24px rgba(160, 100, 74, 0.08)',
-              gap: '12px',
-              transition: 'all 0.2s ease'
             }}
           >
             {/* Left Category Custom Dropdown */}
@@ -444,6 +432,7 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 250)}
               style={{
                 flex: 1,
+                minWidth: 0,
                 border: 'none',
                 outline: 'none',
                 background: 'transparent',
@@ -456,28 +445,13 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
             {/* Right Action Search Button */}
             <button
               onClick={() => { }}
-              style={{
-                background: 'linear-gradient(135deg, #d4b8a0, #b45309)',
-                color: '#ffffff',
-                border: 'none',
-                padding: '10px 24px',
-                borderRadius: '99px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(180, 83, 9, 0.35)',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                flexShrink: 0
-              }}
+              className="search-bar-btn search-bar-btn-gold"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
-              <span>Search</span>
+              <span className="search-btn-text">Search</span>
             </button>
           </div>
 
