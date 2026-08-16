@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "293285182124",
+    "project_id": "jaya-bhavani-jewellers-app",
+    "storage_bucket": "jaya-bhavani-jewellers-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:293285182124:android:ffd58cba9492ae73853d09",
+        "android_client_info": {
+          "package_name": "com.jayabhavani.adminpos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCS7YY0jARRhvhjxRnTMvXIVhmaKUYKVM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:293285182124:android:61bdfb3ad8f1b09a853d09",
+        "android_client_info": {
+          "package_name": "com.jayabhavani.worker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCS7YY0jARRhvhjxRnTMvXIVhmaKUYKVM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
