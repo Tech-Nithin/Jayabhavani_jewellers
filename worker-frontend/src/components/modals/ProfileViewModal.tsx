@@ -11,7 +11,7 @@ interface Props {
 export const ProfileViewModal: React.FC<Props> = ({ worker, isOpen, onClose }) => {
   if (!isOpen || !worker) return null;
 
-  const photoUrl = worker.photo_url || '/JB_logo.png';
+  const photoUrl = worker.photo_url || '/JB_logo_mobile.png';
 
   const handleDownloadPhoto = () => {
     downloadImageAsJpeg(photoUrl, `${worker.name.replace(/\s+/g, '_')}_profile.jpeg`);

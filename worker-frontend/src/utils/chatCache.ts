@@ -7,37 +7,13 @@ interface CachePayload {
   data: WorkerTransaction[];
 }
 
-export function getCachedTransactions(workerId: string): WorkerTransaction[] | null {
-  try {
-    const raw = localStorage.getItem(`jbj_chat_cache_${workerId}`);
-    if (!raw) return null;
-
-    const payload: CachePayload = JSON.parse(raw);
-    const age = Date.now() - payload.timestamp;
-
-    // Check if 8-hour TTL has expired
-    if (age > CACHE_TTL_MS) {
-      console.log(`ℹ️ [Chat Cache] Expiry 8h reached for worker ${workerId}. Revalidating...`);
-      return null;
-    }
-
-    return Array.isArray(payload.data) ? payload.data : null;
-  } catch (e) {
-    console.warn('Failed to read chat cache:', e);
-    return null;
-  }
+export function getCachedTransactions(_workerId: string): WorkerTransaction[] | null {
+  // Local storage caching disabled for clean production & database sync
+  return null;
 }
 
-export function saveCachedTransactions(workerId: string, transactions: WorkerTransaction[]): void {
-  try {
-    const payload: CachePayload = {
-      timestamp: Date.now(),
-      data: transactions,
-    };
-    localStorage.setItem(`jbj_chat_cache_${workerId}`, JSON.stringify(payload));
-  } catch (e) {
-    console.warn('Failed to save chat cache:', e);
-  }
+export function saveCachedTransactions(_workerId: string, _transactions: WorkerTransaction[]): void {
+  // Local storage caching disabled for clean production & database sync
 }
 
 export function mergeTransactions(

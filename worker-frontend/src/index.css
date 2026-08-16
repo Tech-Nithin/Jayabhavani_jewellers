@@ -196,8 +196,8 @@ body, html, #root {
 }
 
 .wa-user-name {
-  font-size: 0.98rem;
-  font-weight: 800;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: var(--wa-text-primary);
   line-height: 1.2;
 }
@@ -295,6 +295,29 @@ body, html, #root {
   justify-content: center;
   padding: 8px 0;
   margin-bottom: 10px;
+}
+
+/* ── WHATSAPP CHAT DATE DIVIDER BADGES ── */
+.wa-date-divider-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 14px 0 10px 0;
+  width: 100%;
+}
+
+.wa-date-divider-pill {
+  background: #ffffff;
+  color: #54656f;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(11, 20, 26, 0.12);
+  border: 1px solid #e2e8f0;
+  letter-spacing: 0.01em;
+  text-transform: capitalize;
+  user-select: none;
 }
 
 .wa-load-earlier-btn {

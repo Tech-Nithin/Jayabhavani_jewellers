@@ -825,40 +825,8 @@ router.put('/workers/:id', async (req: Request, res: Response) => {
   }
 });
 
-// ── WORKER TRANSACTIONS ENDPOINTS (WhatsApp Chat Ledger) ──
-
-const txFilePath = path.join(__dirname, '../../../../data/worker_transactions.json');
-
-const ensureTxFileExists = () => {
-  try {
-    const dir = path.dirname(txFilePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(txFilePath)) fs.writeFileSync(txFilePath, JSON.stringify([], null, 2));
-  } catch (e) {
-    console.error('Failed to create tx data directory:', e);
-  }
-};
-
-const getLocalTransactions = (): WorkerTransactionItem[] => {
-  try {
-    ensureTxFileExists();
-    const raw = fs.readFileSync(txFilePath, 'utf8');
-    return JSON.parse(raw) || [];
-  } catch (e) {
-    return [];
-  }
-};
-
-const saveLocalTransaction = (txn: WorkerTransactionItem) => {
-  try {
-    ensureTxFileExists();
-    const local = getLocalTransactions();
-    local.push(txn);
-    fs.writeFileSync(txFilePath, JSON.stringify(local, null, 2));
-  } catch (e) {
-    console.error('Failed to save transaction to local JSON disk file:', e);
-  }
-};
+// In-memory mock storage fallback if database connection fails
+const mockTransactions: WorkerTransactionItem[] = [];
 
 // ── SERVER-SENT EVENTS (SSE) REALTIME STREAM MANAGER ──
 const sseClientsMap = new Map<string, Set<Response>>();
@@ -931,22 +899,7 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
     const { data: dbTxns, error: dbErr } = await query;
 
     if (!dbErr && dbTxns) {
-      // Merge local disk transactions so newly sent messages never flicker or disappear
-      const localTxns = getLocalTransactions();
-      const map = new Map<string, any>();
-      if (Array.isArray(dbTxns)) {
-        dbTxns.forEach((t: any) => map.set(t.id, t));
-      }
-      localTxns.forEach((t: any) => {
-        if (workerId && String(t.worker_id) !== String(workerId)) return;
-        if (!map.has(t.id)) {
-          map.set(t.id, t);
-        }
-      });
-      let combinedTxns = Array.from(map.values());
-      combinedTxns.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
-      let filtered = combinedTxns;
+      let filtered = Array.isArray(dbTxns) ? dbTxns : [];
 
       // 🔍 SEARCH MODE: Search 100% full database history across all fields
       if (search && String(search).trim() !== '') {
@@ -992,46 +945,16 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
     }
 
     if (dbErr) {
-      console.warn('⚠️ Supabase GET worker_transactions error (using persistent fallback):', dbErr.message);
+      console.warn('⚠️ Supabase GET worker_transactions notice:', dbErr.message);
     }
   } catch (err: any) {
     console.warn('⚠️ Supabase worker_transactions fetch exception:', err);
   }
 
-  // 2. Persistent Disk Fallback + Mock
-  let combined = [...getLocalTransactions(), ...mockTransactions];
-  const seen = new Set();
-  combined = combined.filter((t) => {
-    if (seen.has(t.id)) return false;
-    seen.add(t.id);
-    return true;
-  });
-
+  // 2. In-memory fallback if database query fails
+  let combined = [...mockTransactions];
   if (workerId) {
     combined = combined.filter((t) => t.worker_id === String(workerId));
-  }
-
-  if (search && String(search).trim() !== '') {
-    const q = String(search).toLowerCase().trim();
-    combined = combined.filter((t: any) => {
-      const item = (t.item_name || '').toLowerCase();
-      const notes = (t.notes || '').toLowerCase();
-      const category = (t.category || '').toLowerCase();
-      const amount = String(t.amount_cash || '');
-      const weight = String(t.weight_grams || '');
-      const touch = String(t.touch_percentage || '');
-      return item.includes(q) || notes.includes(q) || category.includes(q) || amount.includes(q) || weight.includes(q) || touch.includes(q);
-    });
-  } else if (fullHistory !== 'true' && fullHistory !== '1') {
-    const cutoffDate = beforeDate ? new Date(String(beforeDate)) : new Date();
-    const daysCount = Number(days) || 7;
-    const startDate = new Date(cutoffDate.getTime() - daysCount * 24 * 60 * 60 * 1000);
-
-    if (beforeDate) {
-      combined = combined.filter((t: any) => new Date(t.created_at) < cutoffDate);
-    } else {
-      combined = combined.filter((t: any) => new Date(t.created_at) >= startDate);
-    }
   }
 
   const formattedCombined = combined.map((t: any) => ({
@@ -1042,7 +965,7 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
   res.json({
     success: true,
     transactions: formattedCombined,
-    source: 'local_disk_fallback',
+    source: 'in_memory_fallback',
   });
 });
 
@@ -1079,34 +1002,8 @@ router.put('/worker-transactions/mark-read', async (req: Request, res: Response)
       console.warn('Supabase mark-read exception:', err);
     }
 
-    // 2. Update Local Disk fallback
-    const local = getLocalTransactions();
+    // Update mockTransactions array in memory ONLY for this specific worker_id
     let updatedCount = 0;
-    const updatedLocal = local.map((tx: any) => {
-      const matchWorker = String(tx.worker_id) === String(worker_id);
-      const matchDirection = targetDirection ? tx.direction === targetDirection : true;
-      const isNotFailed = tx.status_state !== 'FAILED';
-      const isNotYetSeen = !tx.read_at || tx.status_state !== 'READ' || tx.is_seen !== 'YES';
-
-      if (matchWorker && matchDirection && isNotFailed && isNotYetSeen) {
-        updatedCount++;
-        return {
-          ...tx,
-          status_state: 'READ',
-          is_seen: 'YES',
-          read_at: nowIso,
-          seen_at: nowIso,
-        };
-      }
-      return tx;
-    });
-
-    if (updatedCount > 0) {
-      ensureTxFileExists();
-      fs.writeFileSync(txFilePath, JSON.stringify(updatedLocal, null, 2));
-    }
-
-    // 3. Update mockTransactions array in memory ONLY for this specific worker_id
     mockTransactions.forEach((tx: any) => {
       const matchWorker = String(tx.worker_id) === String(worker_id);
       const matchDirection = targetDirection ? tx.direction === targetDirection : true;
@@ -1241,8 +1138,7 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       created_at: new Date().toISOString(),
     };
 
-    // 1. ALWAYS persist to local disk file so chat is NEVER lost regardless of database status
-    saveLocalTransaction(newTxn);
+    // 1. Add to in-memory fallback list
     mockTransactions.push(newTxn);
 
     // 2. Try inserting into Supabase Database
@@ -1333,35 +1229,8 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Notes field is required for editing' });
     }
 
-    // 0. Enforce 30-minute edit window restriction
+    // 1. Enforce 30-minute edit window restriction
     let targetTx: any = mockTransactions.find((t: any) => t.id === id);
-    if (!targetTx) {
-      const local = getLocalTransactions();
-      targetTx = local.find((t: any) => t.id === id);
-    }
-    if (targetTx && targetTx.created_at) {
-      const createdTime = new Date(targetTx.created_at).getTime();
-      if (Date.now() - createdTime > 30 * 60 * 1000) {
-        return res.status(400).json({ success: false, message: 'Editing is restricted to within 30 minutes of sending' });
-      }
-    }
-
-    const editTimestamp = new Date().toISOString();
-
-    // 1. Update local disk file backup
-    try {
-      const local = getLocalTransactions();
-      const idx = local.findIndex((t: any) => t.id === id);
-      if (idx !== -1) {
-        const history = Array.isArray(local[idx].edited_at_history) ? local[idx].edited_at_history : [];
-        history.push(editTimestamp);
-        local[idx].notes = notes;
-        local[idx].edited_at_history = history;
-        fs.writeFileSync(txFilePath, JSON.stringify(local, null, 2));
-      }
-    } catch (e) {
-      console.warn('Failed to update local JSON file for edit:', e);
-    }
 
     // 2. Update in-memory mock
     const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
@@ -1414,24 +1283,11 @@ router.delete('/worker-transactions/:id', async (req: Request, res: Response) =>
   try {
     const { id } = req.params;
 
-    // 1. Update local disk file backup
+    // Update in-memory mock & Supabase
     let targetWorkerId: string | null = null;
-    try {
-      const local = getLocalTransactions();
-      const idx = local.findIndex((t: any) => t.id === id);
-      if (idx !== -1) {
-        targetWorkerId = local[idx].worker_id;
-        local[idx].is_deleted = true;
-        fs.writeFileSync(txFilePath, JSON.stringify(local, null, 2));
-      }
-    } catch (e) {
-      console.warn('Failed to update local JSON file for delete:', e);
-    }
-
-    // 2. Update mock array
     const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
     if (mockIdx !== -1) {
-      targetWorkerId = targetWorkerId || mockTransactions[mockIdx].worker_id;
+      targetWorkerId = mockTransactions[mockIdx].worker_id;
       mockTransactions[mockIdx].is_deleted = true;
     }
 
@@ -1465,37 +1321,7 @@ router.delete('/worker-transactions/:id', async (req: Request, res: Response) =>
 
 // ── USER SETTINGS ENDPOINTS (Message Preview Toggle Preference) ──
 
-const settingsFilePath = path.join(__dirname, '../../../../data/user_settings.json');
-
-const getLocalSettings = () => {
-  try {
-    const dir = path.dirname(settingsFilePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(settingsFilePath)) {
-      const defaultSettings = { message_preview_enabled: true, image_preview_enabled: true };
-      fs.writeFileSync(settingsFilePath, JSON.stringify(defaultSettings, null, 2));
-      return defaultSettings;
-    }
-    const raw = fs.readFileSync(settingsFilePath, 'utf8');
-    return JSON.parse(raw) || { message_preview_enabled: true, image_preview_enabled: true };
-  } catch (e) {
-    return { message_preview_enabled: true, image_preview_enabled: true };
-  }
-};
-
-const saveLocalSettings = (settings: Record<string, any>) => {
-  try {
-    const dir = path.dirname(settingsFilePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const current = getLocalSettings();
-    const updated = { ...current, ...settings };
-    fs.writeFileSync(settingsFilePath, JSON.stringify(updated, null, 2));
-    return updated;
-  } catch (e) {
-    console.error('Failed to save user settings to disk:', e);
-    return settings;
-  }
-};
+let mockUserSettings = { message_preview_enabled: true, image_preview_enabled: true };
 
 // GET /api/user-settings
 router.get('/user-settings', async (_req: Request, res: Response) => {
@@ -1512,22 +1338,20 @@ router.get('/user-settings', async (_req: Request, res: Response) => {
     console.warn('⚠️ Supabase user_settings fetch warning:', err);
   }
 
-  const local = getLocalSettings();
   res.json({
     success: true,
-    settings: local,
-    source: 'local_disk_fallback',
+    settings: mockUserSettings,
+    source: 'in_memory_fallback',
   });
 });
 
 // POST /api/user-settings
 router.post('/user-settings', async (req: Request, res: Response) => {
   try {
-    const updatedSettings = saveLocalSettings(req.body);
+    mockUserSettings = { ...mockUserSettings, ...req.body };
 
-    // Try persisting to Supabase if table exists
     try {
-      await supabase.from('user_settings').upsert({ id: 'DEFAULT_USER', ...updatedSettings });
+      await supabase.from('user_settings').upsert({ id: 'DEFAULT_USER', ...mockUserSettings });
     } catch (e) {
       console.warn('Supabase user_settings upsert fallback:', e);
     }
@@ -1535,7 +1359,7 @@ router.post('/user-settings', async (req: Request, res: Response) => {
     res.json({
       success: true,
       message: 'User settings updated successfully!',
-      settings: updatedSettings,
+      settings: mockUserSettings,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message || 'Failed to update user settings' });
