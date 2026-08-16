@@ -10,6 +10,8 @@ import { PaymentSettlementModal } from './components/PaymentSettlementModal';
 import { OrderDetailView } from './components/OrderDetailDrawer';
 import { ReceiptPreview, downloadReceiptAsPNG } from '../billing-frontend/components/ReceiptPreview';
 
+type DateRangeOption = 'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_30_DAYS' | 'CUSTOM';
+
 const formatIndianCurrencyInput = (val: string): string => {
   const clean = val.replace(/[^0-9.]/g, '');
   if (!clean) return '';
@@ -123,23 +125,27 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     const pageParam = params.get('page');
 
     if (statusParam && ['ALL', 'PENDING', 'ASSIGNED', 'COMPLETED'].includes(statusParam)) {
-      setStatusFilter((prev) => (prev !== statusParam ? (statusParam as any) : prev));
+      setStatusFilter(statusParam as any);
     }
     if (searchParam !== null) {
-      setSearchTerm((prev) => (prev !== searchParam ? searchParam : prev));
+      setSearchTerm(searchParam);
     }
     if (dateRangeParam && ['ALL', 'TODAY', 'YESTERDAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'CUSTOM'].includes(dateRangeParam)) {
+<<<<<<< Updated upstream
       setDateRange((prev: DateRangeOption) => (prev !== dateRangeParam ? dateRangeParam : prev));
+=======
+      setDateRange(dateRangeParam);
+>>>>>>> Stashed changes
     }
-    if (startDateParam !== null) setCustomStartDate((prev) => (prev !== startDateParam ? startDateParam : prev));
-    if (endDateParam !== null) setCustomEndDate((prev) => (prev !== endDateParam ? endDateParam : prev));
+    if (startDateParam !== null) setCustomStartDate(startDateParam);
+    if (endDateParam !== null) setCustomEndDate(endDateParam);
     if (pageSizeParam) {
       const ps = Number(pageSizeParam);
-      if ([10, 20, 50, 100, 200, 500, 1000].includes(ps)) setPageSize((prev) => (prev !== ps ? ps : prev));
+      if ([10, 20, 50, 100, 200, 500, 1000].includes(ps)) setPageSize(ps);
     }
     if (pageParam) {
       const p = Number(pageParam);
-      if (p > 0) setCurrentPage((prev) => (prev !== p ? p : prev));
+      if (p > 0) setCurrentPage(p);
     }
 
     if ((mod === 'orders' || !mod) && orderIdParam && ordersList.length > 0) {

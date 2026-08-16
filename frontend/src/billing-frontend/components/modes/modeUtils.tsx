@@ -40,7 +40,7 @@ export interface ModeFormProps {
   calcResults: any;
   presets: Record<string, string[]>;
   handleAddNewPreset: (name: string, category: string) => void;
-  rates: GlobalRates;
+  rates: GlobalRates | null;
   lang: Language;
   t: Record<string, any>;
   showValidationErrors: boolean;

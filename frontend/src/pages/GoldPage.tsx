@@ -270,13 +270,13 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
       >
         <div style={{ padding: '48px max(32px, calc((100vw - 1280px)/2 + 32px))', zIndex: 2, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <h1
+            className="shimmer-text-gold"
             style={{
               fontFamily: "'Cormorant Garamond', serif",
               fontSize: 'clamp(2.2rem, 4vw, 3.4rem)',
               fontWeight: 400,
               lineHeight: 1.15,
-              marginBottom: '16px',
-              color: '#fef8ee'
+              marginBottom: '16px'
             }}
           >
             Masterpieces in 22K Hallmarked Gold
@@ -329,7 +329,7 @@ export default function GoldPage({ onBackToStore: _onBackToStore, initialCategor
               display: 'flex',
               alignItems: 'center',
               background: '#ffffff',
-              border: isSearchFocused ? '2px solid #000000' : '1.5px solid #000000',
+              border: isSearchFocused ? '2px solid #b45309' : '1.5px solid #b45309',
               borderRadius: '99px',
               padding: '6px 8px 6px 20px',
               boxShadow: isSearchFocused ? '0 8px 30px rgba(180, 83, 9, 0.15)' : '0 6px 24px rgba(160, 100, 74, 0.08)',
