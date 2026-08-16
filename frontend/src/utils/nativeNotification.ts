@@ -4,21 +4,20 @@ import { Capacitor } from '@capacitor/core';
 export const HIGH_PRIORITY_CHANNEL_ID = 'jbj_chat_channel_v2';
 
 export async function initNativeNotifications() {
-  if (Capacitor.isNativePlatform()) {
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('LocalNotifications')) {
     try {
       const perm = await LocalNotifications.checkPermissions();
       if (perm.display !== 'granted') {
         await LocalNotifications.requestPermissions();
       }
 
-      // Create High-Priority Notification Channel (Importance 5 = Heads Up, Lockscreen Visibility 1 = Public, Sound, Vibration & Screen Light-Up)
+      // Create High-Priority Notification Channel
       await LocalNotifications.createChannel({
         id: HIGH_PRIORITY_CHANNEL_ID,
         name: 'Jaya Bhavani Real-time Chat',
         description: 'High-priority notifications for new chat transactions & work assignments',
-        importance: 5, // 5 = Max/High Importance (triggers Heads-Up popup & screen turn on)
-        visibility: 1, // 1 = Public visibility (shows full content on lock screen)
-        sound: 'res://platform_default',
+        importance: 5,
+        visibility: 1,
         vibration: true,
         lights: true,
         lightColor: '#d97706',
@@ -38,7 +37,7 @@ export async function initNativeNotifications() {
 }
 
 export async function triggerDeviceNotification(title: string, body: string, iconUrl?: string) {
-  if (Capacitor.isNativePlatform()) {
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('LocalNotifications')) {
     try {
       await LocalNotifications.schedule({
         notifications: [
@@ -48,7 +47,6 @@ export async function triggerDeviceNotification(title: string, body: string, ico
             id: Math.floor(Math.random() * 1000000),
             channelId: HIGH_PRIORITY_CHANNEL_ID,
             schedule: { at: new Date(Date.now() + 50) },
-            sound: 'res://platform_default',
             smallIcon: 'ic_launcher',
             iconColor: '#d97706',
             actionTypeId: '',

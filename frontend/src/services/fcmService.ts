@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { API_BASE } from '../config/apiConfig';
 
 export async function initFcmPushNotifications(userOrWorkerId: string, role: 'WORKER' | 'ADMIN' = 'ADMIN') {
-  if (!Capacitor.isNativePlatform()) return;
+  if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('PushNotifications')) return;
 
   try {
     const perm = await PushNotifications.checkPermissions();
@@ -15,8 +15,12 @@ export async function initFcmPushNotifications(userOrWorkerId: string, role: 'WO
       }
     }
 
-    // Register with Google FCM gateway
-    await PushNotifications.register();
+    // Register with Google FCM gateway safely without crashing if Firebase is uninitialized
+    try {
+      await PushNotifications.register();
+    } catch (regErr: any) {
+      console.warn('⚠️ FCM Firebase registration notice (unconfigured google-services.json):', regErr.message);
+    }
 
     // Listen for FCM Device Token registration
     PushNotifications.addListener('registration', async (token) => {
