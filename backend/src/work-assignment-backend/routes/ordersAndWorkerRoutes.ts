@@ -828,13 +828,27 @@ router.put('/workers/:id', async (req: Request, res: Response) => {
 const fcmTokensMap = new Map<string, string>();
 
 // POST /api/work-assignment/register-fcm-token
-router.post('/register-fcm-token', (req: Request, res: Response) => {
+router.post('/register-fcm-token', async (req: Request, res: Response) => {
   try {
     const { userId, role, fcmToken } = req.body;
     if (userId && fcmToken) {
       fcmTokensMap.set(String(userId), String(fcmToken));
       console.log(`[FCM Push] Token registered for ${role} (${userId}):`, fcmToken);
-      return res.json({ success: true, message: 'FCM token registered' });
+
+      // Persist token in Supabase workers database table
+      if (role === 'WORKER') {
+        try {
+          const { error } = await supabase
+            .from('workers')
+            .update({ fcm_token: fcmToken })
+            .eq('id', userId);
+          if (error) console.warn('Supabase FCM token update error:', error.message);
+        } catch (e) {
+          console.warn('Supabase FCM token update exception:', e);
+        }
+      }
+
+      return res.json({ success: true, message: 'FCM token registered successfully' });
     }
     return res.status(400).json({ success: false, message: 'Missing userId or fcmToken' });
   } catch (err: any) {
