@@ -129,7 +129,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       setSearchTerm(searchParam);
     }
     if (dateRangeParam && ['ALL', 'TODAY', 'YESTERDAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'CUSTOM'].includes(dateRangeParam)) {
-      setDateRange((prev: DateRangeOption) => (prev !== dateRangeParam ? dateRangeParam : prev));
+      setDateRange(dateRangeParam);
     }
     if (startDateParam !== null) setCustomStartDate(startDateParam);
     if (endDateParam !== null) setCustomEndDate(endDateParam);
@@ -297,12 +297,12 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           prev.map((o) =>
             o.id === order.id
               ? {
-                  ...o,
-                  assigned_worker_id: targetWorkerId || null,
-                  assigned_worker_name: targetWorkerName || null,
-                  status: targetWorkerId ? 'ASSIGNED' : 'PENDING',
-                  assigned_at: targetWorkerId ? (data.assigned_at || new Date().toISOString()) : null,
-                }
+                ...o,
+                assigned_worker_id: targetWorkerId || null,
+                assigned_worker_name: targetWorkerName || null,
+                status: targetWorkerId ? 'ASSIGNED' : 'PENDING',
+                assigned_at: targetWorkerId ? (data.assigned_at || new Date().toISOString()) : null,
+              }
               : o
           )
         );
@@ -369,10 +369,10 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           prev.map((o) =>
             o.id === order.id
               ? {
-                  ...o,
-                  returned_from_worker: newStatus,
-                  returned_at: returnTimestamp,
-                }
+                ...o,
+                returned_from_worker: newStatus,
+                returned_at: returnTimestamp,
+              }
               : o
           )
         );
@@ -420,12 +420,12 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           prev.map((o) =>
             o.id === order.id
               ? {
-                  ...o,
-                  submitted: o.submitted || 'no',
-                  sold_status: targetStatus,
-                  paid_amount: (o.paid_amount || 0) + paidNowNum,
-                  due_amount: remainingDue,
-                }
+                ...o,
+                submitted: o.submitted || 'no',
+                sold_status: targetStatus,
+                paid_amount: (o.paid_amount || 0) + paidNowNum,
+                due_amount: remainingDue,
+              }
               : o
           )
         );
@@ -749,10 +749,10 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
               {st === 'ALL'
                 ? t.allOrdersTab
                 : st === 'PENDING'
-                ? ((t as any).notAssignedTab || 'Not Assigned')
-                : st === 'ASSIGNED'
-                ? ((t as any).assignedTab || 'Assigned')
-                : t.completedTab}
+                  ? ((t as any).notAssignedTab || 'Not Assigned')
+                  : st === 'ASSIGNED'
+                    ? ((t as any).assignedTab || 'Assigned')
+                    : t.completedTab}
             </button>
           ))}
         </div>

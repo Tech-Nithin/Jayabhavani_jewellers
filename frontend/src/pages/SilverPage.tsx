@@ -426,7 +426,7 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
             {/* Right Action Search Button */}
             <button
               onClick={() => { }}
-              className="search-bar-btn"
+              className="search-bar-btn search-bar-btn-silver"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>
