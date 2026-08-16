@@ -1,6 +1,7 @@
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { API_BASE } from '../config/apiConfig';
+import { triggerDeviceNotification } from '../utils/nativeNotification';
 
 export async function initFcmPushNotifications(userOrWorkerId: string, role: 'WORKER' | 'ADMIN' = 'ADMIN') {
   if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('PushNotifications')) return;
@@ -14,6 +15,9 @@ export async function initFcmPushNotifications(userOrWorkerId: string, role: 'WO
         return;
       }
     }
+
+    // Remove any stale listeners from previous calls (prevents duplicate stacking)
+    await PushNotifications.removeAllListeners();
 
     // Register with Google FCM gateway safely without crashing if Firebase is uninitialized
     try {
@@ -48,6 +52,9 @@ export async function initFcmPushNotifications(userOrWorkerId: string, role: 'WO
     // Listen for incoming FCM push payloads when app is active
     PushNotifications.addListener('pushNotificationReceived', (notification) => {
       console.log('FCM Push Notification Received:', notification);
+      const title = notification.title || notification.data?.title || 'Jaya Bhavani Jewellers';
+      const body = notification.body || notification.data?.body || 'New message update';
+      triggerDeviceNotification(title, body);
     });
 
     PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {

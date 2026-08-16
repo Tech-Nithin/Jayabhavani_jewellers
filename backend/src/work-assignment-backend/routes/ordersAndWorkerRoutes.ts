@@ -853,17 +853,22 @@ router.post('/register-fcm-token', async (req: Request, res: Response) => {
         console.warn('Local push token save notice:', fErr);
       }
 
-      // Persist worker token in Supabase workers database table
-      if (role === 'WORKER') {
-        try {
+      // Persist token in Supabase workers database table for both WORKER and ADMIN
+      try {
+        if (role === 'ADMIN') {
+          const { error } = await supabase
+            .from('workers')
+            .upsert({ id: 'ADMIN', name: 'Admin User', fcm_token: fcmToken }, { onConflict: 'id' });
+          if (error) console.warn('Supabase Admin FCM token upsert notice:', error.message);
+        } else {
           const { error } = await supabase
             .from('workers')
             .update({ fcm_token: fcmToken })
             .eq('id', userId);
-          if (error) console.warn('Supabase FCM token update error:', error.message);
-        } catch (e) {
-          console.warn('Supabase FCM token update exception:', e);
+          if (error) console.warn('Supabase Worker FCM token update notice:', error.message);
         }
+      } catch (e) {
+        console.warn('Supabase FCM token update exception:', e);
       }
 
       return res.json({ success: true, message: 'FCM token registered successfully' });

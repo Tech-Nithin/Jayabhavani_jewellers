@@ -126,11 +126,15 @@ export const triggerFcmPushNotification = async (
   const pushTokens = loadPushTokens();
   let deviceToken = pushTokens[targetWorkerId];
 
-  if (!deviceToken && targetWorkerId !== 'ADMIN') {
+  // Supabase database fallback (works for both WORKER IDs and 'ADMIN' target across server reboots)
+  if (!deviceToken) {
     try {
       const { data: wData } = await supabase.from('workers').select('fcm_token').eq('id', targetWorkerId).single();
       if (wData?.fcm_token) {
         deviceToken = wData.fcm_token;
+        // Restore to local file cache for subsequent calls
+        pushTokens[targetWorkerId] = wData.fcm_token;
+        savePushTokens(pushTokens);
       }
     } catch {}
   }
@@ -140,8 +144,7 @@ export const triggerFcmPushNotification = async (
     return;
   }
 
-  const customSound = process.env.FCM_NOTIFICATION_SOUND || 'jbj_notification_sound';
-  const channelId = process.env.FCM_CHANNEL_ID || 'jbj_notifications';
+  const channelId = 'jbj_chat_channel_v2';
 
   // 1. Try modern Firebase HTTP v1 API if Service Account keys are configured
   if (projectId && clientEmail && privateKey) {
@@ -149,7 +152,7 @@ export const triggerFcmPushNotification = async (
       const accessToken = await getFirebaseAccessToken(clientEmail, privateKey);
       
       // Convert all payload data values to strings as required by FCM v1
-      const stringifiedData: Record<string, string> = {};
+      const stringifiedData: Record<string, string> = { title, body };
       for (const [k, v] of Object.entries(payloadData || {})) {
         stringifiedData[k] = typeof v === 'string' ? v : JSON.stringify(v);
       }
@@ -170,18 +173,19 @@ export const triggerFcmPushNotification = async (
             android: {
               priority: 'HIGH',
               notification: {
-                sound: customSound,
+                sound: 'default',
                 channel_id: channelId,
                 priority: 'HIGH',
                 visibility: 'PUBLIC',
-                default_sound: false,
+                default_sound: true,
                 default_vibrate_timings: true,
+                default_light_settings: true,
               },
             },
             apns: {
               payload: {
                 aps: {
-                  sound: `${customSound}.mp3`,
+                  sound: 'default',
                   badge: 1,
                 },
               },
@@ -214,32 +218,26 @@ export const triggerFcmPushNotification = async (
           notification: {
             title,
             body,
-            sound: customSound,
+            sound: 'default',
             android_channel_id: channelId,
             badge: '1',
           },
           android: {
             priority: 'high',
             notification: {
-              sound: customSound,
+              sound: 'default',
               channel_id: channelId,
               priority: 'high',
               visibility: 'public',
-              default_sound: false,
+              default_sound: true,
               default_vibrate_timings: true,
-            },
-          },
-          apns: {
-            payload: {
-              aps: {
-                sound: `${customSound}.mp3`,
-                badge: 1,
-              },
+              default_light_settings: true,
             },
           },
           data: {
             ...payloadData,
-            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            title,
+            body,
           },
         }),
       });

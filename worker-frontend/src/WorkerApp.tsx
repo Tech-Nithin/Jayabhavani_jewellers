@@ -177,7 +177,12 @@ export default function WorkerApp() {
   useEffect(() => {
     if (worker?.id) {
       setLoading(true);
-      initFcmPushNotifications(worker.id, 'WORKER');
+
+      // Initialize native notification channel + FCM push registration together after login
+      // This guarantees Android 13+ notification permission dialog is shown post-login
+      initNativeNotifications().then(() => {
+        initFcmPushNotifications(worker.id, 'WORKER');
+      });
 
       // Mark Admin messages as READ when worker opens chat screen
       fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
