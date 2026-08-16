@@ -8,6 +8,7 @@ import { FullImagePreviewModal } from '../inventory-frontend/components/FullImag
 import { convertImageToWebP, convertImageToWebPBlob, downloadImageAsJpeg } from '../utils/imageUtils';
 import { playJbjNotificationSound } from '../utils/soundUtils';
 import { triggerDeviceNotification } from '../utils/nativeNotification';
+import { initFcmPushNotifications } from '../services/fcmService';
 
 interface WorkerTransactionItem {
   id: string;
@@ -313,6 +314,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   useEffect(() => {
     fetchInitialTransactions();
     fetchUserSettings();
+    initFcmPushNotifications('ADMIN', 'ADMIN');
   }, [worker?.id]);
 
   const fetchUserSettings = async () => {

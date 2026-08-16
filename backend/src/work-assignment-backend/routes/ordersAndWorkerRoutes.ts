@@ -824,6 +824,24 @@ router.put('/workers/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ── FIREBASE CLOUD MESSAGING (FCM) TOKEN REGISTRATION & PUSH ENGINE ──
+const fcmTokensMap = new Map<string, string>();
+
+// POST /api/work-assignment/register-fcm-token
+router.post('/register-fcm-token', (req: Request, res: Response) => {
+  try {
+    const { userId, role, fcmToken } = req.body;
+    if (userId && fcmToken) {
+      fcmTokensMap.set(String(userId), String(fcmToken));
+      console.log(`[FCM Push] Token registered for ${role} (${userId}):`, fcmToken);
+      return res.json({ success: true, message: 'FCM token registered' });
+    }
+    return res.status(400).json({ success: false, message: 'Missing userId or fcmToken' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── SERVER-SENT EVENTS (SSE) REALTIME STREAM MANAGER ──
 const sseClientsMap = new Map<string, Set<Response>>();
 

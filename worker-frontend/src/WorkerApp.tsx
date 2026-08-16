@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
+import { initFcmPushNotifications } from './services/fcmService';
 import { WorkerProfile, WorkerTransaction, ReplyMessageData, TransactionCategory } from './types/worker';
 import {
   fetchWorkerTransactions,
@@ -140,6 +141,7 @@ export default function WorkerApp() {
   useEffect(() => {
     if (worker?.id) {
       setLoading(true);
+      initFcmPushNotifications(worker.id, 'WORKER');
 
       // Mark Admin messages as READ when worker opens chat screen
       fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
