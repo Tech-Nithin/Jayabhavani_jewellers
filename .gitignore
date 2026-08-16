@@ -36,8 +36,10 @@ Thumbs.db
 *.njsproj
 *.sln
 # Runtime data & backups
-data/
+/data/
 backend/data/
+!jbj-website/src/data/
+!frontend/src/data/
 .vite/
 *.vite/
 
