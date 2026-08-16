@@ -44,7 +44,7 @@ export default function Testimonials() {
             </div>
 
             <div className="testimonial-dots" id="testimonial-dots">
-              {testimonials.map((_, i) => (
+              {testimonials.map((_: unknown, i: number) => (
                 <button
                   key={i}
                   className={`t-dot${i === current ? ' active' : ''}`}
