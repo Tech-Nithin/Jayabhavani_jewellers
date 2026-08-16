@@ -424,7 +424,6 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
             created_at: new Date().toISOString(),
           };
 
-          saveLocalTransaction(newTxn);
           mockTransactions.push(newTxn);
 
           let { data: insertedDb } = await supabase.from('worker_transactions').insert([newTxn]).select().single();
@@ -681,10 +680,10 @@ router.get('/workers', async (req: Request, res: Response) => {
     if (dbTxns && dbTxns.length > 0) {
       allTxns = dbTxns;
     } else {
-      allTxns = getLocalTransactions();
+      allTxns = mockTransactions;
     }
   } catch {
-    allTxns = getLocalTransactions();
+    allTxns = mockTransactions;
   }
 
   const unreadMap: Record<string, number> = {};
@@ -824,9 +823,6 @@ router.put('/workers/:id', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: err.message || 'Failed to update worker profile' });
   }
 });
-
-// In-memory mock storage fallback if database connection fails
-const mockTransactions: WorkerTransactionItem[] = [];
 
 // ── SERVER-SENT EVENTS (SSE) REALTIME STREAM MANAGER ──
 const sseClientsMap = new Map<string, Set<Response>>();
@@ -1224,6 +1220,7 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { notes } = req.body;
+    const editTimestamp = new Date().toISOString();
 
     if (notes === undefined) {
       return res.status(400).json({ success: false, message: 'Notes field is required for editing' });
@@ -1255,7 +1252,7 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
     }
 
     // 4. Broadcast SSE live stream event for instant edit (< 10ms)
-    const localForEdit = getLocalTransactions();
+    const localForEdit = mockTransactions;
     const targetWorkerId = mockIdx !== -1 ? mockTransactions[mockIdx]?.worker_id : (localForEdit.find((t: any) => t.id === id)?.worker_id);
     if (targetWorkerId) {
       broadcastToWorker(String(targetWorkerId), 'MESSAGE_EDITED', {
