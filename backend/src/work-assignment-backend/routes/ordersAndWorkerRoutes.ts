@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import { supabase } from '../../config/supabase';
+import { saveFcmToken } from '../../utils/fcmTokenStore';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 import { triggerFcmPushNotification } from '../../routes/workerAuthRoutes';
 
@@ -834,43 +835,7 @@ router.post('/register-fcm-token', async (req: Request, res: Response) => {
     const { userId, role, fcmToken } = req.body;
     if (userId && fcmToken) {
       const targetId = role === 'ADMIN' ? 'ADMIN' : String(userId);
-      fcmTokensMap.set(targetId, String(fcmToken));
-      console.log(`[FCM Push] Token registered for ${role} (${targetId}):`, fcmToken);
-
-      // Save token to local JSON file for persistent backup
-      try {
-        const tokensFilePath = path.join(__dirname, '../../../../data/worker_push_tokens.json');
-        let currentTokens: Record<string, string> = {};
-        if (fs.existsSync(tokensFilePath)) {
-          currentTokens = JSON.parse(fs.readFileSync(tokensFilePath, 'utf8') || '{}');
-        } else {
-          const dir = path.dirname(tokensFilePath);
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        }
-        currentTokens[targetId] = String(fcmToken);
-        fs.writeFileSync(tokensFilePath, JSON.stringify(currentTokens, null, 2), 'utf8');
-      } catch (fErr) {
-        console.warn('Local push token save notice:', fErr);
-      }
-
-      // Persist token in Supabase workers database table for both WORKER and ADMIN
-      try {
-        if (role === 'ADMIN') {
-          const { error } = await supabase
-            .from('workers')
-            .upsert({ id: 'ADMIN', name: 'Admin User', fcm_token: fcmToken }, { onConflict: 'id' });
-          if (error) console.warn('Supabase Admin FCM token upsert notice:', error.message);
-        } else {
-          const { error } = await supabase
-            .from('workers')
-            .update({ fcm_token: fcmToken })
-            .eq('id', userId);
-          if (error) console.warn('Supabase Worker FCM token update notice:', error.message);
-        }
-      } catch (e) {
-        console.warn('Supabase FCM token update exception:', e);
-      }
-
+      await saveFcmToken(targetId, role === 'ADMIN' ? 'ADMIN' : 'WORKER', String(fcmToken));
       return res.json({ success: true, message: 'FCM token registered successfully' });
     }
     return res.status(400).json({ success: false, message: 'Missing userId or fcmToken' });

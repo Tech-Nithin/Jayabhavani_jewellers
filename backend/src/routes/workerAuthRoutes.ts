@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { getFcmToken } from '../utils/fcmTokenStore';
 import fs from 'fs';
 import path from 'path';
 
@@ -123,21 +124,7 @@ export const triggerFcmPushNotification = async (
     return;
   }
 
-  const pushTokens = loadPushTokens();
-  let deviceToken = pushTokens[targetWorkerId];
-
-  // Supabase database fallback (works for both WORKER IDs and 'ADMIN' target across server reboots)
-  if (!deviceToken) {
-    try {
-      const { data: wData } = await supabase.from('workers').select('fcm_token').eq('id', targetWorkerId).single();
-      if (wData?.fcm_token) {
-        deviceToken = wData.fcm_token;
-        // Restore to local file cache for subsequent calls
-        pushTokens[targetWorkerId] = wData.fcm_token;
-        savePushTokens(pushTokens);
-      }
-    } catch {}
-  }
+  const deviceToken = await getFcmToken(targetWorkerId);
 
   if (!deviceToken) {
     console.log(`ℹ️ No device push token registered for target ID [${targetWorkerId}]. Message saved to database.`);
