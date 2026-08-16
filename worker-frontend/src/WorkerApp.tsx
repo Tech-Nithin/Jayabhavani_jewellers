@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { WorkerProfile, WorkerTransaction, ReplyMessageData, TransactionCategory } from './types/worker';
 import {
   fetchWorkerTransactions,
@@ -69,6 +71,48 @@ export default function WorkerApp() {
   const [editingTx, setEditingTx] = useState<WorkerTransaction | null>(null);
   const [historyTx, setHistoryTx] = useState<WorkerTransaction | null>(null);
 
+  const notifiedMsgIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
+
+  const notifyNewIncomingTransactions = (txList: WorkerTransaction[]) => {
+    if (!initialLoadDoneRef.current) {
+      for (const tx of txList) {
+        if (tx && tx.id) notifiedMsgIdsRef.current.add(tx.id);
+      }
+      initialLoadDoneRef.current = true;
+      return;
+    }
+
+    for (const tx of txList) {
+      if (!tx || !tx.id) continue;
+
+      if (!notifiedMsgIdsRef.current.has(tx.id)) {
+        notifiedMsgIdsRef.current.add(tx.id);
+
+        if (tx.direction === 'OUTGOING') {
+          playJbjNotificationSound();
+          const summaryText = tx.notes || (tx.amount_cash ? `Cash Update: ₹${tx.amount_cash.toLocaleString('en-IN')}` : tx.weight_grams ? `Metal Update: ${tx.weight_grams}g` : 'New work assignment received');
+          triggerDeviceNotification('👑 Jaya Bhavani Admin', summaryText);
+        }
+      }
+    }
+  };
+
+  // App resume & foreground sync listener
+  useEffect(() => {
+    let sub: any;
+    if (Capacitor.isNativePlatform()) {
+      App.addListener('appStateChange', (state) => {
+        if (state.isActive && worker?.id) {
+          loadTransactions(loadedDaysRef.current, searchQueryRef.current, false);
+        }
+      }).then((s) => { sub = s; });
+    }
+    return () => {
+      if (sub && sub.remove) sub.remove();
+    };
+  }, [worker?.id]);
+
   // Load chat history with real-time merge & cache save
   const loadTransactions = async (daysToFetch = 7, query = '', appendEarlier = false) => {
     if (!worker?.id) return;
@@ -78,20 +122,9 @@ export default function WorkerApp() {
       setIsOnline(true);
 
       setTransactions((prev) => {
-        // Strictly merge transactions belonging only to currentWorkerId
         const merged = mergeTransactions(prev, freshData, currentWorkerId);
+        notifyNewIncomingTransactions(merged);
 
-        // Chime & native device notification trigger on new inbound Admin messages
-        if (prev.length > 0 && freshData.length > prev.length) {
-          const latest = freshData[freshData.length - 1];
-          if (latest && latest.direction === 'OUTGOING') {
-            playJbjNotificationSound();
-            const summaryText = latest.notes || (latest.amount_cash ? `Cash Update: ₹${latest.amount_cash.toLocaleString('en-IN')}` : latest.weight_grams ? `Metal Update: ${latest.weight_grams}g` : 'New transaction update');
-            triggerDeviceNotification('👑 Jaya Bhavani Admin', summaryText);
-          }
-        }
-
-        // Save merged active feed to 8-hour local storage cache
         if (!query) {
           saveCachedTransactions(currentWorkerId, merged);
         }
@@ -128,27 +161,13 @@ export default function WorkerApp() {
           try {
             const tx = JSON.parse(event.data);
             if (tx && String(tx.worker_id) === String(worker.id)) {
+              notifyNewIncomingTransactions([tx]);
               setTransactions((prev) => {
                 if (prev.some((t) => t.id === tx.id)) return prev;
-                if (tx.direction === 'OUTGOING') {
-                  playJbjNotificationSound();
-                  const summaryText = tx.notes || (tx.amount_cash ? `Cash Update: ₹${tx.amount_cash.toLocaleString('en-IN')}` : tx.weight_grams ? `Metal Update: ${tx.weight_grams}g` : 'New work assignment received');
-                  triggerDeviceNotification('👑 Jaya Bhavani Admin', summaryText);
-                  // Instantly mark read since Worker is currently actively looking at chat screen
-                  fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ worker_id: worker.id, direction: 'OUTGOING' }),
-                  }).catch(() => {});
-                }
-                const updated = [...prev, tx];
-                saveCachedTransactions(worker.id, updated);
-                return updated;
+                return [...prev, tx];
               });
             }
-          } catch (err) {
-            console.warn('SSE parse error:', err);
-          }
+          } catch {}
         });
 
         eventSource.addEventListener('MARK_READ', (event: any) => {

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
 import { getWorkAssignmentTranslation } from './workAssignmentTranslations';
@@ -348,6 +350,48 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  const notifiedMsgIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
+
+  const notifyNewIncomingTransactions = (txList: WorkerTransactionItem[]) => {
+    if (!initialLoadDoneRef.current) {
+      for (const tx of txList) {
+        if (tx && tx.id) notifiedMsgIdsRef.current.add(tx.id);
+      }
+      initialLoadDoneRef.current = true;
+      return;
+    }
+
+    for (const tx of txList) {
+      if (!tx || !tx.id) continue;
+
+      if (!notifiedMsgIdsRef.current.has(tx.id)) {
+        notifiedMsgIdsRef.current.add(tx.id);
+
+        if (tx.direction === 'INCOMING') {
+          playJbjNotificationSound();
+          const senderTitle = `📩 ${worker?.name || 'Worker'} (Goldsmith Worker)`;
+          const summaryText = tx.notes || (tx.amount_cash ? `Cash Sent: ₹${tx.amount_cash.toLocaleString('en-IN')}` : tx.weight_grams ? `Metal Sent: ${tx.weight_grams}g` : 'New transaction message');
+          triggerDeviceNotification(senderTitle, summaryText);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    let sub: any;
+    if (Capacitor.isNativePlatform()) {
+      App.addListener('appStateChange', (state) => {
+        if (state.isActive && worker?.id) {
+          fetchInitialTransactions();
+        }
+      }).then((s) => { sub = s; });
+    }
+    return () => {
+      if (sub && sub.remove) sub.remove();
+    };
+  }, [worker?.id]);
+
   useEffect(() => {
     setTransactions([]);
     setHasMoreOlderMessages(true);
@@ -373,20 +417,9 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
           try {
             const tx = JSON.parse(event.data);
             if (tx && String(tx.worker_id) === String(worker.id)) {
+              notifyNewIncomingTransactions([tx]);
               setTransactions((prev) => {
                 if (prev.some((t) => t.id === tx.id)) return prev;
-                if (tx.direction === 'INCOMING') {
-                  playJbjNotificationSound();
-                  const senderTitle = `📩 ${worker?.name || 'Worker'} (Goldsmith Worker)`;
-                  const summaryText = tx.notes || (tx.amount_cash ? `Cash Sent: ₹${tx.amount_cash.toLocaleString('en-IN')}` : tx.weight_grams ? `Metal Sent: ${tx.weight_grams}g` : 'New transaction message');
-                  triggerDeviceNotification(senderTitle, summaryText);
-                  // Instantly mark read since Admin is currently actively looking at chat screen
-                  fetch(`${API_BASE}/work-assignment/worker-transactions/mark-read`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ worker_id: worker.id, direction: 'INCOMING' }),
-                  }).catch(() => {});
-                }
                 return [...prev, tx];
               });
               scrollToBottom(true);
