@@ -189,13 +189,13 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                           <strong>{weightGrams ? Number(weightGrams).toFixed(3) : '0.000'} g</strong>
                         </div>
                         <div>
-                          <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>TOUNCH %</span>
-                          <strong>{touchPercentage || (category === 'SILVER' ? '80.0' : '91.6')}%</strong>
+                          <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>TOUCH %</span>
+                          <strong>{touchPercentage || '100'}%</strong>
                         </div>
                         <div>
                           <span style={{ color: '#64748b', display: 'block', fontSize: '0.62rem', fontWeight: 700 }}>100% PURE FINE</span>
                           <strong style={{ color: '#15803d' }}>
-                            {Number((Number(weightGrams) || 0) * (Number(touchPercentage) || (category === 'SILVER' ? 80.0 : 91.6)) / 100).toFixed(3)} g
+                            {Number((Number(weightGrams) || 0) * (Number(touchPercentage) || 100.0) / 100).toFixed(3)} g
                           </strong>
                         </div>
                       </div>
@@ -277,10 +277,9 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
               <select
                 value={category}
                 onChange={(e) => {
-                  const cat = e.target.value as 'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT';
+                  const cat = e.target.value as 'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT';
                   setCategory(cat);
-                  if (cat === 'SILVER') setTouchPercentage('80.0');
-                  if (cat === 'GOLD') setTouchPercentage('91.6');
+                  if (cat === 'GOLD' || cat === 'SILVER' || cat === 'ORNAMENT') setTouchPercentage('100');
                 }}
                 style={{
                   padding: '5px 10px',

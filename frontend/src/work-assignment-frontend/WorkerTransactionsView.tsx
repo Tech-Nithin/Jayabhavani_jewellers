@@ -198,7 +198,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [cashMetalLink, setCashMetalLink] = useState<'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH'>('FOR_GOLD');
   const [appliedRatePerGram, setAppliedRatePerGram] = useState('');
   const [weightGrams, setWeightGrams] = useState('');
-  const [touchPercentage, setTouchPercentage] = useState('91.6');
+  const [touchPercentage, setTouchPercentage] = useState('100');
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
@@ -510,11 +510,10 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     const handleLocalMsg = (e: any) => {
       if (e.detail && worker?.id && String(e.detail.worker_id) === String(worker.id)) {
         setTransactions((prev) => {
-          if (prev.some((t) => t.id === e.detail.id)) return prev;
           if (e.detail.direction === 'INCOMING') {
             playJbjNotificationSound();
           }
-          return [...prev, e.detail];
+          return mergeTransactions(prev, [e.detail], worker.id);
         });
         scrollToBottom(true);
       }
@@ -529,11 +528,10 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
           const tx = msg.data.transaction;
           if (worker?.id && String(tx.worker_id) === String(worker.id)) {
             setTransactions((prev) => {
-              if (prev.some((t) => t.id === tx.id)) return prev;
               if (tx.direction === 'INCOMING') {
                 playJbjNotificationSound();
               }
-              return [...prev, tx];
+              return mergeTransactions(prev, [tx], worker.id);
             });
             scrollToBottom(true);
           }
@@ -591,8 +589,11 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       const res = await fetch(`${API_BASE}/work-assignment/worker-transactions?workerId=${worker.id}&days=7`);
       const data = await res.json();
       if (data.success && Array.isArray(data.transactions)) {
-        setTransactions(data.transactions);
-        saveCachedTransactions(worker.id, data.transactions);
+        setTransactions((prev) => {
+          const merged = mergeTransactions(prev, data.transactions, worker.id);
+          saveCachedTransactions(worker.id, merged);
+          return merged;
+        });
         scrollToBottom(false);
         if (data.transactions.length < 5) {
           fetchFullTransactions();
@@ -625,7 +626,11 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.transactions)) {
-        setTransactions(data.transactions);
+        setTransactions((prev) => {
+          const merged = mergeTransactions(prev, data.transactions, worker.id);
+          saveCachedTransactions(worker.id, merged);
+          return merged;
+        });
         setHasMoreOlderMessages(false);
       }
     } catch (err) {
@@ -725,7 +730,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
     const formattedItemName = toSentenceCase(itemName.trim()) || defaultName;
     const formattedNotes = toSentenceCase(notes.trim());
-    const defaultTouch = category === 'SILVER' ? 80.0 : 91.6;
+    const defaultTouch = 100.0;
 
     // ── 1. OPTIMISTIC INSTANT (0ms) LOCAL BUBBLE INSERTION ──
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -758,7 +763,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     setAmountCash('');
     setAppliedRatePerGram('');
     setWeightGrams('');
-    setTouchPercentage('91.6');
+    setTouchPercentage('100');
     setItemName('');
     setNotes('');
     setPhotos([]);
@@ -903,7 +908,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   transactions.forEach((t) => {
     if (t.is_deleted) return;
     const weight = Number(t.weight_grams) || 0;
-    const touch = Number(t.touch_percentage) || (t.category === 'SILVER' ? 80.0 : 91.6);
+    const touch = Number(t.touch_percentage) || 100.0;
     const fine = t.fine_weight_grams ? Number(t.fine_weight_grams) : (weight * touch / 100);
 
     if (t.direction === 'OUTGOING') {

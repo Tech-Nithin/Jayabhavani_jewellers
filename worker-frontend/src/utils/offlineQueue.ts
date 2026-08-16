@@ -58,33 +58,41 @@ export function getOfflineDb() {
   return dbPromise;
 }
 
+function isGhostTempItem(tempItem: any, confirmedItems: any[]): boolean {
+  if (!tempItem || !tempItem.id || !tempItem.id.startsWith('temp_')) return false;
+  const tempTime = new Date(tempItem.created_at).getTime();
+  const tempNotes = (tempItem.notes || '').trim().toLowerCase();
+
+  return confirmedItems.some((conf) => {
+    if (!conf || !conf.id || conf.id.startsWith('temp_')) return false;
+    if (conf.direction !== tempItem.direction) return false;
+
+    const confNotes = (conf.notes || '').trim().toLowerCase();
+    if (confNotes !== tempNotes) return false;
+
+    const confTime = new Date(conf.created_at).getTime();
+    const diffMs = Math.abs(tempTime - confTime);
+    return isNaN(diffMs) || diffMs <= 120000; // Within 2-minute window
+  });
+}
+
 export async function saveCachedTransactions(workerId: string, transactions: any[]): Promise<void> {
   try {
     const db = await getOfflineDb();
     const tx = db.transaction('cached_transactions', 'readwrite');
 
-    const confirmedNotes = new Set(
-      transactions
-        .filter((item) => item && item.id && !item.id.startsWith('temp_'))
-        .map((item) => `${(item.notes || '').trim().toLowerCase()}_${item.direction}`)
-    );
+    const confirmedItems = transactions.filter((item) => item && item.id && !item.id.startsWith('temp_'));
 
     const existing = await tx.store.index('by-worker').getAll(String(workerId));
     for (const oldItem of existing) {
-      if (oldItem.id && oldItem.id.startsWith('temp_')) {
-        const sig = `${(oldItem.notes || '').trim().toLowerCase()}_${oldItem.direction}`;
-        if (confirmedNotes.has(sig)) {
-          await tx.store.delete(oldItem.id);
-        }
+      if (oldItem.id && oldItem.id.startsWith('temp_') && isGhostTempItem(oldItem, confirmedItems)) {
+        await tx.store.delete(oldItem.id);
       }
     }
 
     for (const item of transactions) {
       if (item && item.id) {
-        if (item.id.startsWith('temp_')) {
-          const sig = `${(item.notes || '').trim().toLowerCase()}_${item.direction}`;
-          if (confirmedNotes.has(sig)) continue;
-        }
+        if (item.id.startsWith('temp_') && isGhostTempItem(item, confirmedItems)) continue;
         await tx.store.put({ ...item, worker_id: String(workerId) });
       }
     }
@@ -99,16 +107,11 @@ export async function getCachedTransactions(workerId: string): Promise<any[]> {
     const db = await getOfflineDb();
     const all = await db.getAllFromIndex('cached_transactions', 'by-worker', String(workerId));
 
-    const confirmedNotes = new Set(
-      all
-        .filter((item) => item && item.id && !item.id.startsWith('temp_'))
-        .map((item) => `${(item.notes || '').trim().toLowerCase()}_${item.direction}`)
-    );
+    const confirmedItems = all.filter((item) => item && item.id && !item.id.startsWith('temp_'));
 
     const filtered = all.filter((item) => {
-      if (item.id && item.id.startsWith('temp_')) {
-        const sig = `${(item.notes || '').trim().toLowerCase()}_${item.direction}`;
-        if (confirmedNotes.has(sig)) return false;
+      if (item.id && item.id.startsWith('temp_') && isGhostTempItem(item, confirmedItems)) {
+        return false;
       }
       return true;
     });

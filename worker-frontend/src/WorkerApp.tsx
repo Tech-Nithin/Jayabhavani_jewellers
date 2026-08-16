@@ -262,11 +262,10 @@ export default function WorkerApp() {
     const handleLocalMsg = (e: any) => {
       if (e.detail && worker?.id && String(e.detail.worker_id) === String(worker.id)) {
         setTransactions((prev) => {
-          if (prev.some((t) => t.id === e.detail.id)) return prev;
           if (e.detail.direction === 'OUTGOING') {
             playJbjNotificationSound();
           }
-          const updated = [...prev, e.detail];
+          const updated = mergeTransactions(prev, [e.detail], worker.id);
           saveCachedTransactions(worker.id, updated);
           return updated;
         });
@@ -282,11 +281,10 @@ export default function WorkerApp() {
           const tx = msg.data.transaction;
           if (worker?.id && String(tx.worker_id) === String(worker.id)) {
             setTransactions((prev) => {
-              if (prev.some((t) => t.id === tx.id)) return prev;
               if (tx.direction === 'OUTGOING') {
                 playJbjNotificationSound();
               }
-              const updated = [...prev, tx];
+              const updated = mergeTransactions(prev, [tx], worker.id);
               saveCachedTransactions(worker.id, updated);
               return updated;
             });

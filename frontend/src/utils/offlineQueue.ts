@@ -58,26 +58,37 @@ export function getOfflineDb() {
   return dbPromise;
 }
 
+function isGhostTempItem(tempItem: any, confirmedItems: any[]): boolean {
+  if (!tempItem || !tempItem.id || !tempItem.id.startsWith('temp_')) return false;
+  const tempTime = new Date(tempItem.created_at).getTime();
+  const tempNotes = (tempItem.notes || '').trim().toLowerCase();
+
+  return confirmedItems.some((conf) => {
+    if (!conf || !conf.id || conf.id.startsWith('temp_')) return false;
+    if (conf.direction !== tempItem.direction) return false;
+
+    const confNotes = (conf.notes || '').trim().toLowerCase();
+    if (confNotes !== tempNotes) return false;
+
+    const confTime = new Date(conf.created_at).getTime();
+    const diffMs = Math.abs(tempTime - confTime);
+    return isNaN(diffMs) || diffMs <= 120000; // Within 2-minute window
+  });
+}
+
 export function mergeTransactions(
   existing: any[],
   incoming: any[],
   activeWorkerId?: string
 ): any[] {
   const map = new Map<string, any>();
-
-  const confirmedNotesSet = new Set<string>();
-  for (const item of [...existing, ...incoming]) {
-    if (item && item.id && !item.id.startsWith('temp_')) {
-      const key = `${(item.notes || '').trim().toLowerCase()}_${item.direction}`;
-      confirmedNotesSet.add(key);
-    }
-  }
+  const allItems = [...existing, ...incoming];
+  const confirmedItems = allItems.filter((item) => item && item.id && !item.id.startsWith('temp_'));
 
   for (const item of existing) {
     if (item && item.id && (!activeWorkerId || String(item.worker_id) === String(activeWorkerId))) {
-      if (item.id.startsWith('temp_')) {
-        const key = `${(item.notes || '').trim().toLowerCase()}_${item.direction}`;
-        if (confirmedNotesSet.has(key)) continue;
+      if (item.id.startsWith('temp_') && isGhostTempItem(item, confirmedItems)) {
+        continue;
       }
       map.set(item.id, item);
     }
@@ -85,9 +96,8 @@ export function mergeTransactions(
 
   for (const item of incoming) {
     if (item && item.id && (!activeWorkerId || String(item.worker_id) === String(activeWorkerId))) {
-      if (item.id.startsWith('temp_')) {
-        const key = `${(item.notes || '').trim().toLowerCase()}_${item.direction}`;
-        if (confirmedNotesSet.has(key)) continue;
+      if (item.id.startsWith('temp_') && isGhostTempItem(item, confirmedItems)) {
+        continue;
       }
       map.set(item.id, item);
     }

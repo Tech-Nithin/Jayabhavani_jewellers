@@ -77,7 +77,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
   const isOutgoing = t.direction === 'OUTGOING';
   const weight = Number(t.weight_grams) || 0;
-  const touch = Number(t.touch_percentage) || (t.category === 'SILVER' ? 80.0 : 91.6);
+  const touch = Number(t.touch_percentage) || 100.0;
   const fineGold = t.fine_weight_grams ? Number(t.fine_weight_grams) : (weight * touch / 100);
 
   return (

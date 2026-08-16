@@ -30,7 +30,7 @@ export const NewTransactionModal: React.FC<Props> = ({
   const [category, setCategory] = useState<TransactionCategory>('GOLD');
   const [itemName, setItemName] = useState('');
   const [weightGrams, setWeightGrams] = useState('');
-  const [touchPercentage, setTouchPercentage] = useState('91.6');
+  const [touchPercentage, setTouchPercentage] = useState('100');
   const [amountCash, setAmountCash] = useState('');
   const [cashMetalLink, setCashMetalLink] = useState<'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH'>('FOR_GOLD');
   const [appliedRatePerGram, setAppliedRatePerGram] = useState('');
@@ -83,7 +83,7 @@ export const NewTransactionModal: React.FC<Props> = ({
       // Reset and close
       setItemName('');
       setWeightGrams('');
-      setTouchPercentage('91.6');
+      setTouchPercentage('100');
       setAmountCash('');
       setCashMetalLink('FOR_GOLD');
       setAppliedRatePerGram('');
@@ -99,29 +99,72 @@ export const NewTransactionModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="wa-modal-backdrop" onClick={onClose}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(4px)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
       <div
-        className="wa-dialog-card"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: '460px', width: '92%' }}
+        style={{
+          background: '#ffffff',
+          borderRadius: '16px',
+          width: '100%',
+          maxWidth: '440px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          overflow: 'hidden',
+          animation: 'fadeIn 0.2s ease-out',
+        }}
       >
-        <div className="wa-dialog-header" style={{ marginBottom: '12px' }}>
-          <div>
-            <h3 className="wa-dialog-title" style={{ fontSize: '1.05rem', margin: 0 }}>
-              <i className="fa-solid fa-calculator" style={{ color: '#d97706', marginRight: '6px' }} />
-              Add Gold / Silver / Cash Spec
-            </h3>
-            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-              Submit metal specs, weight, touch & notes to Admin
-            </span>
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            color: '#ffffff',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.2rem' }}>⚡</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>New Transaction Entry</h3>
+              <p style={{ margin: 0, fontSize: '0.68rem', color: '#94a3b8' }}>Record work assignment item or cash</p>
+            </div>
           </div>
-          <button type="button" className="wa-reply-close-btn" onClick={onClose}>
-            <i className="fa-solid fa-xmark" />
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              color: '#ffffff',
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {/* Category Selector Tabs */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px' }}>
           <div>
             <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
               Select Category
@@ -133,8 +176,7 @@ export const NewTransactionModal: React.FC<Props> = ({
                   type="button"
                   onClick={() => {
                     setCategory(cat);
-                    if (cat === 'SILVER') setTouchPercentage('80.0');
-                    if (cat === 'GOLD') setTouchPercentage('91.6');
+                    if (cat === 'SILVER' || cat === 'GOLD' || cat === 'ORNAMENT') setTouchPercentage('100');
                   }}
                   style={{
                     padding: '6px 4px',
@@ -153,7 +195,6 @@ export const NewTransactionModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Item Name Input */}
           <div>
             <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '3px' }}>
               Item Name / Description
@@ -168,7 +209,6 @@ export const NewTransactionModal: React.FC<Props> = ({
             />
           </div>
 
-          {/* Weight & Touch for Gold / Silver / Ornament */}
           {category !== 'CASH' ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
               <div>
@@ -194,7 +234,7 @@ export const NewTransactionModal: React.FC<Props> = ({
                 <input
                   type="number"
                   step="0.1"
-                  placeholder="91.6"
+                  placeholder="100"
                   value={touchPercentage}
                   onChange={(e) => setTouchPercentage(e.target.value)}
                   className="wa-dialog-textarea"

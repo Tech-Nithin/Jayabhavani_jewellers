@@ -4,6 +4,7 @@ import path from 'path';
 import multer from 'multer';
 import { supabase } from '../../config/supabase';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
+import { triggerFcmPushNotification } from '../../routes/workerAuthRoutes';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -914,12 +915,22 @@ router.get('/worker-transactions/stream', (req: Request, res: Response) => {
 
   res.write(': ping\n\n');
 
+  // Keep connection alive across proxies/Cloudflare by sending periodic heartbeat every 25s
+  const heartbeatTimer = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      clearInterval(heartbeatTimer);
+    }
+  }, 25000);
+
   if (!sseClientsMap.has(cleanWorkerId)) {
     sseClientsMap.set(cleanWorkerId, new Set());
   }
   sseClientsMap.get(cleanWorkerId)!.add(res);
 
   req.on('close', () => {
+    clearInterval(heartbeatTimer);
     const clients = sseClientsMap.get(cleanWorkerId);
     if (clients) {
       clients.delete(res);
@@ -1107,7 +1118,7 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
     }
 
     const wt = Number(weight_grams) || 0;
-    const touch = Number(touch_percentage) || 91.6;
+    const touch = Number(touch_percentage) || 100.0;
     const fine = wt > 0 ? Number(((wt * touch) / 100).toFixed(3)) : 0;
 
     const cashAmt = Number(amount_cash) || 0;
@@ -1229,7 +1240,6 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
 
     // Trigger FCM Event-Driven Push Webhook on transaction submission
     try {
-      const { triggerFcmPushNotification } = require('../../routes/workerAuthRoutes');
       const recipientId = newTxn.direction === 'OUTGOING' ? newTxn.worker_id : 'ADMIN';
 
       let workerName = newTxn.worker_id;
@@ -1272,7 +1282,6 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
     res.status(500).json({
       success: false,
       message: `Backend Execution Error: ${err.message || 'Failed to record transaction'}`,
-      error_details: err.stack,
     });
   }
 });
@@ -1288,22 +1297,35 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Notes field is required for editing' });
     }
 
-    // 1. Enforce 30-minute edit window restriction
-    let targetTx: any = mockTransactions.find((t: any) => t.id === id);
+    // 1. Fetch transaction directly from Supabase
+    const { data: targetTx, error: fetchErr } = await supabase
+      .from('worker_transactions')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    // 2. Update in-memory mock
-    const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
     let currentHistory: string[] = [];
-    if (mockIdx !== -1) {
-      currentHistory = Array.isArray(mockTransactions[mockIdx].edited_at_history) ? mockTransactions[mockIdx].edited_at_history : [];
+    let targetWorkerId = targetTx?.worker_id;
+
+    if (targetTx) {
+      // Enforce 30-minute edit restriction window
+      const createdAt = new Date(targetTx.created_at).getTime();
+      const now = new Date().getTime();
+      const diffMinutes = (now - createdAt) / (1000 * 60);
+      if (diffMinutes > 30) {
+        return res.status(400).json({
+          success: false,
+          message: '⚠️ Edit window expired! Messages can only be edited within 30 minutes of creation.',
+        });
+      }
+
+      currentHistory = Array.isArray(targetTx.edited_at_history) ? targetTx.edited_at_history : [];
       currentHistory.push(editTimestamp);
-      mockTransactions[mockIdx].notes = notes;
-      mockTransactions[mockIdx].edited_at_history = currentHistory;
     } else {
       currentHistory = [editTimestamp];
     }
 
-    // 3. Update in Supabase
+    // 2. Update in Supabase
     try {
       await supabase
         .from('worker_transactions')
@@ -1313,9 +1335,15 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
       console.warn('Supabase update worker_transactions warning:', dbErr);
     }
 
-    // 4. Broadcast SSE live stream event for instant edit (< 10ms)
-    const localForEdit = mockTransactions;
-    const targetWorkerId = mockIdx !== -1 ? mockTransactions[mockIdx]?.worker_id : (localForEdit.find((t: any) => t.id === id)?.worker_id);
+    // Also update in-memory mock if present
+    const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
+    if (mockIdx !== -1) {
+      mockTransactions[mockIdx].notes = notes;
+      mockTransactions[mockIdx].edited_at_history = currentHistory;
+      if (!targetWorkerId) targetWorkerId = mockTransactions[mockIdx].worker_id;
+    }
+
+    // 3. Broadcast SSE live stream event for instant edit (< 10ms)
     if (targetWorkerId) {
       broadcastToWorker(String(targetWorkerId), 'MESSAGE_EDITED', {
         id,
