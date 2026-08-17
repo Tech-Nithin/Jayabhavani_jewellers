@@ -182,8 +182,9 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMatchIdx, setActiveMatchIdx] = useState(0);
 
-  // Accordion Toggle State for Bottom Form
+  // Accordion Toggle State & Sidebar Collapse State
   const [isAccordionExpanded, setIsAccordionExpanded] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => window.innerWidth <= 1024);
 
   // Worker Info Modal & 3-Dots Menu State
   const [showWorkerModal, setShowWorkerModal] = useState(false);
@@ -999,6 +1000,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         lastMessageTimes={lastMessageTimes}
         onSelectWorker={handleWorkerChange}
         filteredSidebarWorkers={filteredSidebarWorkers}
+        isSidebarCollapsed={isSidebarCollapsed}
+        setIsSidebarCollapsed={setIsSidebarCollapsed}
       />
 
 

@@ -54,13 +54,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const t = getWorkAssignmentTranslation(lang);
 
   return (
-    <div style={{ background: '#ffffff', padding: '0.6rem 1rem', borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
+    <div style={{ background: '#ffffff', padding: '0.35rem 0.65rem', borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10, flexWrap: 'wrap', gap: '0.4rem' }}>
 
       {/* Left Side: Back button + Clickable Worker Profile Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flexShrink: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flexShrink: 1 }}>
         <button
           onClick={onBack}
-          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', fontWeight: 700, color: '#475569', flexShrink: 0 }}
+          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#475569', flexShrink: 0 }}
           title="Back to Workers"
         >
           <i className="fa-solid fa-arrow-left"></i>
@@ -76,26 +76,26 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             }
           }}
           title="Click to view worker profile picture & information"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', overflow: 'hidden' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', overflow: 'hidden' }}
         >
           {worker.photo_url ? (
             <img
               src={worker.photo_url}
               alt={worker.name}
-              style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d97706', boxShadow: '0 2px 6px rgba(180, 83, 9, 0.3)', flexShrink: 0 }}
+              style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #d97706', boxShadow: '0 1px 4px rgba(180, 83, 9, 0.25)', flexShrink: 0 }}
             />
           ) : (
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.95rem', boxShadow: '0 2px 6px rgba(180, 83, 9, 0.3)', flexShrink: 0 }}>
+            <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(180, 83, 9, 0.25)', flexShrink: 0 }}>
               {worker.name.charAt(0)}
             </div>
           )}
 
           <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-            <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <h3 style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{worker.name}</span>
-              <i className="fa-solid fa-circle-info" style={{ fontSize: '0.72rem', color: '#0284c7', flexShrink: 0 }}></i>
+              <i className="fa-solid fa-circle-info" style={{ fontSize: '0.65rem', color: '#0284c7', flexShrink: 0 }}></i>
             </h3>
-            <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <p style={{ margin: 0, fontSize: '0.62rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {worker.specialization}&nbsp;·&nbsp;
               <strong style={{ color: '#d97706' }}>{worker.assigned_orders_count || 0} Orders</strong>
             </p>
@@ -104,23 +104,23 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       </div>
 
       {/* Center & Right: Fine Metal Balances & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
 
         {/* Strict 100% Fine Metal Balance summary pills */}
-        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', whiteSpace: 'nowrap' }}>
           {/* Pure Gold Pill */}
           <div
             title={netFineGoldBalance > 0.0001 ? t.workerNeedsToSendUs : netFineGoldBalance < -0.0001 ? t.needsToSendWorker : t.fullySettled}
-            style={{ background: '#fef3c7', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: '6px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '65px' }}
+            style={{ background: '#fef3c7', border: '1px solid #fde68a', padding: '1px 5px', borderRadius: '5px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '55px' }}
           >
-            <span style={{ fontSize: '0.55rem', color: '#b45309', fontWeight: 800, display: 'block' }}>{t.pureGoldLabel}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+            <span style={{ fontSize: '0.52rem', color: '#b45309', fontWeight: 800, display: 'block' }}>{t.pureGoldLabel}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '1px' }}>
               {netFineGoldBalance > 0.0001 ? (
-                <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 900 }} />
+                <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.55rem', color: '#16a34a', fontWeight: 900 }} />
               ) : netFineGoldBalance < -0.0001 ? (
-                <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.62rem', color: '#dc2626', fontWeight: 900 }} />
+                <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.55rem', color: '#dc2626', fontWeight: 900 }} />
               ) : null}
-              <strong style={{ fontSize: '0.66rem', color: netFineGoldBalance < -0.0001 ? '#dc2626' : '#92400e', fontWeight: 800 }}>
+              <strong style={{ fontSize: '0.62rem', color: netFineGoldBalance < -0.0001 ? '#dc2626' : '#92400e', fontWeight: 800 }}>
                 {Math.abs(netFineGoldBalance).toFixed(3)} g
               </strong>
             </div>
@@ -129,16 +129,16 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           {/* Pure Silver Pill */}
           <div
             title={netFineSilverBalance > 0.0001 ? 'Worker needs to send to us' : netFineSilverBalance < -0.0001 ? 'Needs to send to worker' : 'Fully Settled'}
-            style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '2px 6px', borderRadius: '6px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '65px' }}
+            style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '1px 5px', borderRadius: '5px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '55px' }}
           >
-            <span style={{ fontSize: '0.55rem', color: '#475569', fontWeight: 800, display: 'block' }}>Pure Silver</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+            <span style={{ fontSize: '0.52rem', color: '#475569', fontWeight: 800, display: 'block' }}>Pure Silver</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '1px' }}>
               {netFineSilverBalance > 0.0001 ? (
-                <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 900 }} />
+                <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.55rem', color: '#16a34a', fontWeight: 900 }} />
               ) : netFineSilverBalance < -0.0001 ? (
-                <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.62rem', color: '#dc2626', fontWeight: 900 }} />
+                <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.55rem', color: '#dc2626', fontWeight: 900 }} />
               ) : null}
-              <strong style={{ fontSize: '0.66rem', color: netFineSilverBalance < -0.0001 ? '#dc2626' : '#334155', fontWeight: 800 }}>
+              <strong style={{ fontSize: '0.62rem', color: netFineSilverBalance < -0.0001 ? '#dc2626' : '#334155', fontWeight: 800 }}>
                 {Math.abs(netFineSilverBalance).toFixed(3)} g
               </strong>
             </div>
@@ -147,16 +147,16 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           {/* Net Cash Pill */}
           <div
             title={netCashBalance > 0.01 ? 'Worker needs to send to us' : netCashBalance < -0.01 ? 'Needs to send to worker' : 'Fully Settled'}
-            style={{ background: '#e0f2fe', border: '1px solid #bae6fd', padding: '2px 6px', borderRadius: '6px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '65px' }}
+            style={{ background: '#e0f2fe', border: '1px solid #bae6fd', padding: '1px 5px', borderRadius: '5px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: '55px' }}
           >
-            <span style={{ fontSize: '0.55rem', color: '#0369a1', fontWeight: 800, display: 'block' }}>Net Cash</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+            <span style={{ fontSize: '0.52rem', color: '#0369a1', fontWeight: 800, display: 'block' }}>Net Cash</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '1px' }}>
               {netCashBalance > 0.01 ? (
-                <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 900 }} />
+                <i className="fa-solid fa-arrow-down" style={{ fontSize: '0.55rem', color: '#16a34a', fontWeight: 900 }} />
               ) : netCashBalance < -0.01 ? (
-                <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.62rem', color: '#dc2626', fontWeight: 900 }} />
+                <i className="fa-solid fa-arrow-up" style={{ fontSize: '0.55rem', color: '#dc2626', fontWeight: 900 }} />
               ) : null}
-              <strong style={{ fontSize: '0.66rem', color: netCashBalance < -0.01 ? '#dc2626' : '#075985', fontWeight: 800 }}>
+              <strong style={{ fontSize: '0.62rem', color: netCashBalance < -0.01 ? '#dc2626' : '#075985', fontWeight: 800 }}>
                 ₹{Math.abs(Math.round(netCashBalance)).toLocaleString('en-IN')}
               </strong>
             </div>
