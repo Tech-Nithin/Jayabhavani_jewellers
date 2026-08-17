@@ -7,7 +7,7 @@ const getApiBase = (): string => {
   }
   // Native Capacitor APK fallback
   if ((window as any).Capacitor?.isNativePlatform()) {
-    return 'https://jayabhavani-jewellers-aa1p.vercel.app/api';
+    return 'https://jbj-backend.vercel.app/api';
   }
   const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') {

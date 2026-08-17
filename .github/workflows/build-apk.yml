@@ -35,6 +35,9 @@ jobs:
           npm ci || npm install
 
       - name: Build Worker Web App Assets
+        env:
+          VITE_API_BASE_URL: https://jbj-backend.vercel.app/api
+          VITE_API_URL: https://jbj-backend.vercel.app/api
         run: |
           cd worker-frontend
           npm run build
@@ -86,6 +89,9 @@ jobs:
           npm ci || npm install
 
       - name: Build Admin Web App Assets
+        env:
+          VITE_API_BASE_URL: https://jbj-backend.vercel.app/api
+          VITE_API_URL: https://jbj-backend.vercel.app/api
         run: |
           cd frontend
           npm run build

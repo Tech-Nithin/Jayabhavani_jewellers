@@ -5,7 +5,7 @@ import multer from 'multer';
 import { supabase } from '../../config/supabase';
 import { saveFcmToken } from '../../utils/fcmTokenStore';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
-import { triggerFcmPushNotification } from '../../routes/workerAuthRoutes';
+import { triggerFcmPushNotification } from '../../utils/pushService';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -431,9 +431,8 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
           let { data: insertedDb } = await supabase.from('worker_transactions').insert([newTxn]).select().single();
           createdTxn = insertedDb || newTxn;
 
-          // Trigger FCM Push Notification
+          // Trigger FCM Push Notification (firebase-admin SDK)
           try {
-            const { triggerFcmPushNotification } = require('../../routes/workerAuthRoutes');
             triggerFcmPushNotification(workerIdVal, 'Jaya Bhavani Admin', formattedMessage, {
               transaction_id: createdTxn.id,
               direction: 'OUTGOING',

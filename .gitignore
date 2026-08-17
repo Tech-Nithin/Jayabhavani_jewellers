@@ -42,4 +42,5 @@ backend/data/
 !frontend/src/data/
 .vite/
 *.vite/
+/messagingapp
 

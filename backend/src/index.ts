@@ -26,6 +26,10 @@ const envOrigins = process.env.ALLOWED_ORIGINS
 const defaultOrigins = [
   'https://jbjadmin.vercel.app',
   'http://jbjadmin.vercel.app',
+  'https://jbjworkers.vercel.app',
+  'http://jbjworkers.vercel.app',
+  'https://jayabhavanijewellers.vercel.app',
+  'https://jbj-backend.vercel.app',
   'https://jayabhavani-jewellers.vercel.app',
   'https://jayabhavani-jewellers-aa1p.vercel.app',
   'http://localhost:5173',

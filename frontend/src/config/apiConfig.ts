@@ -5,9 +5,9 @@ export const getApiBase = (): string => {
     return cleaned.endsWith('/api') ? cleaned : `${cleaned}/api`;
   }
   if ((window as any).Capacitor?.isNativePlatform()) {
-    return 'https://jayabhavani-jewellers-aa1p.vercel.app/api';
+    return 'https://jbj-backend.vercel.app/api';
   }
-  return window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : 'https://jayabhavani-jewellers-aa1p.vercel.app/api';
+  return window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : 'https://jbj-backend.vercel.app/api';
 };
 
 export const API_BASE = getApiBase();
