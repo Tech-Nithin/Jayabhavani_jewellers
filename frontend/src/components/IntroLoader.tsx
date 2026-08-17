@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react';
 
+const INTRO_SEEN_KEY = 'jbj_intro_seen';
+
 export default function IntroLoader() {
-  const [loading, setLoading] = useState(true);
+  // If intro already played in this browser session, skip it entirely
+  const alreadySeen = sessionStorage.getItem(INTRO_SEEN_KEY) === '1';
+  const [loading, setLoading] = useState(!alreadySeen);
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
+    // If intro was already seen this session, nothing to do
+    if (alreadySeen) return;
+
+    // Mark as seen immediately so any refresh skips the intro
+    sessionStorage.setItem(INTRO_SEEN_KEY, '1');
+
     // Hold splash screen then start fade-out transition after 3.8s
     const fadeTimer = setTimeout(() => {
       setFadeOut(true);

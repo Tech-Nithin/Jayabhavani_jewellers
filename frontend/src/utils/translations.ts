@@ -69,6 +69,7 @@ export const translations = {
     returnPurityLabel: 'Return Purity (%)',
     returnPureGoldLabel: 'Return Pure Gold Weight',
     returnPureSilverLabel: 'Return Pure Silver Weight',
+    pureMetalWeightLabel: 'Pure Metal Weight',
 
     // POS Bottom Calculation Bar
     calculatedSubtotal: 'Calculated Subtotal:',
@@ -234,7 +235,6 @@ export const translations = {
     silverValueReceipt: 'Silver Value',
     makingChargesReceipt: 'Making Charges:',
     itemSubtotalReceipt: 'Item Subtotal:',
-
     // Summary Breakdown
     goldRatesLabel: 'JBJ GOLD SELL/BUY:',
     silverRatesLabel: 'JBJ SILVER SELL/BUY:',
@@ -359,7 +359,7 @@ export const translations = {
     returnPurityLabel: 'రిటర్న్ ప్యూరిటీ (%)',
     returnPureGoldLabel: 'రిటర్న్ సోక్కం బంగారం బరువు',
     returnPureSilverLabel: 'రిటర్న్ సోక్కం వెండి బరువు',
-
+    pureMetalWeightLabel: 'సోక్కం లోహం బరువు',
     // POS Bottom Calculation Bar
     calculatedSubtotal: 'లెక్కింపు ఉపమొత్తం:',
     grossSellingTotal: 'మొత్తం అమ్మకం వెల:',

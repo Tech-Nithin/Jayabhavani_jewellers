@@ -1,6 +1,54 @@
 import React from 'react';
-import type { ModeFormProps } from './modeUtils';
-import { toStartCase, formatMax3Decimals, CreatablePresetSelect } from './modeUtils';
+import type { GlobalRates, BillItem } from '../../types';
+import type { ModeFormProps, ItemCalcDetail, BillCalcResult } from './modeUtils';
+import { toStartCase, formatMax3Decimals, round3Decimals, CreatablePresetSelect } from './modeUtils';
+
+// ─── BUY MODE CALCULATION ─────────────────────────────────────────────────────
+// Formula:
+//   netWeight    = grossWeight - deductionWeight          [3 decimals]
+//   pureWeight   = netWeight × (purity% / 100)           [3 decimals]  ← final metal weight
+//   metalVal     = pureWeight × rate                     [2 decimals]
+//   makingVal    = 0  (JBJ buys, no making charges)
+//   lineTotal    = metalVal                              [2 decimals]
+
+export const calculateBuyItems = (items: BillItem[], rates: GlobalRates): BillCalcResult => {
+  const itemDetails: Record<string, ItemCalcDetail> = {};
+  let totalBuyCredit = 0;
+
+  items
+    .filter((it) => (it.item_type || 'BUY').toUpperCase() === 'BUY')
+    .forEach((it) => {
+      const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
+      const customRate = Number(it.custom_rate_per_gram || (it as any).customRate || (it as any).appliedRate) || 0;
+      const rate = customRate > 0 ? customRate : (isGold ? rates.gold_buy_value : rates.silver_buy_value) || 0;
+
+      const grossWeight = Number(it.weight_grams) || 0;
+      const deductionWeight = Number(it.deduction_weight_grams) || 0;
+      const netWeight = Math.max(0, round3Decimals(grossWeight - deductionWeight));
+
+      const purityPercent = Number(it.purity_percentage) || 0;
+      // Final metal weight for BUY = pure metal weight = netWeight × (purity% / 100)
+      const pureWeight = round3Decimals(netWeight * (purityPercent / 100));
+
+      const metalVal = Number((pureWeight * rate).toFixed(2));
+      const lineTotal = Number(metalVal.toFixed(2));
+
+      itemDetails[it.id] = {
+        metalVal, makingVal: 0, additionalVal: 0, wastageVal: 0, gstVal: 0, lineTotal,
+        grossWeight, deductionWeight, netWeight, pureWeight, wastageWeight: 0, totalChargedWeight: pureWeight,
+        wastagePercent: 0, purityPercent, rate,
+      };
+
+      totalBuyCredit = Number((totalBuyCredit + lineTotal).toFixed(2));
+    });
+
+  return {
+    itemDetails,
+    totalSellValue: 0,
+    totalBuyCredit: Number(totalBuyCredit.toFixed(2)),
+    netPayable: Number(totalBuyCredit.toFixed(2)),
+  };
+};
 
 export const BuyModeForm: React.FC<ModeFormProps> = ({
   items,
@@ -25,6 +73,7 @@ export const BuyModeForm: React.FC<ModeFormProps> = ({
         const pureW = (netW * purityPct) / 100;
 
         const netWeightLabel = it.metal_type === 'SILVER' ? t.onlySilverWeightLabel : t.onlyGoldWeightLabel;
+        const pureMetalWeightLabel = it.metal_type === 'SILVER' ? t.pureSilverWeightLabel : t.pureGoldWeightLabel;
 
         return (
           <div
@@ -41,7 +90,7 @@ export const BuyModeForm: React.FC<ModeFormProps> = ({
             {/* Item Card Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', paddingBottom: '0.4rem', borderBottom: '1px solid #f1f5f9' }}>
               <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: '4px' }}>
-                Item {idx + 1} - Buying Old Gold / Silver
+                Item {idx + 1} - JBJ Buying
               </span>
               {items.length > 1 && handleRemoveItem && (
                 <button
@@ -256,7 +305,7 @@ export const BuyModeForm: React.FC<ModeFormProps> = ({
 
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', display: 'block', marginBottom: '3px' }}>
-                  {t.pureMetalWeightLabel}
+                  {pureMetalWeightLabel}
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input

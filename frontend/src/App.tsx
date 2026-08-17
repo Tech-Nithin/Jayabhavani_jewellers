@@ -10,6 +10,7 @@ const STORAGE_KEY_TAB = 'jbj_active_tab';
 
 export default function App() {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [checking, setChecking] = useState(true);
 
   // Check saved admin session token on mount
   useEffect(() => {
@@ -27,6 +28,8 @@ export default function App() {
           setUser(null);
         }
       }
+      // Done verifying — now safe to show login or dashboard
+      setChecking(false);
     }
 
     checkSession();
@@ -52,14 +55,17 @@ export default function App() {
   return (
     <>
       <IntroLoader />
-      {user ? (
-        <AdminDashboard
-          user={user}
-          onLogout={handleLogout}
-          onBackToStore={handleLogout}
-        />
-      ) : (
-        <AdminLoginPage onSuccess={handleLoginSuccess} />
+      {/* Render nothing while session token is being verified to prevent login screen flash */}
+      {!checking && (
+        user ? (
+          <AdminDashboard
+            user={user}
+            onLogout={handleLogout}
+            onBackToStore={handleLogout}
+          />
+        ) : (
+          <AdminLoginPage onSuccess={handleLoginSuccess} />
+        )
       )}
     </>
   );

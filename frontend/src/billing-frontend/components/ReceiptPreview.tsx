@@ -4,6 +4,7 @@ import type { BillItem, GlobalRates } from '../types';
 
 import { translations } from '../../utils/translations';
 import type { Language } from '../../utils/translations';
+import { round3Decimals } from './modes/modeUtils';
 
 interface ReceiptPreviewProps {
   receiptId: string;
@@ -15,6 +16,8 @@ interface ReceiptPreviewProps {
   teluguCustomerAddress?: string;
   rates: GlobalRates | null;
   items: BillItem[];
+  /** Pre-computed item details from the mode calculate function (single source of truth) */
+  itemDetails?: Record<string, any>;
   totalSellValue: number;
   totalBuyCredit: number;
   netPayable: number;
@@ -221,8 +224,7 @@ const formatMax3Decimals = (val: number | string | undefined | null): string => 
   if (val === undefined || val === null || val === '') return '0';
   const num = Number(val);
   if (isNaN(num)) return '0';
-  const rounded = Math.round((num + Number.EPSILON) * 1000) / 1000;
-  return String(rounded);
+  return String(round3Decimals(num));
 };
 
 export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
@@ -235,6 +237,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   teluguCustomerAddress,
   rates,
   items,
+  itemDetails: passedItemDetails,
   totalSellValue,
   totalBuyCredit,
   createdDate,
@@ -252,50 +255,60 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   const getItemDetails = (item: any) => {
     const isGold = (item.metal_type || '').toUpperCase() === 'GOLD';
     const isSell = (item.item_type || '').toUpperCase() === 'SELL';
+    const isOrderMode = mode === 'ORDER';
     const customRate = Number(item.custom_rate_per_gram || item.customRate || item.appliedRate);
     const defaultRate = isGold
       ? (isSell ? rates?.gold_sell_value || 0 : rates?.gold_buy_value || 0)
       : (isSell ? rates?.silver_sell_value || 0 : rates?.silver_buy_value || 0);
     const rate = customRate > 0 ? customRate : defaultRate;
 
-    const grossWeight = Number((Number(item.weight_grams) || 0).toFixed(2));
-    const deductionWeight = Number((Number(item.deduction_weight_grams) || 0).toFixed(2));
-    const netWeight = Math.max(0, Number((grossWeight - deductionWeight).toFixed(2)));
+    const grossWeight = round3Decimals(Number(item.weight_grams) || 0);
+    const deductionWeight = round3Decimals(Number(item.deduction_weight_grams) || 0);
+    const netWeight = Math.max(0, round3Decimals(grossWeight - deductionWeight));
 
-    const purityPercent = isSell ? 100 : (Number(item.purity_percentage) || 100);
-    const pureWeight = Number((netWeight * (purityPercent / 100)).toFixed(2));
-
+    const purityPercent = Number(item.purity_percentage) || 0;
     const wastagePercent = Number(item.wastage_percent) || 0;
-    const wastageWeight = isSell ? Number(((wastagePercent / 100) * netWeight).toFixed(3)) : 0;
-    const totalChargedWeight = isSell ? Number((netWeight + wastageWeight).toFixed(3)) : pureWeight;
+    const wastageWeight = isSell ? round3Decimals((wastagePercent / 100) * netWeight) : 0;
+    const totalChargedWeight = round3Decimals(netWeight + wastageWeight);
 
-    const makingCharges = Number(item.making_charges_per_gram) || 0;
-    const additionalCharges = Number(item.additional_charges_amount) || 0;
+    // Determine pureWeight and metalVal — mirrors the mode calculate functions exactly
+    let pureWeight = netWeight;
+    let metalVal = 0;
 
-    const wastageVal = isSell ? Number(((wastagePercent / 100) * netWeight * rate).toFixed(2)) : 0;
-    const metalVal = isSell
-      ? Number((totalChargedWeight * rate).toFixed(2))
-      : Number((pureWeight * rate).toFixed(2));
+    if (isSell) {
+      if (purityPercent > 0) {
+        // Purity entered: rate on pureWeight = netWeight × purity%
+        pureWeight = round3Decimals(netWeight * (purityPercent / 100));
+        metalVal = Number((pureWeight * rate).toFixed(2));
+      } else {
+        // No purity: rate on totalChargedWeight (after HMW)
+        pureWeight = netWeight;
+        metalVal = Number((totalChargedWeight * rate).toFixed(2));
+      }
+    } else {
+      if (isOrderMode) {
+        // ORDER BUY: pureWeight if purity entered, else netWeight
+        pureWeight = purityPercent > 0
+          ? round3Decimals(netWeight * (purityPercent / 100))
+          : netWeight;
+      } else {
+        // BUY / EXCHANGE BUY: pure metal weight
+        pureWeight = round3Decimals(netWeight * (purityPercent / 100));
+      }
+      metalVal = Number((pureWeight * rate).toFixed(2));
+    }
 
-    const makingVal = isSell ? Number(makingCharges.toFixed(2)) : 0;
-    const additionalVal = isSell ? Number(additionalCharges.toFixed(2)) : 0;
-
-    const computedLineTotal = Number((metalVal + makingVal + additionalVal).toFixed(2));
+    // Making charges = flat amount directly (no per-gram multiplication)
+    const makingVal = isSell ? Number((Number(item.making_charges_per_gram) || 0).toFixed(2)) : 0;
+    const additionalVal = isSell ? Number((Number(item.additional_charges_amount) || 0).toFixed(2)) : 0;
+    const lineTotal = Number((metalVal + makingVal + additionalVal).toFixed(2));
 
     return {
-      grossWeight,
-      deductionWeight,
-      netWeight,
-      purityPercent,
-      pureWeight,
-      wastagePercent,
-      wastageWeight,
-      totalChargedWeight,
-      metalVal,
-      wastageVal,
-      makingVal,
-      additionalVal,
-      lineTotal: computedLineTotal,
+      grossWeight, deductionWeight, netWeight,
+      purityPercent, pureWeight,
+      wastagePercent, wastageWeight, totalChargedWeight,
+      metalVal, wastageVal: 0, makingVal, additionalVal, lineTotal,
+      rate,
     };
   };
 
@@ -425,11 +438,12 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         {/* Itemized Line Items Breakdown */}
         <div style={{ marginBottom: '1rem' }}>
           {items.map((it, idx) => {
-            const details = getItemDetails(it);
+            // Use pre-computed values from the mode calculate function when available (live billing).
+            // Fall back to local getItemDetails() for stored invoice views (SeeBillModal, InvoiceDetailsView).
+            const details = (passedItemDetails && passedItemDetails[it.id]) || getItemDetails(it);
             const isSell = it.item_type === 'SELL';
-            const customRate = Number(it.custom_rate_per_gram || it.customRate || it.appliedRate);
             const isGold = (it.metal_type || '').toUpperCase() === 'GOLD';
-            const rate = customRate > 0 ? customRate : (isGold ? (isSell ? rates?.gold_sell_value : rates?.gold_buy_value) : (isSell ? rates?.silver_sell_value : rates?.silver_buy_value)) || 0;
+            const rate = details.rate || 0;
 
             return (
               <div key={it.id || idx} style={{ background: 'rgba(248, 250, 252, 0.65)', borderRadius: '8px', padding: '0.65rem 0.75rem', marginBottom: '0.6rem', border: '1px solid #94a3b8', fontSize: '0.68rem', color: '#0f172a' }}>
@@ -446,13 +460,15 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <strong>{isGold ? t.goldMetal : t.silverMetal}</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                    <span style={{ fontWeight: 700 }}>Quantity & Unit:</span>
-                    <strong>
-                      {it.quantity_value || 1} {it.quantity_unit === 'PAIRS' ? 'Pairs' : it.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}
-                      {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + ' in'})` : ''}
-                    </strong>
-                  </div>
+                  {mode === 'ORDER' && isSell && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
+                      <span style={{ fontWeight: 700 }}>Quantity & Unit:</span>
+                      <strong>
+                        {it.quantity_value || 1} {it.quantity_unit === 'PAIRS' ? 'Pairs' : it.quantity_unit === 'GRAMS' ? 'g' : 'Pcs'}
+                        {it.item_length_inches ? ` (${it.item_length_inches.toString().endsWith('"') ? it.item_length_inches : it.item_length_inches + ' in'})` : ''}
+                      </strong>
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                     <span style={{ fontWeight: 700 }}>{t.grossItemWeightReceipt}</span>
@@ -463,6 +479,14 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
                       <span style={{ fontWeight: 700 }}>{t.deductionReceipt} ({it.deduction_name || 'Stones/Wax'}):</span>
                       <strong>- {formatMax3Decimals(details.deductionWeight)} gm</strong>
+                    </div>
+                  )}
+
+                  {/* Only Gold/Silver Weight — shown for SELL items after deduction, and always for BUY items */}
+                  {isSell && details.deductionWeight > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                      <span>{isGold ? t.onlyGoldWeightLabel : t.onlySilverWeightLabel}:</span>
+                      <strong>{formatMax3Decimals(details.netWeight)} gm</strong>
                     </div>
                   )}
 

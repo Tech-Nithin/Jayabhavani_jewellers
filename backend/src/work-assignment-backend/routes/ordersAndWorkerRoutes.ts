@@ -292,18 +292,31 @@ router.post('/orders', async (req: Request, res: Response) => {
 
     try {
       const { data: dbOrder, error: dbErr } = await supabase.from('orders').insert([dbPayload]).select('*').single();
+
       if (!dbErr && dbOrder) {
+        // ✅ Success — record inserted and confirmed
         return res.json({ success: true, message: 'Order created & stored in database successfully!', order: dbOrder });
-      } else if (dbErr) {
+      }
+
+      if (dbErr) {
+        // Check if it's a column-not-found error (e.g. image_url column missing in schema)
         if (dbErr.code === 'PGRST204' || dbErr.message?.includes('image_url')) {
-          // If image_url column doesn't exist yet in Supabase table schema, fallback gracefully
           const { image_url: _, ...fallbackPayload } = dbPayload;
           const { data: retryData, error: retryErr } = await supabase.from('orders').insert([fallbackPayload]).select('*').single();
           if (!retryErr && retryData) {
             return res.json({ success: true, message: 'Order created & stored in database successfully!', order: { ...retryData, image_url: finalImageUrl } });
           }
+          // Retry also failed — report the retry error
+          const retryErrMsg = retryErr ? `${retryErr.message} (${retryErr.code})` : 'Retry returned no data';
+          return res.status(500).json({
+            success: false,
+            message: `Database Error on retry: ${retryErrMsg}`,
+            details: retryErr?.details,
+            hint: retryErr?.hint,
+          });
         }
-        console.error('❌ Supabase orders insert error:', dbErr.message, dbErr.details, dbErr.hint);
+
+        // All other DB errors
         return res.status(500).json({
           success: false,
           message: `Database Error (${dbErr.code || 'DB_ERR'}): ${dbErr.message}`,
@@ -311,25 +324,22 @@ router.post('/orders', async (req: Request, res: Response) => {
           hint: dbErr.hint,
         });
       }
+
+      // ❌ Supabase returned null data AND null error — usually an RLS policy block or silent schema issue
+      const silentMsg = 'Database insert returned no confirmation and no error. Likely caused by a Row-Level Security (RLS) policy blocking the insert. Check Supabase RLS policies for the "orders" table.';
+      return res.status(500).json({ success: false, message: silentMsg });
+
     } catch (e: any) {
-      console.error('Orders Supabase insert exception:', e);
       return res.status(500).json({
         success: false,
         message: `Database Exception: ${e.message || String(e)}`,
       });
     }
-
-    mockOrders.unshift(newOrder);
-
-    res.json({
-      success: true,
-      message: 'Order created successfully!',
-      order: newOrder,
-    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message || 'Failed to create order' });
   }
 });
+
 
 // PUT /api/orders/:id/assign
 router.put('/orders/:id/assign', async (req: Request, res: Response) => {
@@ -411,7 +421,7 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
             worker_id: workerIdVal,
             order_id: id,
             direction: 'OUTGOING',
-            category: 'GENERAL',
+            category: 'CHAT',
             amount_cash: 0,
             weight_grams: 0,
             touch_percentage: 0,
@@ -428,7 +438,10 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
 
           mockTransactions.push(newTxn);
 
-          let { data: insertedDb } = await supabase.from('worker_transactions').insert([newTxn]).select().single();
+          let { data: insertedDb, error: dbErr } = await supabase.from('worker_transactions').insert([newTxn]).select().single();
+          if (dbErr) {
+            console.error('❌ Error inserting worker_transactions during assignment:', dbErr.message, dbErr.details);
+          }
           createdTxn = insertedDb || newTxn;
 
           // Trigger FCM Push Notification (firebase-admin SDK)
@@ -436,7 +449,7 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
             triggerFcmPushNotification(workerIdVal, 'Jaya Bhavani Admin', formattedMessage, {
               transaction_id: createdTxn.id,
               direction: 'OUTGOING',
-              category: 'GENERAL',
+              category: 'CHAT',
             });
           } catch (fcmErr) { }
 

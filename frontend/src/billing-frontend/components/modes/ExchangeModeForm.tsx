@@ -1,6 +1,79 @@
 import React from 'react';
-import type { ModeFormProps } from './modeUtils';
-import { toStartCase, formatMax3Decimals, CreatablePresetSelect } from './modeUtils';
+import type { GlobalRates, BillItem } from '../../types';
+import type { ModeFormProps, ItemCalcDetail, BillCalcResult } from './modeUtils';
+import { toStartCase, formatMax3Decimals, round3Decimals, CreatablePresetSelect } from './modeUtils';
+
+// ─── EXCHANGE / TRADE-IN MODE CALCULATION ─────────────────────────────────────
+// SELL items (new ornament JBJ sells):
+//   finalWeight = netWeight + HMW wastage         [3 decimals]
+//   metalVal    = finalWeight × sell_rate          [2 decimals]
+//   makingVal   = making_charges_per_gram × finalWeight  [2 decimals]
+//
+// BUY items (old gold customer brings in):
+//   finalWeight = pureWeight = netWeight × (purity%/100)  [3 decimals]
+//   metalVal    = pureWeight × buy_rate            [2 decimals]
+//   makingVal   = 0
+
+export const calculateExchangeItems = (items: BillItem[], rates: GlobalRates): BillCalcResult => {
+  const itemDetails: Record<string, ItemCalcDetail> = {};
+  let totalSellValue = 0;
+  let totalBuyCredit = 0;
+
+  items.forEach((it) => {
+    const isSell = (it.item_type || 'SELL').toUpperCase() === 'SELL';
+    const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
+    const customRate = Number(it.custom_rate_per_gram || (it as any).customRate || (it as any).appliedRate) || 0;
+    const defaultRate = isGold
+      ? (isSell ? rates.gold_sell_value : rates.gold_buy_value)
+      : (isSell ? rates.silver_sell_value : rates.silver_buy_value);
+    const rate = customRate > 0 ? customRate : defaultRate || 0;
+
+    const grossWeight = Number(it.weight_grams) || 0;
+    const deductionWeight = Number(it.deduction_weight_grams) || 0;
+    const netWeight = Math.max(0, round3Decimals(grossWeight - deductionWeight));
+
+    let metalVal = 0, makingVal = 0, additionalVal = 0;
+    let wastageWeight = 0, totalChargedWeight = netWeight, pureWeight = netWeight;
+    let purityPercent = 100;
+
+    if (isSell) {
+      // SELL item: final weight = netWeight + HMW
+      const wastagePercent = Number(it.wastage_percent) || 0;
+      wastageWeight = round3Decimals((wastagePercent / 100) * netWeight);
+      totalChargedWeight = round3Decimals(netWeight + wastageWeight);
+      pureWeight = netWeight;
+      purityPercent = 100;
+
+      metalVal = Number((totalChargedWeight * rate).toFixed(2));
+      makingVal = Number((Number(it.making_charges_per_gram) || 0).toFixed(2));
+      additionalVal = Number((Number(it.additional_charges_amount) || 0).toFixed(2));
+      totalSellValue = Number((totalSellValue + metalVal + makingVal + additionalVal).toFixed(2));
+    } else {
+      // BUY item: final weight = pureWeight = netWeight × (purity%/100)
+      purityPercent = Number(it.purity_percentage) || 0;
+      pureWeight = round3Decimals(netWeight * (purityPercent / 100));
+      totalChargedWeight = pureWeight;
+
+      metalVal = Number((pureWeight * rate).toFixed(2));
+      totalBuyCredit = Number((totalBuyCredit + metalVal).toFixed(2));
+    }
+
+    const lineTotal = Number((metalVal + makingVal + additionalVal).toFixed(2));
+
+    itemDetails[it.id] = {
+      metalVal, makingVal, additionalVal, wastageVal: 0, gstVal: 0, lineTotal,
+      grossWeight, deductionWeight, netWeight, pureWeight, wastageWeight, totalChargedWeight,
+      wastagePercent: isSell ? (Number(it.wastage_percent) || 0) : 0, purityPercent, rate,
+    };
+  });
+
+  return {
+    itemDetails,
+    totalSellValue: Number(totalSellValue.toFixed(2)),
+    totalBuyCredit: Number(totalBuyCredit.toFixed(2)),
+    netPayable: Number(Math.abs(totalSellValue - totalBuyCredit).toFixed(2)),
+  };
+};
 
 export const ExchangeModeForm: React.FC<ModeFormProps> = ({
   items,
@@ -24,7 +97,7 @@ export const ExchangeModeForm: React.FC<ModeFormProps> = ({
 
         const isSellItem = it.item_type === 'SELL';
         const hmwPct = Number(it.wastage_percent) || 0;
-        const totalWWithHmw = grossW + (grossW * hmwPct) / 100;
+        const totalWWithHmw = netW + (netW * hmwPct) / 100;
 
         const purityPct = Number(it.purity_percentage) || 0;
         const pureW = (netW * purityPct) / 100;
@@ -33,6 +106,7 @@ export const ExchangeModeForm: React.FC<ModeFormProps> = ({
         const calculatedRetPureG = (netW * retPurityPct) / 100;
 
         const netWeightLabel = it.metal_type === 'SILVER' ? t.onlySilverWeightLabel : t.onlyGoldWeightLabel;
+        const pureMetalWeightLabel = it.metal_type === 'SILVER' ? t.pureSilverWeightLabel : t.pureGoldWeightLabel;
 
         return (
           <div
@@ -48,8 +122,8 @@ export const ExchangeModeForm: React.FC<ModeFormProps> = ({
           >
             {/* Item Card Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', paddingBottom: '0.4rem', borderBottom: '1px solid #f1f5f9' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: isSellItem ? '#15803d' : '#0369a1', background: isSellItem ? '#dcfce7' : '#e0f2fe', padding: '2px 8px', borderRadius: '4px' }}>
-                {isSellItem ? `🛍️ Item #${idx + 1} — New Ornament Selling` : `🔄 Item #${idx + 1} — Customer Old Metal Trade-in (Deduction Credit)`}
+              <span style={{ fontSize: '0.6rem', fontWeight: 800, color: isSellItem ? '#15803d' : '#0369a1', background: isSellItem ? '#dcfce7' : '#e0f2fe', padding: '2px 8px', borderRadius: '4px' }}>
+                {isSellItem ? `Item ${idx + 1} — New Ornament Selling` : `Item ${idx + 1} — Customer Old Item Selling`}
               </span>
               {items.length > 1 && handleRemoveItem && (
                 <button
@@ -314,7 +388,7 @@ export const ExchangeModeForm: React.FC<ModeFormProps> = ({
 
                 <div>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', display: 'block', marginBottom: '3px' }}>
-                    {t.pureMetalWeightLabel}
+                    {pureMetalWeightLabel}
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input

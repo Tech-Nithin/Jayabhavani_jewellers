@@ -2,16 +2,61 @@ import React, { useState, useEffect } from 'react';
 import type { GlobalRates, BillItem } from '../../types';
 import type { Language } from '../../../utils/translations';
 
+// ─── Shared Calculation Result Types ────────────────────────────────────────
+
+/** Full computed detail for a single bill item — single source of truth */
+export interface ItemCalcDetail {
+  metalVal: number;
+  makingVal: number;
+  additionalVal: number;
+  wastageVal: number;
+  gstVal: number;
+  lineTotal: number;
+  // Weights (3 decimal precision)
+  grossWeight: number;
+  deductionWeight: number;
+  netWeight: number;
+  pureWeight: number;
+  wastageWeight: number;
+  totalChargedWeight: number;
+  // Percentages
+  wastagePercent: number;
+  purityPercent: number;
+  // Meta
+  rate: number;
+}
+
+/** Result returned by each mode's calculate function */
+export interface BillCalcResult {
+  itemDetails: Record<string, ItemCalcDetail>;
+  totalSellValue: number;
+  totalBuyCredit: number;
+  netPayable: number;
+}
+
 /** Converts any string to Start Case (Title Case) — frontend-only display formatting */
 export const toStartCase = (str: string): string =>
   str.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+
+/**
+ * JBJ Custom 3-Decimal Weight Rounding Rule:
+ * Round up ONLY if the 4th decimal place is 6 or greater (> 0.5 remainder).
+ * e.g., 4.4285 -> 4.428 (4th digit is 5 -> round down)
+ * e.g., 4.4286 -> 4.429 (4th digit is 6 -> round up)
+ */
+export const round3Decimals = (val: number): number => {
+  if (isNaN(val)) return 0;
+  const scaled = val * 1000;
+  const floorVal = Math.floor(scaled);
+  const diff = Number((scaled - floorVal).toFixed(6));
+  return diff > 0.5 ? Math.ceil(scaled) / 1000 : floorVal / 1000;
+};
 
 export const formatMax3Decimals = (val: number | string | undefined | null): string => {
   if (val === undefined || val === null || val === '') return '0';
   const num = Number(val);
   if (isNaN(num)) return '0';
-  const rounded = Math.round((num + Number.EPSILON) * 1000) / 1000;
-  return String(rounded);
+  return String(round3Decimals(num));
 };
 
 /** Formats text input dynamically into Indian currency format (e.g., 1,00,000) while typing */

@@ -1,6 +1,61 @@
 import React from 'react';
-import type { ModeFormProps } from './modeUtils';
-import { toStartCase, formatMax3Decimals, CreatablePresetSelect } from './modeUtils';
+import type { GlobalRates, BillItem } from '../../types';
+import type { ModeFormProps, ItemCalcDetail, BillCalcResult } from './modeUtils';
+import { toStartCase, formatMax3Decimals, round3Decimals, CreatablePresetSelect } from './modeUtils';
+
+// ─── SELL MODE CALCULATION ────────────────────────────────────────────────────
+// Formula:
+//   netWeight          = grossWeight - deductionWeight          [3 decimals]
+//   wastageWeight      = netWeight × (hmw% / 100)              [3 decimals]
+//   totalChargedWeight = netWeight + wastageWeight              [3 decimals]  ← final metal weight
+//   metalVal           = totalChargedWeight × rate              [2 decimals]
+//   makingVal          = making_charges_per_gram × totalChargedWeight  [2 decimals]
+//   additionalVal      = additional_charges_amount              [2 decimals]
+//   lineTotal          = metalVal + makingVal + additionalVal   [2 decimals]
+
+export const calculateSellItems = (items: BillItem[], rates: GlobalRates): BillCalcResult => {
+  const itemDetails: Record<string, ItemCalcDetail> = {};
+  let totalSellValue = 0;
+
+  items
+    .filter((it) => (it.item_type || 'SELL').toUpperCase() === 'SELL')
+    .forEach((it) => {
+      const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
+      const customRate = Number(it.custom_rate_per_gram || (it as any).customRate || (it as any).appliedRate) || 0;
+      const rate = customRate > 0 ? customRate : (isGold ? rates.gold_sell_value : rates.silver_sell_value) || 0;
+
+      const grossWeight = Number(it.weight_grams) || 0;
+      const deductionWeight = Number(it.deduction_weight_grams) || 0;
+      const netWeight = Math.max(0, round3Decimals(grossWeight - deductionWeight));
+
+      const wastagePercent = Number(it.wastage_percent) || 0;
+      const wastageWeight = round3Decimals((wastagePercent / 100) * netWeight);
+      // Final metal weight for SELL = net weight + HMW wastage
+      const totalChargedWeight = round3Decimals(netWeight + wastageWeight);
+
+      const additionalCharges = Number(it.additional_charges_amount) || 0;
+
+      const metalVal = Number((totalChargedWeight * rate).toFixed(2));
+      const makingVal = Number((Number(it.making_charges_per_gram) || 0).toFixed(2));
+      const additionalVal = Number(additionalCharges.toFixed(2));
+      const lineTotal = Number((metalVal + makingVal + additionalVal).toFixed(2));
+
+      itemDetails[it.id] = {
+        metalVal, makingVal, additionalVal, wastageVal: 0, gstVal: 0, lineTotal,
+        grossWeight, deductionWeight, netWeight, pureWeight: netWeight, wastageWeight, totalChargedWeight,
+        wastagePercent, purityPercent: 100, rate,
+      };
+
+      totalSellValue = Number((totalSellValue + lineTotal).toFixed(2));
+    });
+
+  return {
+    itemDetails,
+    totalSellValue: Number(totalSellValue.toFixed(2)),
+    totalBuyCredit: 0,
+    netPayable: Number(totalSellValue.toFixed(2)),
+  };
+};
 
 export const SellModeForm: React.FC<ModeFormProps> = ({
   items,
@@ -23,7 +78,7 @@ export const SellModeForm: React.FC<ModeFormProps> = ({
         const netW = Math.max(0, grossW - dedW);
 
         const hmwPct = Number(it.wastage_percent) || 0;
-        const totalWWithHmw = grossW + (grossW * hmwPct) / 100;
+        const totalWWithHmw = netW + (netW * hmwPct) / 100;
 
         const retPurityPct = Number(it.return_purity_percentage) || 0;
         const calculatedRetPureG = (netW * retPurityPct) / 100;
@@ -45,7 +100,7 @@ export const SellModeForm: React.FC<ModeFormProps> = ({
             {/* Item Card Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', paddingBottom: '0.4rem', borderBottom: '1px solid #f1f5f9' }}>
               <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>
-                🏷️ Item {idx + 1} — Selling Item
+                Item {idx + 1} - JBJ Selling Item
               </span>
               {items.length > 1 && handleRemoveItem && (
                 <button

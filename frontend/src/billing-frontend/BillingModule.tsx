@@ -12,8 +12,12 @@ import { getTeluguTransliteration } from '../utils/transliterate';
 import { SellModeForm } from './components/modes/SellModeForm';
 import { BuyModeForm } from './components/modes/BuyModeForm';
 import { ExchangeModeForm } from './components/modes/ExchangeModeForm';
-import { OrderModeForm } from './components/modes/OrderModeForm';
+import { OrderModeForm, calculateOrderItems } from './components/modes/OrderModeForm';
 import { toStartCase, formatIndianCurrencyInput, parseIndianCurrencyNumber } from './components/modes/modeUtils';
+import type { BillCalcResult } from './components/modes/modeUtils';
+import { calculateSellItems } from './components/modes/SellModeForm';
+import { calculateBuyItems } from './components/modes/BuyModeForm';
+import { calculateExchangeItems } from './components/modes/ExchangeModeForm';
 
 import { translations } from '../utils/translations';
 import type { Language } from '../utils/translations';
@@ -35,19 +39,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   const [activeBillType, setActiveBillType] = useState<'SALE_DONE' | 'ESTIMATION'>('SALE_DONE');
 
   // Customer & Mode with Session Persistence
-  const getInitialDraft = () => {
-    try {
-      const saved = sessionStorage.getItem('jbj_billing_draft_v1');
-      if (saved) return JSON.parse(saved);
-    } catch (e) { }
-    return null;
-  };
-
-  const initialDraft = getInitialDraft();
-
-  const [customerName, setCustomerName] = useState(initialDraft?.customerName || '');
-  const [customerPhone, setCustomerPhone] = useState(initialDraft?.customerPhone || '');
-  const [customerAddress, setCustomerAddress] = useState(initialDraft?.customerAddress || '');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
   const [teluguCustomerName, setTeluguCustomerName] = useState('');
   const [teluguCustomerAddress, setTeluguCustomerAddress] = useState('');
 
@@ -77,8 +71,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   const [successModal, setSuccessModal] = useState<{ open: boolean; message: string; invId: string } | null>(null);
 
   // Payment Breakdown State (Full vs Partial Payment)
-  const [paymentType, setPaymentType] = useState<'FULL' | 'PARTIAL'>(initialDraft?.paymentType || 'FULL');
-  const [advancePaidAmount, setAdvancePaidAmount] = useState<string>(initialDraft?.advancePaidAmount || '');
+  const [paymentType, setPaymentType] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [advancePaidAmount, setAdvancePaidAmount] = useState<string>('');
   const getInitialItemsForMode = (m: 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER'): BillItem[] => {
     if (m === 'BUY') {
       return [
@@ -146,20 +140,15 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     if (m === 'BUYING' || m === 'BUY') return 'BUY';
     if (m === 'EXCHANGE' || m === 'TRADE-IN' || m === 'TRADEIN') return 'EXCHANGE';
     if (m === 'ORDER' || m === 'ORDERS') return 'ORDER';
-    return initialDraft?.mode || 'SELL';
+    return 'SELL';
   });
 
   // Per-mode items storage cache map - single source of truth for tab item persistence
-  const [modeItemsMap, setModeItemsMap] = useState<Record<'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER', BillItem[]>>(() => {
-    if (initialDraft?.modeItemsMap) {
-      return initialDraft.modeItemsMap;
-    }
-    return {
-      SELL: getInitialItemsForMode('SELL'),
-      BUY: getInitialItemsForMode('BUY'),
-      EXCHANGE: getInitialItemsForMode('EXCHANGE'),
-      ORDER: getInitialItemsForMode('ORDER'),
-    };
+  const [modeItemsMap, setModeItemsMap] = useState<Record<'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER', BillItem[]>>({
+    SELL: getInitialItemsForMode('SELL'),
+    BUY: getInitialItemsForMode('BUY'),
+    EXCHANGE: getInitialItemsForMode('EXCHANGE'),
+    ORDER: getInitialItemsForMode('ORDER'),
   });
 
   // Items for currently active mode derived directly from modeItemsMap
@@ -173,21 +162,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     }));
   };
 
-  // Sync state changes to sessionStorage for complete cross-module navigation persistence
-  useEffect(() => {
-    try {
-      const payload = {
-        customerName,
-        customerPhone,
-        customerAddress,
-        paymentType,
-        advancePaidAmount,
-        mode,
-        modeItemsMap,
-      };
-      sessionStorage.setItem('jbj_billing_draft_v1', JSON.stringify(payload));
-    } catch (e) { }
-  }, [customerName, customerPhone, customerAddress, paymentType, advancePaidAmount, mode, modeItemsMap]);
+
 
   // View state: 'POS' | 'CUSTOMERS' | 'DETAILS' - synced with URL params
   const [selectedCustomerDetailsRecord, setSelectedCustomerDetailsRecord] = useState<CustomerDirectoryRecord | null>(null);
@@ -229,10 +204,6 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   };
 
   const handleStartFresh = () => {
-    try {
-      sessionStorage.removeItem('jbj_billing_draft_v1');
-    } catch (e) { }
-
     setCustomerName('');
     setCustomerPhone('');
     setCustomerAddress('');
@@ -307,31 +278,22 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     fetchPresets();
   }, []);
 
-  // Fetch 100% server-calculated subtotals & net payables from backend API
+  // ─── Single Source of Truth: Frontend-Only Calculation ─────────────────────
+  // Dispatches to the correct mode calculate function. No backend call.
+  // Receipt and Sale Done both consume these exact same computed values.
   useEffect(() => {
     if (!rates) return;
-    const fetchCalculation = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/billing/calculate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items, rates }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setCalcResults({
-            itemDetails: data.itemDetails || {},
-            totalSellValue: data.totalSellValue || 0,
-            totalBuyCredit: data.totalBuyCredit || 0,
-            netPayable: data.netPayable || 0,
-          });
-        }
-      } catch (err) {
-        console.error('Server calculation error:', err);
-      }
-    };
-    fetchCalculation();
-  }, [items, rates]);
+
+    let result: BillCalcResult;
+    switch (mode) {
+      case 'BUY':      result = calculateBuyItems(items, rates);      break;
+      case 'EXCHANGE': result = calculateExchangeItems(items, rates);  break;
+      case 'ORDER':    result = calculateOrderItems(items, rates);     break;
+      default:         result = calculateSellItems(items, rates);      break;
+    }
+
+    setCalcResults(result);
+  }, [items, rates, mode]);
 
   const fetchRates = async () => {
     try {
@@ -684,44 +646,47 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           balanceDueAmount: effDue,
         };
 
+        const postBody = {
+          customer_name: customerName.trim(),
+          customer_phone: customerPhone.trim(),
+          customer_address: customerAddress.trim(),
+          metal_type: primaryItem?.metal_type || 'GOLD',
+          item_name: combinedItemNames,
+          quantity_unit: primaryItem?.quantity_unit || 'PIECES',
+          quantity_value: Number(primaryItem?.quantity_value) || 1,
+          item_length_inches: primaryItem?.item_length_inches || '',
+          gross_weight_grams: totalGrossW,
+          net_weight_grams: totalNetW,
+          touch_percentage: Number(primaryItem?.purity_percentage) || 91.6,
+          making_charges: Number(primaryItem?.making_charges_per_gram) || 0,
+          estimated_delivery_date: new Date().toISOString().split('T')[0],
+          paid_amount: effPaid,
+          due_amount: effDue,
+          applied_rate_per_gram: Number(rates?.gold_sell_value) || 0,
+          pure_metal_weight: Number((totalNetW * ((Number(primaryItem?.purity_percentage) || 91.6) / 100)).toFixed(3)),
+          metal_value: totalSellValue,
+          gst_amount: 0,
+          final_amount: grandTotalVal,
+          receipt_json_data: orderReceiptPayload,
+          submitted: 'no',
+          image_url: primaryItem?.image_url || '',
+          hmw_percentage: Number(primaryItem?.wastage_percent) || 0,
+          hmw_weight: Number((totalNetW + (totalNetW * ((Number(primaryItem?.wastage_percent) || 0) / 100))).toFixed(3)),
+          additional_charge_name: primaryItem?.additional_charges_name || '',
+          additional_charge_value: Number(primaryItem?.additional_charges_amount) || 0,
+          return_purity_percentage: Number(primaryItem?.return_purity_percentage) || 0,
+          return_pure_gold: Number(primaryItem?.return_pure_gold) || (primaryItem?.return_purity_percentage ? Number((totalNetW * (Number(primaryItem.return_purity_percentage) / 100)).toFixed(3)) : 0),
+          notes: primaryItem?.item_notes || (primaryItem as any)?.notes || `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
+        };
+
         const resOrder = await fetch(`${API_BASE}/work-assignment/orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer_name: customerName.trim(),
-            customer_phone: customerPhone.trim(),
-            customer_address: customerAddress.trim(),
-            metal_type: primaryItem?.metal_type || 'GOLD',
-            item_name: combinedItemNames,
-            quantity_unit: primaryItem?.quantity_unit || 'PIECES',
-            quantity_value: Number(primaryItem?.quantity_value) || 1,
-            item_length_inches: primaryItem?.item_length_inches || '',
-            gross_weight_grams: totalGrossW,
-            net_weight_grams: totalNetW,
-            touch_percentage: Number(primaryItem?.purity_percentage) || 91.6,
-            making_charges: Number(primaryItem?.making_charges_per_gram) || 0,
-            estimated_delivery_date: new Date().toISOString().split('T')[0],
-            paid_amount: effPaid,
-            due_amount: effDue,
-            applied_rate_per_gram: Number(rates?.gold_sell_value) || 0,
-            pure_metal_weight: Number((totalNetW * ((Number(primaryItem?.purity_percentage) || 91.6) / 100)).toFixed(3)),
-            metal_value: totalSellValue,
-            gst_amount: 0,
-            final_amount: grandTotalVal,
-            receipt_json_data: orderReceiptPayload,
-            submitted: 'no',
-            image_url: primaryItem?.image_url || '',
-            hmw_percentage: Number(primaryItem?.wastage_percent) || 0,
-            hmw_weight: Number((totalNetW + (totalNetW * ((Number(primaryItem?.wastage_percent) || 0) / 100))).toFixed(3)),
-            additional_charge_name: primaryItem?.additional_charges_name || '',
-            additional_charge_value: Number(primaryItem?.additional_charges_amount) || 0,
-            return_purity_percentage: Number(primaryItem?.return_purity_percentage) || 0,
-            return_pure_gold: Number(primaryItem?.return_pure_gold) || (primaryItem?.return_purity_percentage ? Number((totalNetW * (Number(primaryItem.return_purity_percentage) / 100)).toFixed(3)) : 0),
-            notes: primaryItem?.item_notes || (primaryItem as any)?.notes || `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
-          }),
+          body: JSON.stringify(postBody),
         });
 
         const dataOrder = await resOrder.json();
+
         if (resOrder.ok && dataOrder.success) {
           fetchCustomerDirectory();
           printReceipt80mm('pos-realtime-receipt-card');
@@ -1541,6 +1506,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   teluguCustomerAddress={teluguCustomerAddress}
                   rates={rates}
                   items={items}
+                  itemDetails={calcResults.itemDetails}
                   totalSellValue={totalSellValue}
                   totalBuyCredit={totalBuyCredit}
                   netPayable={netPayable}

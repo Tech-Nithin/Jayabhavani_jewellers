@@ -500,10 +500,10 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     const term = searchTerm.toLowerCase();
     const matchSearch =
       !term ||
-      o.customer_name.toLowerCase().includes(term) ||
-      o.customer_phone.includes(term) ||
-      o.item_name.toLowerCase().includes(term) ||
-      o.id.toLowerCase().includes(term);
+      (o.customer_name || '').toLowerCase().includes(term) ||
+      (o.customer_phone || '').includes(term) ||
+      (o.item_name || '').toLowerCase().includes(term) ||
+      String(o.id || '').toLowerCase().includes(term);
 
     const matchStatus =
       statusFilter === 'ALL' ||

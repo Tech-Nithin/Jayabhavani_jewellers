@@ -39,9 +39,9 @@ export const AssignWorkerModal: React.FC<AssignWorkerModalProps> = ({
 
   const filteredWorkers = workers.filter(
     (w) =>
-      w.name.toLowerCase().includes(searchWorker.toLowerCase()) ||
-      w.phone.includes(searchWorker) ||
-      (w.specialization && w.specialization.toLowerCase().includes(searchWorker.toLowerCase()))
+      (w.name || '').toLowerCase().includes(searchWorker.toLowerCase()) ||
+      (w.phone || '').includes(searchWorker) ||
+      (w.specialization || '').toLowerCase().includes(searchWorker.toLowerCase())
   );
 
   return (

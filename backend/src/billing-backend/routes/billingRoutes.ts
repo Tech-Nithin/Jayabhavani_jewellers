@@ -15,6 +15,20 @@ let activeMetalValues = {
   silver_sell_value_updated_at: new Date().toISOString(),
 };
 
+/**
+ * JBJ Custom 3-Decimal Weight Rounding Rule:
+ * Round up ONLY if the 4th decimal place is 6 or greater (> 0.5 remainder).
+ * e.g., 4.4285 -> 4.428 (4th digit is 5 -> round down)
+ * e.g., 4.4286 -> 4.429 (4th digit is 6 -> round up)
+ */
+const round3Decimals = (val: number): number => {
+  if (isNaN(val)) return 0;
+  const scaled = val * 1000;
+  const floorVal = Math.floor(scaled);
+  const diff = Number((scaled - floorVal).toFixed(6));
+  return diff > 0.5 ? Math.ceil(scaled) / 1000 : floorVal / 1000;
+};
+
 interface HistoryEntry {
   id?: number;
   metal_type: 'GOLD' | 'SILVER';
@@ -204,7 +218,8 @@ router.post('/rates', async (req: Request, res: Response) => {
 
 // POST /api/billing/calculate - 100% Server-side multi-item & single-item calculation engine
 router.post('/calculate', (req: Request, res: Response) => {
-  const { items, rates } = req.body;
+  const { items, rates, mode } = req.body;
+  const isOrderMode = (mode || '').toUpperCase() === 'ORDER';
 
   const currentRates = rates || activeMetalValues;
 
@@ -224,21 +239,39 @@ router.post('/calculate', (req: Request, res: Response) => {
 
       const grossWeight = Number(it.weight_grams) || 0;
       const deductionWeight = Number(it.deduction_weight_grams) || 0;
-      const netWeight = Math.max(0, Number((grossWeight - deductionWeight).toFixed(3)));
+      const netWeight = Math.max(0, round3Decimals(grossWeight - deductionWeight));
 
       const purityPercent = isSell ? 100 : (Number(it.purity_percentage) || 100);
-      const pureWeight = Number((netWeight * (purityPercent / 100)).toFixed(3));
+      const pureWeight = round3Decimals(netWeight * (purityPercent / 100));
 
       const wastagePercent = Number(it.wastage_percent) || 0;
-      const makingCharges = Number(it.making_charges_per_gram) || 0;
+      const wastageWeight = isSell ? round3Decimals((wastagePercent / 100) * netWeight) : 0;
+      // SELL: totalChargedWeight = netWeight + HMW wastage weight (rate applied on this)
+      // BUY:  pureWeight = netWeight * (purity/100) (rate applied on this)
+      const totalChargedWeight = isSell ? round3Decimals(netWeight + wastageWeight) : pureWeight;
+
+      const makingChargesPerGram = Number(it.making_charges_per_gram) || 0;
       const additionalCharges = Number(it.additional_charges_amount) || 0;
 
-      const metalVal = isSell
-        ? Number((netWeight * rate).toFixed(2))
-        : Number((pureWeight * rate).toFixed(2));
+      const wastageVal = 0;
+      let metalVal = 0;
 
-      const wastageVal = isSell ? Number(((wastagePercent / 100) * netWeight * rate).toFixed(2)) : 0;
-      const makingVal = isSell ? Number(makingCharges.toFixed(2)) : 0;
+      if (isSell) {
+        // SELL / ORDER JBJ item / TRADE-IN new ornament: totalChargedWeight (after HMW) × rate
+        metalVal = Number((totalChargedWeight * rate).toFixed(2));
+      } else {
+        // BUY items
+        if (isOrderMode) {
+          // ORDER customer old metal: netWeight × rate
+          metalVal = Number((netWeight * rate).toFixed(2));
+        } else {
+          // BUY / TRADE-IN customer old item: pureWeight × rate
+          metalVal = Number((pureWeight * rate).toFixed(2));
+        }
+      }
+
+      // making charges added directly as flat amount
+      const makingVal = isSell ? Number(makingChargesPerGram.toFixed(2)) : 0;
       const additionalVal = isSell ? Number(additionalCharges.toFixed(2)) : 0;
 
       const lineTotal = Number((metalVal + wastageVal + makingVal + additionalVal).toFixed(2));
