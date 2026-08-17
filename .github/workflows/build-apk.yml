@@ -62,6 +62,14 @@ jobs:
           path: worker-frontend/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
+      - name: Upload Worker APK to Supabase Public Storage (Auto-overwrite)
+        run: |
+          curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/apks/JayaBhavaniWorker.apk" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            -H "x-upsert: true" \
+            --data-binary "@worker-frontend/android/app/build/outputs/apk/debug/app-debug.apk"
+
   build-admin-apk:
     name: Build Admin App APK
     runs-on: ubuntu-latest
@@ -115,3 +123,11 @@ jobs:
           name: JayaBhavaniAdmin-Standalone-APK
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Upload Admin APK to Supabase Public Storage (Auto-overwrite)
+        run: |
+          curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/apks/JayaBhavaniAdmin.apk" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            -H "x-upsert: true" \
+            --data-binary "@frontend/android/app/build/outputs/apk/debug/app-debug.apk"

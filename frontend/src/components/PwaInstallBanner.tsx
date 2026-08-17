@@ -5,99 +5,132 @@ interface PwaInstallBannerProps {
 }
 
 export const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ mode = 'banner' }) => {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showInfoMsg, setShowInfoMsg] = useState('');
 
   useEffect(() => {
-    // Check if app is running in standalone mode (already installed)
-    if (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone) {
-      setIsInstalled(true);
-    }
-
     // Check if user is on iOS (iPhone/iPad)
     const userAgent = window.navigator.userAgent.toLowerCase();
     const iosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(iosDevice);
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
   }, []);
 
-  const handleInstallClick = async () => {
+  const ADMIN_APK_URL = 'https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniAdmin.apk';
+  const WORKER_APK_URL = 'https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniWorker.apk';
+  const WEBSITE_URL = 'https://jayabhavanijewellers.vercel.app/';
+
+  const downloadApk = (url: string, filename: string, appName: string) => {
     setShowInfoMsg('');
-    const activePrompt = deferredPrompt || (window as any).deferredPwaPrompt;
-    if (activePrompt) {
-      activePrompt.prompt();
-      const { outcome } = await activePrompt.userChoice;
-      if (outcome === 'accepted') {
-        setIsInstalled(true);
-      }
-      setDeferredPrompt(null);
-      (window as any).deferredPwaPrompt = null;
-    } else if (isIOS) {
+    if (isIOS) {
       setShowIOSGuide((prev) => !prev);
-    } else if (isInstalled) {
-      setShowInfoMsg('Jaya Bhavani Jewellers is already installed on this device!');
-    } else {
-      // Fallback for browsers where install prompt was already triggered or browser menu offers install
-      setShowInfoMsg('Tap your browser menu (⋮ or ⚙) and select "Install App" or "Add to Home Screen".');
+      return;
     }
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setShowInfoMsg(`⚡ Downloading ${appName}...`);
+  };
+
+  const handleInstallClick = () => {
+    downloadApk(ADMIN_APK_URL, 'JayaBhavaniAdmin.apk', 'Admin App APK');
   };
 
   if (mode === 'menu') {
     return (
-      <div style={{ margin: '0.6rem 0' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '0.6rem 0' }}>
+        {/* 1. Install Admin App Button */}
         <button
           type="button"
-          onClick={handleInstallClick}
+          onClick={() => downloadApk(ADMIN_APK_URL, 'JayaBhavaniAdmin.apk', 'Admin App APK')}
           style={{
             width: '100%',
-            padding: '9px 12px',
+            padding: '8px 10px',
             borderRadius: '8px',
             border: '1px solid #b45309',
             background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
             color: '#ffffff',
             fontWeight: 800,
-            fontSize: '0.78rem',
+            fontSize: '0.76rem',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
-            boxShadow: '0 3px 10px rgba(180, 83, 9, 0.35)',
+            gap: '6px',
+            boxShadow: '0 3px 8px rgba(180, 83, 9, 0.35)',
             transition: 'all 0.15s ease',
           }}
-          title="Download & Install Jayabhavani Jewellers application"
+          title="Download & Install Admin Application APK"
         >
           <img
             src="/JB_logo.png"
             alt="JBJ Logo"
-            style={{ padding: '1px', width: '22px', height: '22px', borderRadius: '10%', objectFit: 'cover', background: '#fff' }}
+            style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover', background: '#fff' }}
           />
-          <span>{isInstalled ? 'JBJ App Installed' : 'Install JBJ App'}</span>
-          {/* <i className="fa-solid fa-download" style={{ fontSize: '0.8rem' }} /> */}
+          <span>Install Admin App</span>
         </button>
 
+        {/* 2. Install Worker App Button */}
+        <button
+          type="button"
+          onClick={() => downloadApk(WORKER_APK_URL, 'JayaBhavaniWorker.apk', 'Worker App APK')}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            borderRadius: '8px',
+            border: '1px solid #d97706',
+            background: 'linear-gradient(135deg, #b45309 0%, #78350f 100%)',
+            color: '#ffffff',
+            fontWeight: 800,
+            fontSize: '0.76rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            boxShadow: '0 3px 8px rgba(120, 53, 15, 0.35)',
+            transition: 'all 0.15s ease',
+          }}
+          title="Download & Install Worker Application APK"
+        >
+          <span style={{ fontSize: '0.9rem' }}>🔨</span>
+          <span>Install Worker App</span>
+        </button>
+
+        {/* 3. JBJ Website Link (Opens in New Tab) */}
+        <a
+          href={WEBSITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            borderRadius: '8px',
+            border: '1px solid #374151',
+            background: '#1f2937',
+            color: '#fbbf24',
+            fontWeight: 700,
+            fontSize: '0.76rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            textDecoration: 'none',
+            boxSizing: 'border-box',
+            transition: 'all 0.15s ease',
+          }}
+          title="Open Jaya Bhavani Jewellers Website in new tab"
+        >
+          <span style={{ fontSize: '0.9rem' }}>🌐</span>
+          <span>Visit JBJ Website</span>
+        </a>
+
         {showInfoMsg && (
-          <p style={{ margin: '6px 0 0 0', fontSize: '0.7rem', color: '#fbbf24', textAlign: 'center', lineHeight: '1.2' }}>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: '#fbbf24', textAlign: 'center', lineHeight: '1.2' }}>
             {showInfoMsg}
           </p>
         )}
@@ -129,9 +162,6 @@ export const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ mode = 'bann
   }
 
   // Default banner mode
-  if (isInstalled) return null;
-  if (!deferredPrompt && !isIOS) return null;
-
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
