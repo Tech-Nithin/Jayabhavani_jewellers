@@ -79,11 +79,11 @@ jobs:
       - name: Register Worker App Version in Supabase DB
         if: github.ref == 'refs/heads/main'
         run: |
-          curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/rest/v1/app_versions" \
+          curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/rest/v1/app_versions?on_conflict=app_id" \
             -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
             -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
             -H "Content-Type: application/json" \
-            -H "Prefer: resolution=merge-duplicates" \
+            -H "Prefer: resolution=merge-duplicates,return=representation" \
             -d '{"app_id": "WORKER", "version_code": ${{ github.run_number }}, "version_name": "1.0.${{ github.run_number }}", "apk_url": "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniWorker.apk"}'
 
   build-admin-apk:
@@ -159,9 +159,9 @@ jobs:
       - name: Register Admin App Version in Supabase DB
         if: github.ref == 'refs/heads/main'
         run: |
-          curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/rest/v1/app_versions" \
+          curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/rest/v1/app_versions?on_conflict=app_id" \
             -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
             -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
             -H "Content-Type: application/json" \
-            -H "Prefer: resolution=merge-duplicates" \
+            -H "Prefer: resolution=merge-duplicates,return=representation" \
             -d '{"app_id": "ADMIN", "version_code": ${{ github.run_number }}, "version_name": "1.0.${{ github.run_number }}", "apk_url": "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniAdmin.apk"}'

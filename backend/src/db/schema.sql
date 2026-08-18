@@ -340,3 +340,8 @@ VALUES
   ('WORKER', 1, '1.0.0', 'https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniWorker.apk')
 ON CONFLICT (app_id) DO NOTHING;
 
+-- Grant permissions to PostgREST roles (Fixes 403 Permission Denied)
+GRANT ALL ON TABLE public.app_versions TO service_role, anon, authenticated, postgres;
+ALTER TABLE public.app_versions DISABLE ROW LEVEL SECURITY;
+
+
