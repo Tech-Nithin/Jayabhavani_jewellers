@@ -15,7 +15,7 @@ export const ordersTranslations = {
     inProgressTab: 'In Progress',
     completedTab: 'Completed',
     deliveryDueTab: 'Delivery Due',
-    newOrderBtn: '+ New Order',
+    newOrderBtn: 'New Order',
     searchOrdersPlaceholder: 'Search by customer name, phone, or order ID...',
     snCol: 'S.N.',
     orderDateCol: 'Order Date',

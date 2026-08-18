@@ -18,6 +18,26 @@ CREATE TABLE IF NOT EXISTS public.products (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Customer Metal Transactions Table (running ledger for KPI cards)
+CREATE TABLE IF NOT EXISTS public.customer_metal_transactions (
+  id SERIAL PRIMARY KEY,
+  invoice_id VARCHAR(100) NULL,
+  customer_id VARCHAR(100) NULL,
+  customer_name VARCHAR(255) NULL,
+  customer_phone VARCHAR(50) NULL,
+  transaction_type VARCHAR(20) NULL,
+  metal_type VARCHAR(20) NULL,
+  item_type VARCHAR(20) NULL,
+  product_name VARCHAR(255) NULL,
+  weight_grams NUMERIC(12, 3) NULL DEFAULT 0,
+  amount NUMERIC(15, 2) NULL DEFAULT 0,
+  purity_percentage NUMERIC(6, 2) NULL DEFAULT 100,
+  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT customer_metal_transactions_item_type_check CHECK (item_type IN ('SELL', 'BUY')),
+  CONSTRAINT customer_metal_transactions_metal_type_check CHECK (metal_type IN ('GOLD', 'SILVER')),
+  CONSTRAINT customer_metal_transactions_transaction_type_check CHECK (transaction_type IN ('SELL', 'BUY', 'EXCHANGE', 'ORDER'))
+);
+
 -- 2. Create Collections Table
 CREATE TABLE IF NOT EXISTS public.collections (
   id VARCHAR(50) PRIMARY KEY,

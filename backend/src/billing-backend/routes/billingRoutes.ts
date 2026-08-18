@@ -344,7 +344,7 @@ router.post('/calculate', (req: Request, res: Response) => {
   });
 });
 
-const directoryColumns = 'id,customer_name,customer_phone,customer_address,transaction_type,metal_type,product_name,weight_grams,purity_percentage,applied_rate_per_gram,pure_metal_weight,metal_value,making_charges,gst_amount,final_amount,paid_amount,due_amount,image_url,created_at,updated_at';
+const directoryColumns = 'id,customer_name,customer_phone,customer_address,transaction_type,metal_type,product_name,weight_grams,purity_percentage,applied_rate_per_gram,pure_metal_weight,metal_value,making_charges,gst_amount,final_amount,paid_amount,due_amount,image_url,receipt_json_data,created_at,updated_at';
 
 // GET /api/billing/invoices/:id - Fetch single invoice with full receipt_json_data on demand
 router.get('/invoices/:id', async (req: Request, res: Response) => {
@@ -612,6 +612,9 @@ router.post('/create', async (req: Request, res: Response) => {
     final_amount_val = Number((subtotal + gst_amount).toFixed(2));
   }
 
+  const paidAmt = req.body.paid_amount !== undefined ? Number(req.body.paid_amount) : Number(receipt_json_data?.advancePaidAmount ?? final_amount_val);
+  const dueAmt = req.body.due_amount !== undefined ? Number(req.body.due_amount) : Number(receipt_json_data?.balanceDueAmount ?? 0);
+
   const newInvoicePayload: any = {
     customer_name: customer_name || 'Walk-in Customer',
     customer_phone: customer_phone || '',
@@ -627,6 +630,8 @@ router.post('/create', async (req: Request, res: Response) => {
     making_charges: Number(making_charges) || 0,
     gst_amount: Number(gst_amount) || 0,
     final_amount: Number(final_amount_val) || 0,
+    paid_amount: Number(paidAmt) || 0,
+    due_amount: Number(dueAmt) || 0,
     gold_buy_rate_snapshot: Number(activeMetalValues.gold_buy_value) || 0,
     gold_sell_rate_snapshot: Number(activeMetalValues.gold_sell_value) || 0,
     silver_buy_rate_snapshot: Number(activeMetalValues.silver_buy_value) || 0,
@@ -699,11 +704,147 @@ router.post('/create', async (req: Request, res: Response) => {
 
   invoicesList.unshift(createdInvoice);
 
+  // Trigger automatic insert into customer_metal_transactions running ledger
+  insertMetalTransactions(createdInvoice).catch(() => {});
+
   res.json({
     success: true,
     message: 'Billing invoice generated & persisted successfully',
     invoice: createdInvoice,
   });
+});
+
+// Helper to insert item records into customer_metal_transactions table
+export const insertMetalTransactions = async (invoice: any) => {
+  try {
+    let rawData = typeof invoice.receipt_json_data === 'string'
+      ? JSON.parse(invoice.receipt_json_data)
+      : (invoice.receipt_json_data || {});
+
+    const items: any[] = Array.isArray(rawData?.items) ? rawData.items : [];
+    const customerPhone = invoice.customer_phone || rawData.customer_phone || '';
+    const customerName = invoice.customer_name || rawData.customer_name || 'Walk-in Customer';
+    const txnType = (invoice.transaction_type || rawData.transaction_type || 'SELL').toUpperCase();
+    const invoiceId = String(invoice.id || '');
+
+    const rowsToInsert: any[] = [];
+
+    if (items.length > 0) {
+      items.forEach((it: any) => {
+        const itemType = (it.item_type || txnType).toUpperCase();
+        const metalType = (it.metal_type || invoice.metal_type || 'GOLD').toUpperCase();
+        const cleanMetal = metalType === 'SILVER' ? 'SILVER' : 'GOLD';
+        const cleanItemType = itemType === 'BUY' ? 'BUY' : 'SELL';
+        const cleanTxnType = ['SELL', 'BUY', 'EXCHANGE', 'ORDER'].includes(txnType) ? txnType : 'SELL';
+
+        rowsToInsert.push({
+          invoice_id: invoiceId,
+          customer_id: customerPhone || null,
+          customer_phone: customerPhone,
+          customer_name: customerName,
+          transaction_type: cleanTxnType,
+          metal_type: cleanMetal,
+          item_type: cleanItemType,
+          product_name: it.product_name || `${cleanMetal} Item`,
+          weight_grams: Number(it.weight_grams) || 0,
+          amount: Number(it.lineTotal || it.line_total || it.metalVal || 0),
+          purity_percentage: Number(it.purity_percentage) || 100,
+          created_at: invoice.created_at || new Date().toISOString(),
+        });
+      });
+    } else {
+      const metalType = (invoice.metal_type || 'GOLD').toUpperCase();
+      const cleanMetal = metalType === 'SILVER' ? 'SILVER' : 'GOLD';
+      const cleanTxnType = ['SELL', 'BUY', 'EXCHANGE', 'ORDER'].includes(txnType) ? txnType : 'SELL';
+      const cleanItemType = cleanTxnType === 'BUY' ? 'BUY' : 'SELL';
+
+      rowsToInsert.push({
+        invoice_id: invoiceId,
+        customer_id: customerPhone || null,
+        customer_phone: customerPhone,
+        customer_name: customerName,
+        transaction_type: cleanTxnType,
+        metal_type: cleanMetal,
+        item_type: cleanItemType,
+        product_name: invoice.product_name || `${cleanMetal} Item`,
+        weight_grams: Number(invoice.weight_grams) || 0,
+        amount: Number(invoice.final_amount) || 0,
+        purity_percentage: Number(invoice.purity_percentage) || 100,
+        created_at: invoice.created_at || new Date().toISOString(),
+      });
+    }
+
+    if (rowsToInsert.length > 0) {
+      const { error } = await supabase.from('customer_metal_transactions').insert(rowsToInsert);
+      if (error) {
+        console.warn('⚠️ Supabase customer_metal_transactions insert warning:', error.message);
+      } else {
+        console.log(`✅ Inserted ${rowsToInsert.length} item records into customer_metal_transactions for ${invoiceId}`);
+      }
+    }
+  } catch (err: any) {
+    console.error('Exception inserting into customer_metal_transactions:', err);
+  }
+};
+
+// GET /api/billing/kpi-summary - Calculate cumulative running totals from customer_metal_transactions
+router.get('/kpi-summary', async (req: Request, res: Response) => {
+  try {
+    const from = (req.query.from as string) || '';
+    const to = (req.query.to as string) || '';
+
+    let query = supabase.from('customer_metal_transactions').select('*');
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
+
+    const { data: rows, error } = await query;
+    if (error) {
+      console.warn('⚠️ Error fetching customer_metal_transactions for KPI:', error.message);
+    }
+
+    const summary = (rows || []).reduce(
+      (acc: any, r: any) => {
+        const w = Number(r.weight_grams) || 0;
+        const amt = Number(r.amount) || 0;
+        const purity = Number(r.purity_percentage) || 0;
+        const metal = (r.metal_type || '').toUpperCase();
+        const itemType = (r.item_type || '').toUpperCase();
+
+        if (metal === 'GOLD' && itemType === 'SELL') {
+          acc.goldSoldWeight += w;
+          acc.goldSoldAmount += amt;
+        } else if (metal === 'GOLD' && itemType === 'BUY') {
+          acc.goldBoughtWeight += w;
+          acc.goldBoughtAmount += amt;
+          acc.goldBoughtPurityWeightedSum += purity * w;
+        } else if (metal === 'SILVER' && itemType === 'SELL') {
+          acc.silverSoldWeight += w;
+          acc.silverSoldAmount += amt;
+        } else if (metal === 'SILVER' && itemType === 'BUY') {
+          acc.silverBoughtWeight += w;
+          acc.silverBoughtAmount += amt;
+          acc.silverBoughtPurityWeightedSum += purity * w;
+        }
+        return acc;
+      },
+      {
+        goldSoldWeight: 0,
+        goldSoldAmount: 0,
+        goldBoughtWeight: 0,
+        goldBoughtAmount: 0,
+        goldBoughtPurityWeightedSum: 0,
+        silverSoldWeight: 0,
+        silverSoldAmount: 0,
+        silverBoughtWeight: 0,
+        silverBoughtAmount: 0,
+        silverBoughtPurityWeightedSum: 0,
+      }
+    );
+
+    res.json({ success: true, summary });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // PUT /api/billing/update/:id - Completely overwrite existing invoice record on the same ID
@@ -966,6 +1107,113 @@ router.post('/presets', async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Preset saved successfully', preset: { preset_name: cleanName, category_name: cleanCat } });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message || 'Server error' });
+  }
+});
+
+// PUT /api/billing/invoices/:id/settlement - Record installment/settlement payment on an invoice
+router.put('/invoices/:id/settlement', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { paid_now, custom_paid_at, note } = req.body;
+
+    const pNow = Number(paid_now) || 0;
+    if (pNow <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid payment amount' });
+    }
+
+    // 1. Fetch current invoice record from Supabase DB or memory
+    let targetInv: any = null;
+    try {
+      const { data: dbInv } = await supabase.from('billing_invoices').select('*').eq('id', id).single();
+      if (dbInv) targetInv = dbInv;
+    } catch (e) { }
+
+    if (!targetInv) {
+      targetInv = invoicesList.find((i) => String(i.id) === String(id));
+    }
+
+    if (!targetInv) {
+      return res.status(404).json({ success: false, message: 'Invoice record not found' });
+    }
+
+    // 2. Parse current payment history & amounts
+    let receiptData = typeof targetInv.receipt_json_data === 'string'
+      ? JSON.parse(targetInv.receipt_json_data)
+      : (targetInv.receipt_json_data || {});
+
+    const currentPaid = Number(targetInv.paid_amount) || Number(receiptData?.advancePaidAmount) || 0;
+    const totalGrand = Number(targetInv.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+
+    const newPaidAmount = currentPaid + pNow;
+    const newDueAmount = Math.max(0, totalGrand - newPaidAmount);
+
+    let paymentHistory: any[] = Array.isArray(receiptData?.payment_history) ? receiptData.payment_history : [];
+
+    // If payment_history is empty, initialize installment 1 with initial advance
+    if (paymentHistory.length === 0 && currentPaid > 0) {
+      paymentHistory.push({
+        installment: 1,
+        amount: currentPaid,
+        paid_at: targetInv.created_at || new Date().toISOString(),
+        note: 'Advance / Initial Payment',
+      });
+    }
+
+    const nextInstallmentNum = paymentHistory.length + 1;
+    const paymentTimestamp = custom_paid_at || new Date().toISOString();
+
+    const newPaymentEntry = {
+      installment: nextInstallmentNum,
+      amount: pNow,
+      paid_at: paymentTimestamp,
+      note: note || `Installment ${nextInstallmentNum}`,
+    };
+
+    paymentHistory.push(newPaymentEntry);
+
+    // Update receipt JSON payload
+    receiptData = {
+      ...receiptData,
+      advancePaidAmount: newPaidAmount,
+      balanceDueAmount: newDueAmount,
+      paymentType: newDueAmount === 0 ? 'FULL' : 'PARTIAL',
+      payment_history: paymentHistory,
+    };
+
+    targetInv.paid_amount = newPaidAmount;
+    targetInv.due_amount = newDueAmount;
+    targetInv.receipt_json_data = receiptData;
+
+    // Update in memory list
+    const memIdx = invoicesList.findIndex((i) => String(i.id) === String(id));
+    if (memIdx >= 0) {
+      invoicesList[memIdx] = targetInv;
+    }
+
+    // 3. Persist update to Supabase PostgreSQL database
+    try {
+      await supabase
+        .from('billing_invoices')
+        .update({
+          paid_amount: newPaidAmount,
+          due_amount: newDueAmount,
+          receipt_json_data: receiptData,
+        })
+        .eq('id', id);
+    } catch (dbErr: any) {
+      console.warn('⚠️ Supabase invoice settlement update warning:', dbErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: newDueAmount === 0 ? `Invoice ${id} fully paid & settled!` : `Payment of ₹${pNow.toLocaleString('en-IN')} recorded successfully`,
+      invoice: targetInv,
+      paid_amount: newPaidAmount,
+      due_amount: newDueAmount,
+      payment_history: paymentHistory,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to record invoice settlement' });
   }
 });
 

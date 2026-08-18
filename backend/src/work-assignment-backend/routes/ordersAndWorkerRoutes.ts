@@ -6,6 +6,7 @@ import { supabase } from '../../config/supabase';
 import { saveFcmToken } from '../../utils/fcmTokenStore';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 import { triggerFcmPushNotification } from '../../utils/pushService';
+import { insertMetalTransactions } from '../../billing-backend/routes/billingRoutes';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -591,13 +592,12 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
     }
 
     const newSubmitted = (submitted === 'yes' || submitted === 'no') ? submitted : (order.submitted || 'no');
-    const newSoldStatus = (sold_status === 'SOLD' || newSubmitted === 'yes' || order.due_amount === 0) ? 'SOLD' : 'DUE';
+    const newSoldStatus = sold_status
+      ? (sold_status === 'SOLD' ? 'SOLD' : 'DUE')
+      : (order.due_amount === 0 ? 'SOLD' : (order.sold_status || 'DUE'));
 
     order.submitted = newSubmitted;
     order.sold_status = newSoldStatus;
-    if (newSoldStatus === 'SOLD') {
-      order.due_amount = 0;
-    }
 
     // Update receipt JSON blob to reflect latest paid_amount, due_amount & installment payment history
     const existingJSON = typeof order.receipt_json_data === 'string'
@@ -669,8 +669,30 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       console.warn('Supabase orders table update notice:', e);
     }
 
-    // 2. When submitted === 'yes' or marked SOLD, also insert into billing_invoices!
+    // 2. When submitted === 'yes' or marked SOLD, also insert into billing_invoices & customer_metal_transactions!
     if (newSubmitted === 'yes' || newSoldStatus === 'SOLD') {
+      if (newSubmitted === 'yes') {
+        try {
+          const orderInvoicePayload = {
+            id: order.id,
+            customer_phone: order.customer_phone,
+            customer_name: order.customer_name,
+            transaction_type: 'ORDER',
+            metal_type: order.metal_type || 'GOLD',
+            product_name: order.item_name || 'Custom Jewelry Order',
+            weight_grams: Number(order.net_weight_grams || order.gross_weight_grams) || 0,
+            final_amount: Number((order as any).total_amount || order.final_amount || order.paid_amount) || 0,
+            purity_percentage: Number(order.touch_percentage) || 91.6,
+            receipt_json_data: updatedReceiptJSON,
+            created_at: new Date().toISOString(),
+          };
+
+          insertMetalTransactions(orderInvoicePayload).catch(() => {});
+        } catch (e) {
+          console.warn('⚠️ customer_metal_transactions order trigger warning:', e);
+        }
+      }
+
       const grossW = order.gross_weight_grams || 0;
       const netW = order.net_weight_grams || grossW;
       const mc = order.making_charges || 0;

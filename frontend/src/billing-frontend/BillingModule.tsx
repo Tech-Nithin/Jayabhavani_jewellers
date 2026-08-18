@@ -514,6 +514,15 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
       return;
     }
 
+    if (paymentType === 'PARTIAL' && parseIndianCurrencyNumber(advancePaidAmount) <= 0) {
+      alert(
+        lang === 'TE'
+          ? "⚠️ బాకీ చెల్లింపు (Partial Payment) ఎంచుకున్నందున, దయచేసి 'అడ్వాన్స్ ₹' మొత్తాన్ని నమోదు చేయండి లేదా 'పూర్తి చెల్లింపు (Full Payment Done)' ని ఎంచుకోండి!"
+          : "⚠️ Partial Payment selected!\n\nPlease enter an advance amount in 'How much are they paying? (Advance ₹)', or select 'Full Payment Done'!"
+      );
+      return;
+    }
+
     setShowConfirmModal(true);
   };
 
@@ -544,6 +553,15 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
     if (invalidDeductionItem) {
       alert(`⚠️ Cannot generate invoice: Deduction weight (${invalidDeductionItem.deduction_weight_grams} g) cannot be greater than Item Weight (${invalidDeductionItem.weight_grams} g) for item "${invalidDeductionItem.product_name || 'Item'}".`);
+      return;
+    }
+
+    if (paymentType === 'PARTIAL' && parseIndianCurrencyNumber(advancePaidAmount) <= 0) {
+      alert(
+        lang === 'TE'
+          ? "⚠️ బాకీ చెల్లింపు (Partial Payment) ఎంచుకున్నందున, దయచేసి 'అడ్వాన్స్ ₹' మొత్తాన్ని నమోదు చేయండి లేదా 'పూర్తి చెల్లింపు (Full Payment Done)' ని ఎంచుకోండి!"
+          : "⚠️ Partial Payment selected!\n\nPlease enter an advance amount in 'How much are they paying? (Advance ₹)', or select 'Full Payment Done'!"
+      );
       return;
     }
 
@@ -608,6 +626,19 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         };
       });
 
+      const grandTotVal = mode === 'BUY' ? totalBuyCredit : mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+      const paidVal = paymentType === 'FULL' ? grandTotVal : Math.min(grandTotVal, parseIndianCurrencyNumber(advancePaidAmount));
+      const dueVal = Math.max(0, grandTotVal - paidVal);
+
+      const initialPaymentHistory = [
+        {
+          installment: 1,
+          amount: paidVal,
+          paid_at: new Date().toISOString(),
+          note: paymentType === 'FULL' ? 'Full Payment Done' : 'Advance / Initial Payment',
+        },
+      ];
+
       const receiptPayload = {
         customer_name: customerName,
         customer_phone: customerPhone,
@@ -618,6 +649,11 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         totalSellValue,
         totalBuyCredit,
         netPayable,
+        paymentType,
+        advancePaidAmount: paidVal,
+        balanceDueAmount: dueVal,
+        grandTotal: grandTotVal,
+        payment_history: initialPaymentHistory,
       };
 
       // If mode === 'ORDER', save directly to orders table ONLY with submitted: 'no'
@@ -658,17 +694,17 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           gross_weight_grams: totalGrossW,
           net_weight_grams: totalNetW,
           touch_percentage: Number(primaryItem?.purity_percentage) || 91.6,
-          making_charges: Number(primaryItem?.making_charges_per_gram) || 0,
-          estimated_delivery_date: new Date().toISOString().split('T')[0],
+          making_charges_per_gram: Number(primaryItem?.making_charges_per_gram) || 0,
+          making_charges_total: Number((primaryItem as any)?.makingVal) || 0,
+          wastage_percentage: Number(primaryItem?.wastage_percent) || 0,
+          total_sell_value: totalSellValue,
+          total_buy_credit: totalBuyCredit,
+          total_amount: grandTotalVal,
           paid_amount: effPaid,
           due_amount: effDue,
-          applied_rate_per_gram: Number(rates?.gold_sell_value) || 0,
-          pure_metal_weight: Number((totalNetW * ((Number(primaryItem?.purity_percentage) || 91.6) / 100)).toFixed(3)),
-          metal_value: totalSellValue,
-          gst_amount: 0,
-          final_amount: grandTotalVal,
-          receipt_json_data: orderReceiptPayload,
+          sold_status: effDue === 0 ? 'SOLD' : 'DUE',
           submitted: 'no',
+          receipt_json_data: orderReceiptPayload,
           image_url: primaryItem?.image_url || '',
           hmw_percentage: Number(primaryItem?.wastage_percent) || 0,
           hmw_weight: Number((totalNetW + (totalNetW * ((Number(primaryItem?.wastage_percent) || 0) / 100))).toFixed(3)),
@@ -722,6 +758,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           purity_percentage: firstItem?.purity_percentage,
           making_charges_per_gram: firstItem?.making_charges_per_gram,
           gst_percent: firstItem?.gst_percent,
+          paid_amount: paidVal,
+          due_amount: dueVal,
           receipt_json_data: receiptPayload,
         }),
       });

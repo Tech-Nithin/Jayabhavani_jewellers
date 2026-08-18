@@ -7,6 +7,13 @@ import { API_BASE } from '../../config/apiConfig';
 import { getTeluguTransliterationSync } from '../../utils/transliterate';
 import { FullImagePreviewModal } from '../../inventory-frontend/components/FullImagePreviewModal';
 
+const parseIndianCurrencyNumber = (val: string | number | undefined | null): number => {
+  if (typeof val === 'number') return val;
+  if (!val) return 0;
+  const cleanStr = String(val).replace(/[^0-9.]/g, '');
+  return parseFloat(cleanStr) || 0;
+};
+
 interface CustomerDirectoryViewProps {
   customers: CustomerDirectoryRecord[];
   rates: GlobalRates | null;
@@ -36,10 +43,10 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     return new URLSearchParams(window.location.search).get('search') || '';
   });
 
-  const [historyTab, setHistoryTab] = useState<'ALL' | 'SELL' | 'BUY' | 'EXCHANGE'>(() => {
+  const [historyTab, setHistoryTab] = useState<'ALL' | 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER'>(() => {
     const params = new URLSearchParams(window.location.search);
     const histParam = (params.get('history') || params.get('tab') || '').toUpperCase();
-    if (histParam === 'SELL' || histParam === 'BUY' || histParam === 'EXCHANGE') return histParam;
+    if (['SELL', 'BUY', 'EXCHANGE', 'ORDER'].includes(histParam)) return histParam as any;
     return 'ALL';
   });
 
@@ -62,6 +69,105 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
 
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDirectoryRecord | null>(null);
   const [activeKpiFilter, setActiveKpiFilter] = useState<null | 'GOLD_SELL' | 'GOLD_BUY' | 'SILVER_SELL' | 'SILVER_BUY'>(null);
+
+  // Settlement Modal State
+  const [settlementModal, setSettlementModal] = useState<{
+    open: boolean;
+    cust: CustomerDirectoryRecord | null;
+    payingNow: string;
+    note: string;
+    customPaidAt: string;
+    isSubmitting: boolean;
+  }>({
+    open: false,
+    cust: null,
+    payingNow: '',
+    note: '',
+    customPaidAt: '',
+    isSubmitting: false,
+  });
+
+  const handleOpenSettlementModal = (cust: CustomerDirectoryRecord) => {
+    const inv = cust.latestInvoice;
+    const receiptData = inv?.receipt_json_data || {};
+    const dueVal = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
+
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    const localIso = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+
+    setSettlementModal({
+      open: true,
+      cust,
+      payingNow: dueVal > 0 ? dueVal.toLocaleString('en-IN') : '',
+      note: '',
+      customPaidAt: localIso,
+      isSubmitting: false,
+    });
+  };
+
+  const handleConfirmSettlement = async () => {
+    if (!settlementModal.cust || !settlementModal.cust.latestInvoice) return;
+    const cust = settlementModal.cust;
+    const inv = cust.latestInvoice;
+    const paidNowNum = parseIndianCurrencyNumber(settlementModal.payingNow);
+
+    if (paidNowNum <= 0) {
+      alert('Please enter a valid payment amount');
+      return;
+    }
+
+    const invId = inv?.id || 'INV';
+    setSettlementModal((prev) => ({ ...prev, isSubmitting: true }));
+    try {
+      const res = await fetch(`${API_BASE}/billing/invoices/${invId}/settlement`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paid_now: paidNowNum,
+          custom_paid_at: settlementModal.customPaidAt ? new Date(settlementModal.customPaidAt).toISOString() : new Date().toISOString(),
+          note: settlementModal.note || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setServerCustomers((prev) =>
+          prev.map((c) => {
+            if ((invId && c.latestInvoice?.id === invId) || c.name === cust.name) {
+              const updatedInv = data.invoice || {
+                ...c.latestInvoice,
+                paid_amount: data.paid_amount,
+                due_amount: data.due_amount,
+                receipt_json_data: {
+                  ...(c.latestInvoice?.receipt_json_data || {}),
+                  advancePaidAmount: data.paid_amount,
+                  balanceDueAmount: data.due_amount,
+                  payment_history: data.payment_history,
+                },
+              };
+              return {
+                ...c,
+                latestInvoice: updatedInv,
+              };
+            }
+            return c;
+          })
+        );
+        setSettlementModal({ open: false, cust: null, payingNow: '', note: '', customPaidAt: '', isSubmitting: false });
+        alert(
+          data.due_amount === 0
+            ? `✅ Invoice ${invId} full payment of ₹${paidNowNum.toLocaleString('en-IN')} received & marked as PAID!`
+            : `ℹ️ Payment installment of ₹${paidNowNum.toLocaleString('en-IN')} recorded successfully! Remaining Due: ₹${Number(data.due_amount).toLocaleString('en-IN')}`
+        );
+      } else {
+        alert('Failed to record payment: ' + (data.message || 'Error'));
+      }
+    } catch (err: any) {
+      alert('Request error: ' + err.message);
+    } finally {
+      setSettlementModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
 
   // Pagination State (persisted in URL query params & localStorage)
   const [currentPage, setCurrentPage] = useState<number>(() => {
@@ -87,6 +193,21 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
   const [serverCustomers, setServerCustomers] = useState<CustomerDirectoryRecord[]>(customers);
   const [serverTotalCount, setServerTotalCount] = useState<number>(customers.length);
   const [loadingRecords, setLoadingRecords] = useState(false);
+
+  const [backendKpiSummary, setBackendKpiSummary] = useState<any>(null);
+
+  const fetchKpiSummary = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.set('from', startDate);
+      if (endDate) params.set('to', endDate);
+      const res = await fetch(`${API_BASE}/billing/kpi-summary?${params.toString()}`);
+      const data = await res.json();
+      if (data.success && data.summary) {
+        setBackendKpiSummary(data.summary);
+      }
+    } catch (e) { }
+  };
 
   // Fetch on-demand records from backend PostgreSQL database based on limit & page
   const fetchOnDemand = async () => {
@@ -115,6 +236,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
 
   useEffect(() => {
     fetchOnDemand();
+    fetchKpiSummary();
   }, [pageSize, currentPage, search, historyTab, startDate, endDate]);
 
   // Handle Chrome swipe gestures & browser Back/Forward navigation in CustomerDirectoryView
@@ -122,7 +244,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
       const histParam = (params.get('history') || 'all').toUpperCase();
-      if (['ALL', 'SELL', 'BUY', 'EXCHANGE'].includes(histParam)) {
+      if (['ALL', 'SELL', 'BUY', 'EXCHANGE', 'ORDER'].includes(histParam)) {
         setHistoryTab(histParam as any);
       }
       setSearch(params.get('search') || '');
@@ -187,11 +309,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     return { dateStr, timeStr };
   };
 
-  const getCustomerMode = (cust: CustomerDirectoryRecord): 'SELL' | 'BUY' | 'EXCHANGE' => {
+  const getCustomerMode = (cust: CustomerDirectoryRecord): 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER' => {
     const inv = cust.latestInvoice;
-    const jsonMode = inv?.receipt_json_data?.transaction_type;
+    const jsonMode = inv?.receipt_json_data?.transaction_type || inv?.receipt_json_data?.mode;
     const invMode = inv?.transaction_type;
     const rawMode = (jsonMode || invMode || 'SELL').toUpperCase();
+
+    if (rawMode === 'ORDER') return 'ORDER';
 
     const items = inv?.receipt_json_data?.items || [];
     const hasBuy = items.some((i: any) => i.item_type === 'BUY');
@@ -202,7 +326,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     return 'SELL';
   };
 
-  const filtered = customers.filter((c) => {
+  const displayCustomersList = serverCustomers && serverCustomers.length > 0 ? serverCustomers : customers;
+
+  const filtered = displayCustomersList.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.toLowerCase().includes(search.toLowerCase());
@@ -221,18 +347,21 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     // KPI card filter: check for matching metal + item_type in receipt items
     if (activeKpiFilter) {
       const [kpiMetal, kpiType] = activeKpiFilter.split('_'); // e.g. ['GOLD','SELL']
-      const invItems: any[] = c.latestInvoice?.receipt_json_data?.items || [];
+      let rawData = c.latestInvoice?.receipt_json_data;
+      if (typeof rawData === 'string') {
+        try { rawData = JSON.parse(rawData); } catch (e) { rawData = {}; }
+      }
+      const invItems: any[] = Array.isArray(rawData?.items) ? rawData.items : [];
       if (invItems.length > 0) {
         const hasMatch = invItems.some((i: any) =>
           (i.metal_type || '').toUpperCase() === kpiMetal &&
-          (i.item_type || '').toUpperCase() === kpiType
+          (i.item_type || (c.latestInvoice?.transaction_type || 'SELL')).toUpperCase() === kpiType
         );
         if (!hasMatch) return false;
       } else if (c.latestInvoice) {
         const inv = c.latestInvoice;
         const metal = (inv.metal_type || '').toUpperCase();
         const txn = (inv.transaction_type || '').toUpperCase();
-        // Include exchange bills that contain the matching metal
         if (metal !== kpiMetal) return false;
         if (txn !== kpiType && txn !== 'EXCHANGE') return false;
       } else {
@@ -243,28 +372,33 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     return true;
   });
 
-  // ── Reactive KPI Aggregation (derived from filtered records) ──
-  const kpi = filtered.reduce(
+  // ── Reactive KPI Aggregation (derived from customer_metal_transactions or filtered records) ──
+  const localKpi = filtered.reduce(
     (acc, c) => {
-      const items: any[] = c.latestInvoice?.receipt_json_data?.items || [];
+      let rawData = c.latestInvoice?.receipt_json_data;
+      if (typeof rawData === 'string') {
+        try { rawData = JSON.parse(rawData); } catch (e) { rawData = {}; }
+      }
+      const items: any[] = Array.isArray(rawData?.items) ? rawData.items : [];
       const finalAmt = Number(c.latestInvoice?.final_amount || 0);
 
       if (items.length > 0) {
         items.forEach((item: any) => {
           const w = Number(item.weight_grams) || 0;
-          const metal = (item.metal_type || '').toUpperCase();
-          const type = (item.item_type || '').toUpperCase();
-          const purity = Number(item.purity_percentage) || 0;
+          const metal = (item.metal_type || c.latestInvoice?.metal_type || 'GOLD').toUpperCase();
+          const type = (item.item_type || c.latestInvoice?.transaction_type || 'SELL').toUpperCase();
+          const purity = Number(item.purity_percentage || c.latestInvoice?.purity_percentage) || 0;
           const pureW = Number(item.pureWeight || item.pure_weight_grams || (w * (purity / 100))) || 0;
 
           // Compute or fallback amount
+          const storedRate = Number(item.applied_rate_per_gram || item.appliedRate || item.custom_rate_per_gram || item.customRate || item.rate || 0);
           let amt = Number(item.lineTotal || item.line_total || 0);
           if (!amt && rates) {
             const isGold = metal === 'GOLD';
             const isSell = type === 'SELL';
-            const rate = isGold
+            const rate = storedRate > 0 ? storedRate : (isGold
               ? (isSell ? rates.gold_sell_value : rates.gold_buy_value)
-              : (isSell ? rates.silver_sell_value : rates.silver_buy_value);
+              : (isSell ? rates.silver_sell_value : rates.silver_buy_value));
             const wUsed = isSell ? w : pureW;
             const mVal = wUsed * rate;
             const mChg = isSell ? Number(item.making_charges_per_gram || 0) : 0;
@@ -279,14 +413,14 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           if (metal === 'GOLD' && type === 'SELL') {
             acc.goldSoldWeight += w;
             acc.goldSoldAmount += amt;
-          } else if (metal === 'GOLD' && type === 'BUY') {
+          } else if (metal === 'GOLD' && (type === 'BUY' || type === 'EXCHANGE')) {
             acc.goldBoughtWeight += w;
             acc.goldBoughtAmount += amt;
             acc.goldBoughtPurityWeightedSum += purity * w;
           } else if (metal === 'SILVER' && type === 'SELL') {
             acc.silverSoldWeight += w;
             acc.silverSoldAmount += amt;
-          } else if (metal === 'SILVER' && type === 'BUY') {
+          } else if (metal === 'SILVER' && (type === 'BUY' || type === 'EXCHANGE')) {
             acc.silverBoughtWeight += w;
             acc.silverBoughtAmount += amt;
             acc.silverBoughtPurityWeightedSum += purity * w;
@@ -301,12 +435,12 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
 
         if (metal === 'GOLD' && txn === 'SELL') {
           acc.goldSoldWeight += w; acc.goldSoldAmount += finalAmt;
-        } else if (metal === 'GOLD' && txn === 'BUY') {
+        } else if (metal === 'GOLD' && (txn === 'BUY' || txn === 'EXCHANGE')) {
           acc.goldBoughtWeight += w; acc.goldBoughtAmount += finalAmt;
           acc.goldBoughtPurityWeightedSum += purity * w;
         } else if (metal === 'SILVER' && txn === 'SELL') {
           acc.silverSoldWeight += w; acc.silverSoldAmount += finalAmt;
-        } else if (metal === 'SILVER' && txn === 'BUY') {
+        } else if (metal === 'SILVER' && (txn === 'BUY' || txn === 'EXCHANGE')) {
           acc.silverBoughtWeight += w; acc.silverBoughtAmount += finalAmt;
           acc.silverBoughtPurityWeightedSum += purity * w;
         }
@@ -321,13 +455,16 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     }
   );
 
+  const kpi = backendKpiSummary || localKpi;
+
   const goldBoughtAvgPurity = kpi.goldBoughtWeight > 0 ? kpi.goldBoughtPurityWeightedSum / kpi.goldBoughtWeight : 0;
   const silverBoughtAvgPurity = kpi.silverBoughtWeight > 0 ? kpi.silverBoughtPurityWeightedSum / kpi.silverBoughtWeight : 0;
 
-  const totalBillsCount = filtered.length;
-  const sellBillsCount = filtered.filter(c => (c.latestInvoice?.transaction_type || '').toUpperCase() === 'SELL').length;
-  const buyBillsCount = filtered.filter(c => (c.latestInvoice?.transaction_type || '').toUpperCase() === 'BUY').length;
-  const exchangeBillsCount = filtered.filter(c => (c.latestInvoice?.transaction_type || '').toUpperCase() === 'EXCHANGE').length;
+  const totalBillsCount = displayCustomersList.length;
+  const sellBillsCount = displayCustomersList.filter(c => getCustomerMode(c) === 'SELL').length;
+  const buyBillsCount = displayCustomersList.filter(c => getCustomerMode(c) === 'BUY').length;
+  const exchangeBillsCount = displayCustomersList.filter(c => getCustomerMode(c) === 'EXCHANGE').length;
+  const orderBillsCount = displayCustomersList.filter(c => getCustomerMode(c) === 'ORDER').length;
 
   const fmtW = (w: number) => w > 0 ? `${w.toFixed(1)}g` : '0g';
   const fmtAmt = (a: number) => a > 0 ? `₹${a.toLocaleString('en-IN')}` : '₹0';
@@ -890,6 +1027,29 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             <i className="fa-solid fa-rotate" style={{ fontSize: '0.74rem' }}></i>
             {t.exchangeFilter} ({exchangeBillsCount})
           </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryTab('ORDER')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: historyTab === 'ORDER' ? '#ffffff' : 'transparent',
+              color: historyTab === 'ORDER' ? '#15803d' : '#64748b',
+              fontWeight: historyTab === 'ORDER' ? 700 : 600,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              boxShadow: historyTab === 'ORDER' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <i className="fa-solid fa-clipboard-list" style={{ fontSize: '0.74rem' }}></i>
+            Order ({orderBillsCount})
+          </button>
         </div>
       </div>
 
@@ -1038,25 +1198,26 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
         <table className="customer-history-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f4ede4', borderBottom: '1px solid #e6decb', color: '#4a3e35', fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
-              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}>{t.thMode}</th>
-              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '14%' }}>{t.thDateTime}</th>
-              <th className="col-customer" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '24%' }}>{t.thCustomer}</th>
-              <th className="col-product" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '28%' }}>{t.thProduct}</th>
-              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '11%' }}>{t.thWeight}</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '13%' }}>{t.thFinalAmount}</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '9%' }}>{t.thMode}</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '13%' }}>{t.thDateTime}</th>
+              <th className="col-customer" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '22%' }}>{t.thCustomer}</th>
+              <th className="col-product" style={{ padding: '0.65rem 0.75rem', textAlign: 'left', width: '25%' }}>{t.thProduct}</th>
+              <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '10%' }}>{t.thWeight}</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}>STATUS</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '11%' }}>{t.thFinalAmount}</th>
             </tr>
           </thead>
           <tbody>
             {loadingRecords ? (
               <tr>
-                <td colSpan={6} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#6366f1' }}>
+                <td colSpan={7} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#6366f1' }}>
                   <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', marginBottom: '8px', display: 'block', color: '#6366f1' }}></i>
                   <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>Fetching records from database...</span>
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
+                <td colSpan={7} style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
                   <i className="fa-solid fa-user-slash" style={{ fontSize: '1.3rem', marginBottom: '6px', display: 'block', color: '#cbd5e1' }}></i>
                   No customer records found in {historyTab} history.
                 </td>
@@ -1089,9 +1250,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                           borderRadius: '5px',
                           fontSize: '0.62rem',
                           fontWeight: 600,
-                          background: mode === 'SELL' ? '#fef3c7' : mode === 'BUY' ? '#e0f2fe' : '#f3e8ff',
-                          color: mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#6d28d9',
-                          border: mode === 'SELL' ? '1px solid #fde68a' : mode === 'BUY' ? '1px solid #bae6fd' : '1px solid #e9d5ff',
+                          background: mode === 'SELL' ? '#fef3c7' : mode === 'BUY' ? '#e0f2fe' : mode === 'ORDER' ? '#dcfce7' : '#f3e8ff',
+                          color: mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : mode === 'ORDER' ? '#15803d' : '#6d28d9',
+                          border: mode === 'SELL' ? '1px solid #fde68a' : mode === 'BUY' ? '1px solid #bae6fd' : mode === 'ORDER' ? '1px solid #86efac' : '1px solid #e9d5ff',
                           display: 'inline-block',
                         }}
                       >
@@ -1163,6 +1324,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                     const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
                                     const itemType = (item.item_type || mode).toUpperCase();
                                     const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
+                                    const itemRate = Number(item.applied_rate_per_gram || item.appliedRate || item.custom_rate_per_gram || item.customRate || item.rate || (cust.latestInvoice as any)?.applied_rate_per_gram || 0);
 
                                     return (
                                       <div key={i} style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
@@ -1180,6 +1342,11 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                           {itemMetal}
                                         </span>
                                         <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
+                                        {itemRate > 0 && (
+                                          <span style={{ fontSize: '0.66rem', color: '#0284c7', fontWeight: 700 }}>
+                                            (@ ₹{itemRate.toLocaleString('en-IN')}/g)
+                                          </span>
+                                        )}
                                         {mode === 'EXCHANGE' && (
                                           <span
                                             style={{
@@ -1249,7 +1416,53 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       })()}
                     </td>
 
-                    {/* 5. Final Amount (Normal font weight) */}
+                    {/* 5. PAYMENT STATUS Column (Paid vs Due + Paid? Settlement Button) */}
+                    {(() => {
+                      const inv = cust.latestInvoice;
+                      const receiptData = inv?.receipt_json_data || {};
+                      const grandTotalVal = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+                      const dueAmount = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
+                      const paidAmount = inv?.paid_amount !== undefined ? Number(inv.paid_amount) : Number(receiptData?.advancePaidAmount || grandTotalVal);
+                      const isDue = dueAmount > 0;
+
+                      return (
+                        <td style={{ padding: '0.65rem 0.5rem', verticalAlign: 'middle', textAlign: 'center' }}>
+                          {!isDue ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 8px', borderRadius: '10px', background: '#dcfce7', color: '#15803d', fontWeight: 800, fontSize: '0.68rem' }}>
+                              <i className="fa-solid fa-circle-check"></i> Paid
+                            </span>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                              <div style={{ display: 'inline-flex', gap: '3px', background: '#f1f5f9', padding: '2px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                                <span style={{ padding: '3px 6px', borderRadius: '4px', background: '#d97706', color: '#ffffff', fontSize: '0.68rem', fontWeight: 800 }}>
+                                  Due
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenSettlementModal(cust);
+                                  }}
+                                  style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', background: '#ffffff', color: '#16a34a', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+                                >
+                                  Paid?
+                                </button>
+                              </div>
+
+                              <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '2px', textAlign: 'center' }}>
+                                <span style={{ color: '#16a34a' }}>Paid: ₹{paidAmount.toLocaleString('en-IN')}</span>
+                                {dueAmount > 0 && (
+                                  <span style={{ color: '#dc2626', marginLeft: '4px', fontWeight: 800 }}>Due: ₹{dueAmount.toLocaleString('en-IN')}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })()}
+
+
+                    {/* 6. Final Amount (Normal font weight) */}
                     {(() => {
                       const inv = cust.latestInvoice;
                       const txnType = (inv?.transaction_type || mode).toUpperCase();
@@ -1271,6 +1484,51 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                         </td>
                       );
                     })()}
+
+                    {/* 6. PAYMENT STATUS Column (Paid vs Due + Paid? Settlement Button) */}
+                    {/* {(() => {
+                      const inv = cust.latestInvoice;
+                      const receiptData = inv?.receipt_json_data || {};
+                      const grandTotalVal = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+                      const dueAmount = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
+                      const paidAmount = inv?.paid_amount !== undefined ? Number(inv.paid_amount) : Number(receiptData?.advancePaidAmount || grandTotalVal);
+                      const isDue = dueAmount > 0;
+
+                      return (
+                        <td style={{ padding: '0.65rem 0.5rem', verticalAlign: 'middle', textAlign: 'center' }}>
+                          {!isDue ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 8px', borderRadius: '10px', background: '#dcfce7', color: '#15803d', fontWeight: 800, fontSize: '0.68rem' }}>
+                              <i className="fa-solid fa-circle-check"></i> Paid
+                            </span>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                              <div style={{ display: 'inline-flex', gap: '3px', background: '#f1f5f9', padding: '2px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                                <span style={{ padding: '3px 6px', borderRadius: '4px', background: '#d97706', color: '#ffffff', fontSize: '0.68rem', fontWeight: 800 }}>
+                                  Due
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenSettlementModal(cust);
+                                  }}
+                                  style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', background: '#ffffff', color: '#16a34a', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+                                >
+                                  Paid?
+                                </button>
+                              </div>
+
+                              <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '2px', textAlign: 'center' }}>
+                                <span style={{ color: '#16a34a' }}>Paid: ₹{paidAmount.toLocaleString('en-IN')}</span>
+                                {dueAmount > 0 && (
+                                  <span style={{ color: '#dc2626', marginLeft: '4px', fontWeight: 800 }}>Due: ₹{dueAmount.toLocaleString('en-IN')}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })()} */}
 
 
 
@@ -1402,6 +1660,194 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           title={previewImage.title}
           onClose={() => setPreviewImage(null)}
         />
+      )}
+
+      {/* ── INVOICE SETTLEMENT MODAL (UPGRADE / INSTALLMENT PAYMENT) ── */}
+      {settlementModal.open && settlementModal.cust && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #cbd5e1',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              width: '100%',
+              maxWidth: '480px',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', padding: '1rem 1.25rem', borderBottom: '1px solid #fcd34d', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="fa-solid fa-credit-card"></i> Record Installment Payment
+                </h3>
+                <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600 }}>
+                  Customer: <strong>{settlementModal.cust.name}</strong> ({settlementModal.cust.phone})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettlementModal({ open: false, cust: null, payingNow: '', note: '', customPaidAt: '', isSubmitting: false })}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', color: '#92400e', cursor: 'pointer' }}
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {(() => {
+                const inv = settlementModal.cust.latestInvoice;
+                const receiptData = inv?.receipt_json_data || {};
+                const totalGrand = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+                const currentDue = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
+                const currentPaid = inv?.paid_amount !== undefined ? Number(inv.paid_amount) : Number(receiptData?.advancePaidAmount || totalGrand);
+
+                const paidNowNum = parseIndianCurrencyNumber(settlementModal.payingNow);
+                const newRemainingDue = Math.max(0, currentDue - paidNowNum);
+                const newTotalPaid = currentPaid + paidNowNum;
+
+                const paymentHistory: any[] = Array.isArray(receiptData?.payment_history) ? receiptData.payment_history : [];
+
+                return (
+                  <>
+                    {/* Summary Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', background: '#f8fafc', padding: '0.75rem', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                      <div>
+                        <span style={{ fontSize: '0.62rem', color: '#64748b', fontWeight: 700, display: 'block' }}>TOTAL BILL</span>
+                        <strong style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 800 }}>₹{totalGrand.toLocaleString('en-IN')}</strong>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 700, display: 'block' }}>PAID SO FAR</span>
+                        <strong style={{ fontSize: '0.85rem', color: '#16a34a', fontWeight: 800 }}>₹{currentPaid.toLocaleString('en-IN')}</strong>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.62rem', color: '#dc2626', fontWeight: 700, display: 'block' }}>BALANCE DUE</span>
+                        <strong style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: 800 }}>₹{currentDue.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+
+                    {/* Payment Input */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
+                        Amount Paying Today (₹):
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Enter payment amount e.g. 10,000"
+                        value={settlementModal.payingNow}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const num = parseIndianCurrencyNumber(raw);
+                          setSettlementModal((prev) => ({
+                            ...prev,
+                            payingNow: num > 0 ? num.toLocaleString('en-IN') : raw,
+                          }));
+                        }}
+                        style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '8px', border: '1.5px solid #d97706', fontSize: '1rem', fontWeight: 800, color: '#b45309', outline: 'none', background: '#fffbeb' }}
+                      />
+                    </div>
+
+                    {/* Payment Date & Time Input */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Payment Date & Time:
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settlementModal.customPaidAt}
+                        onChange={(e) => setSettlementModal((prev) => ({ ...prev, customPaidAt: e.target.value }))}
+                        style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem', fontWeight: 600, color: '#0f172a', outline: 'none' }}
+                      />
+                    </div>
+
+                    {/* Calculation Real-Time Summary */}
+                    <div style={{ background: newRemainingDue === 0 ? '#dcfce7' : '#fef3c7', border: newRemainingDue === 0 ? '1px solid #86efac' : '1px solid #fde68a', borderRadius: '8px', padding: '0.65rem 0.85rem', fontSize: '0.78rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
+                        <span>New Paid Total:</span>
+                        <span style={{ color: '#16a34a' }}>₹{newTotalPaid.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: newRemainingDue === 0 ? '#15803d' : '#b45309', fontWeight: 800, marginTop: '2px' }}>
+                        <span>Remaining Balance Due:</span>
+                        <span>₹{newRemainingDue.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+
+                    {/* Payment Installments Timeline History */}
+                    {paymentHistory.length > 0 && (
+                      <div style={{ marginTop: '0.2rem', paddingTop: '0.6rem', borderTop: '1px dashed #cbd5e1' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <i className="fa-solid fa-clock-rotate-left" style={{ color: '#0284c7' }}></i>
+                          Payment Installments History ({paymentHistory.length}):
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
+                          {paymentHistory.map((ph: any, pIdx: number) => {
+                            const pDate = ph.paid_at ? new Date(ph.paid_at).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
+                            return (
+                              <div key={pIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '4px 8px', borderRadius: '6px', fontSize: '0.70rem', border: '1px solid #e2e8f0' }}>
+                                <span style={{ fontWeight: 700, color: '#334155' }}>
+                                  #{ph.installment || pIdx + 1} ({ph.note || 'Payment'}):
+                                </span>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  <span style={{ color: '#64748b', fontSize: '0.65rem' }}>{pDate}</span>
+                                  <strong style={{ color: '#16a34a' }}>₹{Number(ph.amount || 0).toLocaleString('en-IN')}</strong>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Modal Buttons */}
+              <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setSettlementModal({ open: false, cust: null, payingNow: '', note: '', customPaidAt: '', isSubmitting: false })}
+                  style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={settlementModal.isSubmitting || parseIndianCurrencyNumber(settlementModal.payingNow) <= 0}
+                  onClick={handleConfirmSettlement}
+                  style={{
+                    flex: 1.5,
+                    padding: '0.6rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    cursor: settlementModal.isSubmitting ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(22, 163, 74, 0.3)',
+                  }}
+                >
+                  {settlementModal.isSubmitting ? 'Recording Payment...' : 'Record Payment Now'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

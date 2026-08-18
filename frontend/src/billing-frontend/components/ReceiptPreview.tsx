@@ -256,7 +256,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
     const isGold = (item.metal_type || '').toUpperCase() === 'GOLD';
     const isSell = (item.item_type || '').toUpperCase() === 'SELL';
     const isOrderMode = mode === 'ORDER';
-    const customRate = Number(item.custom_rate_per_gram || item.customRate || item.appliedRate);
+    const customRate = Number(item.applied_rate_per_gram || item.appliedRate || item.custom_rate_per_gram || item.customRate || item.rate);
     const defaultRate = isGold
       ? (isSell ? rates?.gold_sell_value || 0 : rates?.gold_buy_value || 0)
       : (isSell ? rates?.silver_sell_value || 0 : rates?.silver_buy_value || 0);
@@ -680,7 +680,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               </div>
               {paymentHistory.map((ph: any, pIdx: number) => (
                 <div key={pIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', padding: '1px 0' }}>
-                  <span>#{pIdx + 1} {formatReceiptDateTime(ph.date)} ({ph.type || 'Payment'}):</span>
+                  <span>#{ph.installment || pIdx + 1} {formatReceiptDateTime(ph.paid_at || ph.date)} ({ph.note || ph.type || 'Payment'}):</span>
                   <strong style={{ color: '#16a34a' }}>+ ₹{(Number(ph.amount) || 0).toLocaleString('en-IN')}</strong>
                 </div>
               ))}

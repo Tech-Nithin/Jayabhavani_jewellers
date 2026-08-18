@@ -26,6 +26,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToStore,
   activeModule = 'billing',
 }) => {
+  const width = useWindowWidth();
+  const isTabletOrMobile = width < 1024;
+  const isMobileScreen = width < 768;
+
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'workers'>(activeModule as any);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -39,13 +43,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return 'EN';
   });
 
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem('jbj_sidebar_collapsed');
+    return saved === null ? true : saved === 'true';
+  });
+
+  const toggleSidebarCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('jbj_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
+  const effectiveCollapsed = !isTabletOrMobile && isCollapsed;
+
   // Silence unused state check
   void setGlobalSearch;
   void onBackToStore;
-
-  const width = useWindowWidth();
-  const isTabletOrMobile = width < 1024;
-  const isMobileScreen = width < 768;
 
   // Sync tab & language with URL and localStorage & handle popstate swipe gestures
   useEffect(() => {
@@ -92,13 +107,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const t = translations[lang];
 
-  const navItems = [
+  const navItems: Array<{ id: string; label: string; icon: string; imgSrc?: string }> = [
     { id: 'dashboard', label: t.dashboard, icon: 'fa-solid fa-chart-pie' },
-    { id: 'billing', label: t.billing, icon: 'fa-solid fa-cash-register' },
-    { id: 'orders', label: lang === 'TE' ? 'ఆర్డర్లు' : 'Orders', icon: 'fa-solid fa-cart-flatbed' },
-    { id: 'workers', label: t.workAssignment, icon: 'fa-solid fa-clipboard-list' },
-    { id: 'finance', label: t.finance, icon: 'fa-solid fa-scale-balanced' },
-    { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-boxes-stacked' },
+    { id: 'billing', label: t.billing, icon: 'fa-solid fa-receipt' },
+    { id: 'orders', label: lang === 'TE' ? 'ఆర్డర్లు' : 'Orders', icon: 'fa-solid fa-dolly' },
+    { id: 'workers', label: t.workAssignment, icon: 'fa-solid fa-users-gear' },
+    { id: 'finance', label: t.finance, icon: 'fa-solid fa-hand-holding-dollar' },
+    { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-store' },
   ];
 
   return (
@@ -312,13 +327,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* 3. Full Sidebar Panel (Sticky on PC, Fixed Overlay Drawer on Tablet & Mobile) */}
       <aside
         style={{
-          width: '240px',
+          width: effectiveCollapsed ? '72px' : '240px',
           background: '#181310',
           borderRight: '1px solid #2b2019',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          padding: '1.25rem 1rem',
+          padding: effectiveCollapsed ? '1.25rem 0.5rem' : '1.25rem 1rem',
           position: isTabletOrMobile ? 'fixed' : 'sticky',
           top: 0,
           left: 0,
@@ -326,29 +341,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           zIndex: isTabletOrMobile ? 100 : 50,
           transform: isTabletOrMobile ? (mobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
           boxShadow: isTabletOrMobile && mobileMenuOpen ? '0 20px 40px rgba(0,0,0,0.35)' : 'none',
-          transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         <div>
-          {/* Brand Logo Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingLeft: '0.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Brand Logo Header & Collapse Toggle */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: effectiveCollapsed ? 'center' : 'space-between',
+              marginBottom: '1.5rem',
+              paddingLeft: effectiveCollapsed ? 0 : '0.25rem',
+              position: 'relative',
+            }}
+          >
+            <div
+              onClick={() => {
+                if (!isTabletOrMobile) toggleSidebarCollapse();
+              }}
+              title={effectiveCollapsed ? 'Click to expand sidebar' : 'Jaya Bhavani Jewellers'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: !isTabletOrMobile ? 'pointer' : 'default',
+              }}
+            >
               <img
                 src="/JB_logo_mobile.png"
                 alt="Jaya Bhavani Jewellers Logo"
                 style={{
-                  width: '46px',
-                  height: '46px',
+                  width: effectiveCollapsed ? '38px' : '46px',
+                  height: effectiveCollapsed ? '38px' : '46px',
                   objectFit: 'contain',
+                  transition: 'all 0.2s ease',
                 }}
               />
-              <div>
-                <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#fffefb', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
-                  Jaya Bhavani
-                </h1>
-                <span style={{ fontSize: '0.68rem', color: '#c59b27', fontWeight: 700, letterSpacing: '0.5px' }}>JEWELLERS SHOWROOM</span>
-              </div>
+              {!effectiveCollapsed && (
+                <div>
+                  <h1 style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.1rem', color: '#fffefb', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
+                    Jaya Bhavani
+                  </h1>
+                  <span style={{ fontSize: '0.68rem', color: '#c59b27', fontWeight: 700, letterSpacing: '0.5px' }}>JEWELLERS SHOWROOM</span>
+                </div>
+              )}
             </div>
+
+            {/* Desktop Collapse/Expand Button */}
+            {!isTabletOrMobile && (
+              <button
+                type="button"
+                onClick={toggleSidebarCollapse}
+                title={effectiveCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+                style={{
+                  background: '#2b2019',
+                  border: '1px solid #3d2f25',
+                  color: '#fbbf24',
+                  borderRadius: '6px',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '0.72rem',
+                  transition: 'all 0.15s ease',
+                  marginLeft: effectiveCollapsed ? 0 : '6px',
+                }}
+              >
+                <i className={`fa-solid fa-angles-${effectiveCollapsed ? 'right' : 'left'}`}></i>
+              </button>
+            )}
 
             {/* Close button for overlay drawer */}
             {isTabletOrMobile && (
@@ -365,25 +429,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Primary Action Button (+ New Bill) */}
           <button
             onClick={() => handleTabChange('billing')}
+            title={effectiveCollapsed ? 'Create New Bill' : undefined}
             style={{
               width: '100%',
-              padding: '0.75rem',
+              padding: effectiveCollapsed ? '0.65rem 0' : '0.75rem',
               borderRadius: '12px',
               border: 'none',
               background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
               color: '#ffffff',
               fontWeight: 700,
-              fontSize: '0.85rem',
+              fontSize: effectiveCollapsed ? '1rem' : '0.85rem',
               cursor: 'pointer',
               boxShadow: '0 6px 18px rgba(180, 83, 9, 0.35)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '8px',
+              gap: effectiveCollapsed ? 0 : '8px',
               marginBottom: '1.5rem',
+              transition: 'all 0.2s ease',
             }}
           >
-            <i className="fa-solid fa-plus"></i> Create New Bill
+            <i className="fa-solid fa-plus"></i> {!effectiveCollapsed && 'Create New Bill'}
           </button>
 
           {/* Navigation Links */}
@@ -394,9 +460,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   key={item.id}
                   onClick={() => handleTabChange(item.id as any)}
+                  title={effectiveCollapsed ? item.label : undefined}
                   style={{
                     width: '100%',
-                    padding: '0.7rem 0.85rem',
+                    padding: effectiveCollapsed ? '0.75rem 0' : '0.7rem 0.85rem',
                     borderRadius: '10px',
                     border: 'none',
                     background: active ? '#2b2019' : 'transparent',
@@ -406,13 +473,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
+                    justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
+                    gap: effectiveCollapsed ? 0 : '10px',
                     transition: 'all 0.15s ease',
                     borderLeft: active ? '3px solid #d97706' : '3px solid transparent',
                   }}
                 >
-                  <i className={item.icon} style={{ fontSize: '1rem', width: '18px', textAlign: 'center', color: active ? '#fbbf24' : '#a39284' }}></i>
-                  {item.label}
+                  {item.imgSrc ? (
+                    <img
+                      src={item.imgSrc}
+                      alt={item.label}
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        objectFit: 'contain',
+                        filter: active ? 'brightness(0) invert(1)' : 'brightness(0) invert(0.7) sepia(0.3)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    />
+                  ) : (
+                    <i className={item.icon} style={{ fontSize: '1.05rem', width: effectiveCollapsed ? 'auto' : '20px', textAlign: 'center', color: active ? '#fbbf24' : '#a39284' }}></i>
+                  )}
+                  {!effectiveCollapsed && item.label}
                 </button>
               );
             })}
@@ -424,9 +506,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <button
             type="button"
             onClick={() => setSettingsOpen(!settingsOpen)}
+            title={effectiveCollapsed ? 'Account Settings' : undefined}
             style={{
               width: '100%',
-              padding: '0.7rem 0.85rem',
+              padding: effectiveCollapsed ? '0.75rem 0' : '0.7rem 0.85rem',
               borderRadius: '11px',
               border: '1px solid #3d2f25',
               background: settingsOpen ? '#2b2019' : '#1f1915',
@@ -436,15 +519,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              justifyContent: effectiveCollapsed ? 'center' : 'space-between',
               transition: 'all 0.15s ease',
             }}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: effectiveCollapsed ? 0 : '8px' }}>
               <i className="fa-solid fa-gear" style={{ transform: settingsOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease', color: '#d97706', fontSize: '0.95rem' }}></i>
-              Account Settings
+              {!effectiveCollapsed && 'Account Settings'}
             </span>
-            <i className={`fa-solid fa-chevron-${settingsOpen ? 'down' : 'up'}`} style={{ fontSize: '0.7rem', opacity: 0.7 }}></i>
+            {!effectiveCollapsed && (
+              <i className={`fa-solid fa-chevron-${settingsOpen ? 'down' : 'up'}`} style={{ fontSize: '0.7rem', opacity: 0.7 }}></i>
+            )}
           </button>
 
           {/* Settings Dropdown Popover (Appears above bottom button) */}

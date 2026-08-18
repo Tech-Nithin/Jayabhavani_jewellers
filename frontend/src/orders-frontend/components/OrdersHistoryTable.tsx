@@ -382,7 +382,7 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
 
                 <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                    {ord.sold_status === 'SOLD' || ord.submitted === 'yes' ? (
+                    {ord.sold_status === 'SOLD' || (ord.due_amount !== undefined && Number(ord.due_amount) === 0) ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 8px', borderRadius: '10px', background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '0.68rem' }}>
                         <i className="fa-solid fa-circle-check"></i> Paid
                       </span>
