@@ -323,3 +323,20 @@ CREATE INDEX IF NOT EXISTS idx_workers_status ON public.workers(status);
 
 -- 7. Metal Rate History Index
 CREATE INDEX IF NOT EXISTS idx_metal_history_updated_at ON public.metal_history_rates(updated_at DESC);
+
+-- ── APP VERSIONS PERSISTENCE TABLE (AUTOSYNCED BY GITHUB ACTIONS ON MAIN BRANCH PUSH) ──
+CREATE TABLE IF NOT EXISTS public.app_versions (
+  app_id TEXT PRIMARY KEY,
+  version_code INT NOT NULL,
+  version_name TEXT NOT NULL,
+  apk_url TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed initial records if empty
+INSERT INTO public.app_versions (app_id, version_code, version_name, apk_url)
+VALUES 
+  ('ADMIN', 1, '1.0.0', 'https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniAdmin.apk'),
+  ('WORKER', 1, '1.0.0', 'https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniWorker.apk')
+ON CONFLICT (app_id) DO NOTHING;
+

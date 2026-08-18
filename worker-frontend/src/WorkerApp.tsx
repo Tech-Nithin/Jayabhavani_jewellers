@@ -18,6 +18,7 @@ import { ProfileViewModal } from './components/modals/ProfileViewModal';
 import { EditMessageModal } from './components/modals/EditMessageModal';
 import { EditHistoryModal } from './components/modals/EditHistoryModal';
 import { NewTransactionModal } from './components/modals/NewTransactionModal';
+import { AppUpdateModal } from './components/AppUpdateModal';
 
 import { API_BASE } from './config/apiConfig';
 import { mergeTransactions } from './utils/chatCache';
@@ -515,6 +516,7 @@ export default function WorkerApp() {
 
   return (
     <div className="wa-app-root">
+      <AppUpdateModal />
       <WhatsAppHeader
         worker={worker}
         isOnline={isOnline}

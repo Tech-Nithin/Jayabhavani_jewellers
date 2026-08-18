@@ -921,10 +921,45 @@ router.post('/register-fcm-token', async (req: Request, res: Response) => {
       await saveFcmToken(targetId, role === 'ADMIN' ? 'ADMIN' : 'WORKER', String(fcmToken));
       return res.json({ success: true, message: 'FCM token registered successfully' });
     }
-    return res.status(400).json({ success: false, message: 'Missing userId or fcmToken' });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
   }
+});
+
+// GET /api/work-assignment/app-version?app=WORKER or ?app=ADMIN
+router.get('/app-version', async (req: Request, res: Response) => {
+  try {
+    const appId = String(req.query.app || 'ADMIN').toUpperCase();
+    const targetId = appId === 'WORKER' ? 'WORKER' : 'ADMIN';
+
+    const { data, error } = await supabase
+      .from('app_versions')
+      .select('*')
+      .eq('app_id', targetId)
+      .single();
+
+    if (!error && data) {
+      return res.json({
+        success: true,
+        latestVersionCode: Number(data.version_code || 1),
+        latestVersionName: String(data.version_name || '1.0.0'),
+        apkDownloadUrl: String(data.apk_url || `https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavani${targetId === 'WORKER' ? 'Worker' : 'Admin'}.apk`),
+        releaseNotes: 'Performance improvements, collapsible sidebar & live updates',
+        forceUpdate: false,
+      });
+    }
+  } catch (err: any) {
+    console.warn('Supabase app_versions query notice:', err?.message || err);
+  }
+
+  return res.json({
+    success: true,
+    latestVersionCode: 1,
+    latestVersionName: '1.0.0',
+    apkDownloadUrl: 'https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniAdmin.apk',
+    releaseNotes: 'Performance improvements, collapsible sidebar & live updates',
+    forceUpdate: false,
+  });
 });
 
 // ── SERVER-SENT EVENTS (SSE) REALTIME STREAM MANAGER ──
