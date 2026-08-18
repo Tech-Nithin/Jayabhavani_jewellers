@@ -32,6 +32,13 @@ jobs:
           cd worker-frontend
           npm ci || npm install
 
+      - name: Inject Version Code into Worker App
+        run: |
+          echo "export const CURRENT_APP_VERSION_CODE = ${{ github.run_number }};" > worker-frontend/src/utils/appVersion.ts
+          echo "export const CURRENT_APP_VERSION_NAME = '1.0.${{ github.run_number }}';" >> worker-frontend/src/utils/appVersion.ts
+          sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/g" worker-frontend/android/app/build.gradle || true
+          sed -i "s/versionName \".*\"/versionName \"1.0.${{ github.run_number }}\"/g" worker-frontend/android/app/build.gradle || true
+
       - name: Build Worker Web App Assets
         env:
           VITE_API_BASE_URL: https://jbj-backend.vercel.app/api
@@ -77,7 +84,7 @@ jobs:
             -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
             -H "Content-Type: application/json" \
             -H "Prefer: resolution=merge-duplicates" \
-            -d '{"app_id": "WORKER", "version_code": 1, "version_name": "1.0.0", "apk_url": "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniWorker.apk"}'
+            -d '{"app_id": "WORKER", "version_code": ${{ github.run_number }}, "version_name": "1.0.${{ github.run_number }}", "apk_url": "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniWorker.apk"}'
 
   build-admin-apk:
     name: Build Admin App APK
@@ -104,6 +111,13 @@ jobs:
         run: |
           cd frontend
           npm ci || npm install
+
+      - name: Inject Version Code into Admin App
+        run: |
+          echo "export const CURRENT_APP_VERSION_CODE = ${{ github.run_number }};" > frontend/src/utils/appVersion.ts
+          echo "export const CURRENT_APP_VERSION_NAME = '1.0.${{ github.run_number }}';" >> frontend/src/utils/appVersion.ts
+          sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/g" frontend/android/app/build.gradle || true
+          sed -i "s/versionName \".*\"/versionName \"1.0.${{ github.run_number }}\"/g" frontend/android/app/build.gradle || true
 
       - name: Build Admin Web App Assets
         env:
@@ -150,4 +164,4 @@ jobs:
             -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
             -H "Content-Type: application/json" \
             -H "Prefer: resolution=merge-duplicates" \
-            -d '{"app_id": "ADMIN", "version_code": 1, "version_name": "1.0.0", "apk_url": "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniAdmin.apk"}'
+            -d '{"app_id": "ADMIN", "version_code": ${{ github.run_number }}, "version_name": "1.0.${{ github.run_number }}", "apk_url": "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/public/apks/JayaBhavaniAdmin.apk"}'
