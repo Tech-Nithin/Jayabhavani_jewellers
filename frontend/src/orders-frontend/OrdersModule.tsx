@@ -263,6 +263,10 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
   };
 
   const handleToggleSubmittedStatus = async (order: OrderItem, newSubmitted: 'yes' | 'no') => {
+    if (newSubmitted === 'yes' && order.returned_from_worker !== 'yes') {
+      alert("First mark 'Return from worker' as 'YES', then mark this column as 'YES'!");
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/work-assignment/orders/${order.id}/sold-status`, {
         method: 'PUT',
@@ -417,7 +421,35 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     }
   };
 
+  const handleMarkOrderCompleted = async (order: OrderItem) => {
+    try {
+      const res = await fetch(`${API_BASE}/work-assignment/orders/${order.id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'COMPLETED' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id
+              ? { ...o, status: 'COMPLETED' }
+              : o
+          )
+        );
+      } else {
+        alert('Failed to update status: ' + (data.message || 'Error'));
+      }
+    } catch (err: any) {
+      alert('Request error: ' + err.message);
+    }
+  };
+
   const handleToggleReturnStatus = async (order: OrderItem, newStatus: 'yes' | 'no', customDateTime?: string | null) => {
+    if (newStatus === 'yes' && order.status !== 'COMPLETED') {
+      alert("Item is not returned from worker yet, or mark 'status' as 'Completed' first!");
+      return;
+    }
     const returnTimestamp = newStatus === 'yes' ? (customDateTime || new Date().toISOString()) : null;
     try {
       const res = await fetch(`${API_BASE}/work-assignment/orders/${order.id}/return-status`, {
@@ -906,6 +938,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           onOpenAssignModal={handleOpenAssignModal}
           onOpenSettlementModal={handleOpenSettlement}
           onUnassignOrder={handleUnassignOrder}
+          onMarkOrderCompleted={handleMarkOrderCompleted}
           onToggleReturnStatus={handleToggleReturnStatus}
           onToggleSubmittedStatus={handleToggleSubmittedStatus}
           onViewSeeBill={(order) => handleOpenSeeBill(order)}

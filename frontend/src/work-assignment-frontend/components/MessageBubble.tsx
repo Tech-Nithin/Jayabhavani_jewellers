@@ -5,7 +5,7 @@ interface WorkerTransactionItem {
   worker_id: string;
   order_id?: string | null;
   direction: 'OUTGOING' | 'INCOMING';
-  category: 'CASH' | 'GOLD' | 'SILVER' | 'ORNAMENT' | 'CHAT';
+  category: 'CASH' | 'GOLD' | 'SILVER' | 'ORNAMENT' | 'CHAT' | 'ORDER';
   amount_cash?: number;
   weight_grams?: number;
   touch_percentage?: number;

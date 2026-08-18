@@ -10,7 +10,7 @@ interface TransactionInputFormProps {
   onToggleMessagePreview: () => void;
   direction: 'OUTGOING' | 'INCOMING';
   setDirection: (v: 'OUTGOING' | 'INCOMING') => void;
-  category: 'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT';
+  category: 'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT' | 'ORDER';
   setCategory: (v: 'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT') => void;
   itemName: string;
   setItemName: (v: string) => void;

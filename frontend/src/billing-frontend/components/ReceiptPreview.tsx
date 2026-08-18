@@ -554,8 +554,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           <div
             style={{
               position: 'absolute',
-              bottom: isPartialOrDue ? '110px' : '85px',
-              right: '85px',
+              top: '-38px',
+              right: '78px',
               pointerEvents: 'none',
               zIndex: 10,
               opacity: 0.88,

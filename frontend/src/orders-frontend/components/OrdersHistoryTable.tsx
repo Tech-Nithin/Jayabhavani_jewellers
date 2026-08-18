@@ -12,6 +12,7 @@ interface OrdersHistoryTableProps {
   onOpenAssignModal: (order: OrderItem) => void;
   onOpenSettlementModal: (order: OrderItem) => void;
   onUnassignOrder?: (order: OrderItem) => void;
+  onMarkOrderCompleted?: (order: OrderItem) => void;
   onToggleReturnStatus?: (order: OrderItem, status: 'yes' | 'no', customDateTime?: string | null) => void;
   onToggleSubmittedStatus?: (order: OrderItem, submitted: 'yes' | 'no') => void;
   onViewDetail?: (order: OrderItem, showBill?: boolean) => void;
@@ -37,6 +38,7 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
   onOpenAssignModal,
   onOpenSettlementModal,
   onUnassignOrder,
+  onMarkOrderCompleted,
   onToggleReturnStatus,
   onToggleSubmittedStatus,
   onViewDetail,
@@ -217,291 +219,322 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
                         <i className={`fa-solid fa-chevron-${activeDropdownOrderId === ord.id ? 'up' : 'down'}`} style={{ fontSize: '0.6rem', marginLeft: '2px' }}></i>
                       </button>
 
-                    {/* Floating Modern Custom Dropdown Menu with Fixed Position */}
-                    {activeDropdownOrderId === ord.id && dropdownPos && (
-                      <>
-                        {/* Backdrop overlay to dismiss on outside click */}
-                        <div
-                          onClick={() => {
-                            setActiveDropdownOrderId(null);
-                            setDropdownPos(null);
-                          }}
-                          style={{ position: 'fixed', inset: 0, zIndex: 99998 }}
-                        />
-
-                        <div
-                          style={{
-                            position: 'fixed',
-                            top: `${dropdownPos.top}px`,
-                            left: `${dropdownPos.left}px`,
-                            zIndex: 99999,
-                            minWidth: '175px',
-                            background: '#ffffff',
-                            borderRadius: '12px',
-                            border: '1px solid #cbd5e1',
-                            boxShadow: '0 12px 30px -4px rgba(15, 23, 42, 0.22), 0 4px 6px -1px rgba(0, 0, 0, 0.08)',
-                            padding: '6px',
-                          }}
-                        >
-                          {/* Option 1: Pending */}
+                      {/* Floating Modern Custom Dropdown Menu with Fixed Position */}
+                      {activeDropdownOrderId === ord.id && dropdownPos && (
+                        <>
+                          {/* Backdrop overlay to dismiss on outside click */}
                           <div
                             onClick={() => {
                               setActiveDropdownOrderId(null);
                               setDropdownPos(null);
-                              if (ord.status === 'ASSIGNED' && onUnassignOrder) {
-                                onUnassignOrder(ord);
-                              }
                             }}
-                            style={{
-                              padding: '8px 12px',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
-                              color: ord.status === 'PENDING' ? '#b45309' : '#334155',
-                              background: ord.status === 'PENDING' ? '#fffbeb' : 'transparent',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              transition: 'background 0.15s ease',
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = '#fef3c7')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = ord.status === 'PENDING' ? '#fffbeb' : 'transparent')}
-                          >
-                            <i className="fa-solid fa-clock" style={{ color: '#d97706' }}></i>
-                            Pending
-                          </div>
+                            style={{ position: 'fixed', inset: 0, zIndex: 99998 }}
+                          />
 
-                          {/* Option 2: Assign / Re-Assign */}
                           <div
-                            onClick={() => {
-                              setActiveDropdownOrderId(null);
-                              setDropdownPos(null);
-                              onOpenAssignModal(ord);
-                            }}
                             style={{
-                              padding: '8px 12px',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
-                              color: ord.status === 'ASSIGNED' ? '#0369a1' : '#059669',
-                              background: ord.status === 'ASSIGNED' ? '#f0f9ff' : 'transparent',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              transition: 'background 0.15s ease',
+                              position: 'fixed',
+                              top: `${dropdownPos.top}px`,
+                              left: `${dropdownPos.left}px`,
+                              zIndex: 99999,
+                              minWidth: '175px',
+                              background: '#ffffff',
+                              borderRadius: '12px',
+                              border: '1px solid #cbd5e1',
+                              boxShadow: '0 12px 30px -4px rgba(15, 23, 42, 0.22), 0 4px 6px -1px rgba(0, 0, 0, 0.08)',
+                              padding: '6px',
                             }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = '#e0f2fe')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = ord.status === 'ASSIGNED' ? '#f0f9ff' : 'transparent')}
                           >
-                            <i className="fa-solid fa-user-plus" style={{ color: '#0284c7' }}></i>
-                            {ord.status === 'ASSIGNED' ? 'Re-Assign Worker...' : 'Assign Worker...'}
+                            {/* Option 1: Pending */}
+                            <div
+                              onClick={() => {
+                                setActiveDropdownOrderId(null);
+                                setDropdownPos(null);
+                                if (ord.status === 'ASSIGNED' && onUnassignOrder) {
+                                  onUnassignOrder(ord);
+                                }
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                color: ord.status === 'PENDING' ? '#b45309' : '#334155',
+                                background: ord.status === 'PENDING' ? '#fffbeb' : 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                transition: 'background 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = '#fef3c7')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = ord.status === 'PENDING' ? '#fffbeb' : 'transparent')}
+                            >
+                              <i className="fa-solid fa-clock" style={{ color: '#d97706' }}></i>
+                              Pending
+                            </div>
+
+                            {/* Option 2: Assign / Re-Assign */}
+                            <div
+                              onClick={() => {
+                                setActiveDropdownOrderId(null);
+                                setDropdownPos(null);
+                                onOpenAssignModal(ord);
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                color: ord.status === 'ASSIGNED' ? '#0369a1' : '#059669',
+                                background: ord.status === 'ASSIGNED' ? '#f0f9ff' : 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                transition: 'background 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = '#e0f2fe')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = ord.status === 'ASSIGNED' ? '#f0f9ff' : 'transparent')}
+                            >
+                              <i className="fa-solid fa-user-plus" style={{ color: '#0284c7' }}></i>
+                              {ord.status === 'ASSIGNED' ? 'Re-Assign Worker...' : 'Assign Worker...'}
+                            </div>
+
+                            {/* Option 3: Mark as Completed */}
+                            <div
+                              onClick={() => {
+                                setActiveDropdownOrderId(null);
+                                setDropdownPos(null);
+                                if (onMarkOrderCompleted) {
+                                  onMarkOrderCompleted(ord);
+                                }
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                color: '#15803d',
+                                background: 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                transition: 'background 0.15s ease',
+                                marginTop: '2px',
+                                borderTop: '1px solid #f1f5f9',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = '#dcfce7')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <i className="fa-solid fa-circle-check" style={{ color: '#16a34a' }}></i>
+                              Completed
+                            </div>
                           </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </td>
-
-              {/* Worker Name Column */}
-              <td style={{ padding: '0.55rem 0.5rem' }}>
-                {ord.assigned_worker_name ? (
-                  <div>
-                    <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.78rem' }}>{ord.assigned_worker_name}</div>
-                  </div>
-                ) : (
-                  <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.72rem' }}>Unassigned</span>
-                )}
-              </td>
-
-              {/* Return from Worker Column */}
-              <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                  <select
-                    value={ord.returned_from_worker === 'yes' ? 'yes' : 'no'}
-                    onChange={(e) => {
-                      const val = e.target.value as 'yes' | 'no';
-                      if (val === 'yes') {
-                        handleOpenReturnCalendar(ord);
-                      } else if (val === 'no' && onToggleReturnStatus) {
-                        onToggleReturnStatus(ord, 'no', null);
-                      }
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      border: ord.returned_from_worker === 'yes' ? '1px solid #86efac' : '1px solid #fde68a',
-                      background: ord.returned_from_worker === 'yes' ? '#dcfce7' : '#fef3c7',
-                      color: ord.returned_from_worker === 'yes' ? '#15803d' : '#b45309',
-                      fontWeight: 800,
-                      fontSize: '0.68rem',
-                      cursor: 'pointer',
-                      outline: 'none',
-                    }}
-                  >
-                    <option value="no" style={{ background: '#ffffff', color: '#b45309', fontWeight: 700 }}>NO</option>
-                    <option value="yes" style={{ background: '#ffffff', color: '#15803d', fontWeight: 700 }}>YES</option>
-                  </select>
-                </div>
-              </td>
-
-              <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                  {ord.sold_status === 'SOLD' || ord.submitted === 'yes' ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 8px', borderRadius: '10px', background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '0.68rem' }}>
-                      <i className="fa-solid fa-circle-check"></i> Paid
-                    </span>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                      <div style={{ display: 'inline-flex', gap: '3px', background: '#f1f5f9', padding: '2px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                        <span
-                          style={{
-                            padding: '3px 6px',
-                            borderRadius: '4px',
-                            background: '#d97706',
-                            color: '#ffffff',
-                            fontSize: '0.68rem',
-                            fontWeight: 800,
-                          }}
-                        >
-                          Due
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onOpenSettlementModal(ord)}
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            border: 'none',
-                            background: '#ffffff',
-                            color: '#16a34a',
-                            fontSize: '0.68rem',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                          }}
-                        >
-                          Paid?
-                        </button>
-                      </div>
-
-                      {(ord.paid_amount !== undefined || ord.due_amount !== undefined) && (
-                        <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '2px', textAlign: 'center' }}>
-                          <span style={{ color: '#16a34a' }}>Paid: ₹{(ord.paid_amount || 0).toLocaleString('en-IN')}</span>
-                          {(ord.due_amount || 0) > 0 && (
-                            <span style={{ color: '#dc2626', marginLeft: '4px', fontWeight: 800 }}>Due: ₹{(ord.due_amount || 0).toLocaleString('en-IN')}</span>
-                          )}
-                        </div>
+                        </>
                       )}
                     </div>
                   )}
-                </div>
-              </td>
-              <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <select
-                    value={ord.submitted === 'yes' ? 'yes' : 'no'}
-                    onChange={(e) => {
-                      const val = e.target.value as 'yes' | 'no';
-                      if (onToggleSubmittedStatus) {
-                        onToggleSubmittedStatus(ord, val);
-                      }
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      border: ord.submitted === 'yes' ? '1px solid #86efac' : '1px solid #fde68a',
-                      background: ord.submitted === 'yes' ? '#dcfce7' : '#fef3c7',
-                      color: ord.submitted === 'yes' ? '#15803d' : '#b45309',
-                      fontWeight: 800,
-                      fontSize: '0.68rem',
-                      cursor: 'pointer',
-                      outline: 'none',
-                    }}
-                  >
-                    <option value="no" style={{ background: '#ffffff', color: '#b45309', fontWeight: 700 }}>NO</option>
-                    <option value="yes" style={{ background: '#ffffff', color: '#15803d', fontWeight: 700 }}>YES</option>
-                  </select>
-                </div>
-              </td>
+                </td>
 
-              {/* Info Column: See Bill Icon & Order Details Drawer Button */}
-              <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                  {/* Bill Receipt Icon Button */}
-                  <button
-                    type="button"
-                    onClick={() => (onViewSeeBill ? onViewSeeBill(ord) : onViewDetail && onViewDetail(ord, true))}
-                    title={translations[lang]?.seeBillTooltip || 'See Bill'}
-                    style={{
-                      background: '#f0f9ff',
-                      border: '1px solid #bae6fd',
-                      color: '#0284c7',
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '7px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#e0f2fe';
-                      e.currentTarget.style.borderColor = '#7dd3fc';
-                      e.currentTarget.style.color = '#0369a1';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#f0f9ff';
-                      e.currentTarget.style.borderColor = '#bae6fd';
-                      e.currentTarget.style.color = '#0284c7';
-                    }}
-                  >
-                    <i className="fa-solid fa-file-invoice"></i>
-                  </button>
+                {/* Worker Name Column */}
+                <td style={{ padding: '0.55rem 0.5rem' }}>
+                  {ord.assigned_worker_name ? (
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.78rem' }}>{ord.assigned_worker_name}</div>
+                    </div>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.72rem' }}>Unassigned</span>
+                  )}
+                </td>
 
-                  {/* Order Details Drawer Button */}
-                  <button
-                    type="button"
-                    onClick={() => (onViewOrderDetails ? onViewOrderDetails(ord) : onViewDetail && onViewDetail(ord, false))}
-                    title={translations[lang]?.orderDetailsDrawerTooltip || 'Order Details Drawer'}
-                    style={{
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      color: '#475569',
-                      fontSize: '0.82rem',
-                      cursor: 'pointer',
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '8px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#f1f5f9';
-                      e.currentTarget.style.borderColor = '#94a3b8';
-                      e.currentTarget.style.color = '#0f172a';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#f8fafc';
-                      e.currentTarget.style.borderColor = '#cbd5e1';
-                      e.currentTarget.style.color = '#475569';
-                    }}
-                  >
-                    <i className="fa-solid fa-arrow-up-right-from-square"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          );
-        })}
+                {/* Return from Worker Column */}
+                <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                    <select
+                      value={ord.returned_from_worker === 'yes' ? 'yes' : 'no'}
+                      onChange={(e) => {
+                        const val = e.target.value as 'yes' | 'no';
+                        if (val === 'yes') {
+                          handleOpenReturnCalendar(ord);
+                        } else if (val === 'no' && onToggleReturnStatus) {
+                          onToggleReturnStatus(ord, 'no', null);
+                        }
+                      }}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        border: ord.returned_from_worker === 'yes' ? '1px solid #86efac' : '1px solid #fde68a',
+                        background: ord.returned_from_worker === 'yes' ? '#dcfce7' : '#fef3c7',
+                        color: ord.returned_from_worker === 'yes' ? '#15803d' : '#b45309',
+                        fontWeight: 800,
+                        fontSize: '0.68rem',
+                        cursor: 'pointer',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="no" style={{ background: '#ffffff', color: '#b45309', fontWeight: 700 }}>NO</option>
+                      <option value="yes" style={{ background: '#ffffff', color: '#15803d', fontWeight: 700 }}>YES</option>
+                    </select>
+                  </div>
+                </td>
+
+                <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                    {ord.sold_status === 'SOLD' || ord.submitted === 'yes' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 8px', borderRadius: '10px', background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '0.68rem' }}>
+                        <i className="fa-solid fa-circle-check"></i> Paid
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                        <div style={{ display: 'inline-flex', gap: '3px', background: '#f1f5f9', padding: '2px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                          <span
+                            style={{
+                              padding: '3px 6px',
+                              borderRadius: '4px',
+                              background: '#d97706',
+                              color: '#ffffff',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                            }}
+                          >
+                            Due
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onOpenSettlementModal(ord)}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              border: 'none',
+                              background: '#ffffff',
+                              color: '#16a34a',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                            }}
+                          >
+                            Paid?
+                          </button>
+                        </div>
+
+                        {(ord.paid_amount !== undefined || ord.due_amount !== undefined) && (
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '2px', textAlign: 'center' }}>
+                            <span style={{ color: '#16a34a' }}>Paid: ₹{(ord.paid_amount || 0).toLocaleString('en-IN')}</span>
+                            {(ord.due_amount || 0) > 0 && (
+                              <span style={{ color: '#dc2626', marginLeft: '4px', fontWeight: 800 }}>Due: ₹{(ord.due_amount || 0).toLocaleString('en-IN')}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <select
+                      value={ord.submitted === 'yes' ? 'yes' : 'no'}
+                      onChange={(e) => {
+                        const val = e.target.value as 'yes' | 'no';
+                        if (onToggleSubmittedStatus) {
+                          onToggleSubmittedStatus(ord, val);
+                        }
+                      }}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        border: ord.submitted === 'yes' ? '1px solid #86efac' : '1px solid #fde68a',
+                        background: ord.submitted === 'yes' ? '#dcfce7' : '#fef3c7',
+                        color: ord.submitted === 'yes' ? '#15803d' : '#b45309',
+                        fontWeight: 800,
+                        fontSize: '0.68rem',
+                        cursor: 'pointer',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="no" style={{ background: '#ffffff', color: '#b45309', fontWeight: 700 }}>NO</option>
+                      <option value="yes" style={{ background: '#ffffff', color: '#15803d', fontWeight: 700 }}>YES</option>
+                    </select>
+                  </div>
+                </td>
+
+                {/* Info Column: See Bill Icon & Order Details Drawer Button */}
+                <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                    {/* Bill Receipt Icon Button */}
+                    <button
+                      type="button"
+                      onClick={() => (onViewSeeBill ? onViewSeeBill(ord) : onViewDetail && onViewDetail(ord, true))}
+                      title={translations[lang]?.seeBillTooltip || 'See Bill'}
+                      style={{
+                        background: '#f0f9ff',
+                        border: '1px solid #bae6fd',
+                        color: '#0284c7',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '7px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#e0f2fe';
+                        e.currentTarget.style.borderColor = '#7dd3fc';
+                        e.currentTarget.style.color = '#0369a1';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#f0f9ff';
+                        e.currentTarget.style.borderColor = '#bae6fd';
+                        e.currentTarget.style.color = '#0284c7';
+                      }}
+                    >
+                      <i className="fa-solid fa-file-invoice"></i>
+                    </button>
+
+                    {/* Order Details Drawer Button */}
+                    <button
+                      type="button"
+                      onClick={() => (onViewOrderDetails ? onViewOrderDetails(ord) : onViewDetail && onViewDetail(ord, false))}
+                      title={translations[lang]?.orderDetailsDrawerTooltip || 'Order Details Drawer'}
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #cbd5e1',
+                        color: '#475569',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#f1f5f9';
+                        e.currentTarget.style.borderColor = '#94a3b8';
+                        e.currentTarget.style.color = '#0f172a';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#f8fafc';
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                        e.currentTarget.style.color = '#475569';
+                      }}
+                    >
+                      <i className="fa-solid fa-arrow-up-right-from-square"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

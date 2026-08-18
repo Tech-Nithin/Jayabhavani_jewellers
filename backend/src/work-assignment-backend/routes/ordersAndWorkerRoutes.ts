@@ -443,7 +443,7 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
             worker_id: workerIdVal,
             order_id: id,
             direction: 'OUTGOING',
-            category: 'CHAT',
+            category: 'ORDER',
             amount_cash: 0,
             weight_grams: 0,
             touch_percentage: 0,
@@ -495,6 +495,33 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
   }
 });
 
+
+// PUT /api/orders/:id/status
+router.put('/orders/:id/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const newStatus = ['PENDING', 'ASSIGNED', 'COMPLETED'].includes(status) ? status : 'PENDING';
+
+    let order = mockOrders.find((o) => o.id === id);
+    if (order) {
+      order.status = newStatus;
+    }
+
+    try {
+      await supabase.from('orders').update({ status: newStatus }).eq('id', id);
+    } catch (e) { }
+
+    res.json({
+      success: true,
+      message: `Order status updated to ${newStatus}`,
+      status: newStatus,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to update order status' });
+  }
+});
 
 // PUT /api/orders/:id/return-status
 router.put('/orders/:id/return-status', async (req: Request, res: Response) => {

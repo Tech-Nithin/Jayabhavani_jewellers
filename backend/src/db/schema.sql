@@ -202,7 +202,7 @@ CREATE TABLE IF NOT EXISTS public.worker_transactions (
   worker_id VARCHAR(50) NOT NULL,
   order_id VARCHAR(50),
   direction VARCHAR(20) NOT NULL CHECK (direction IN ('OUTGOING', 'INCOMING')),
-  category VARCHAR(20) NOT NULL CHECK (category IN ('GOLD', 'SILVER', 'CASH', 'ORNAMENT', 'CHAT')),
+  category VARCHAR(20) NOT NULL CHECK (category IN ('GOLD', 'SILVER', 'CASH', 'ORNAMENT', 'CHAT', 'ORDER')),
   amount_cash NUMERIC(12, 2) DEFAULT 0.00,
   weight_grams NUMERIC(10, 3) DEFAULT 0.000,
   touch_percentage NUMERIC(5, 2) DEFAULT 91.60,

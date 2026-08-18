@@ -2,6 +2,8 @@ import React from 'react';
 import { type Language, translations } from '../../utils/translations';
 import { getWorkAssignmentTranslation } from '../workAssignmentTranslations';
 
+export type ChatFilterOption = 'ALL' | 'ORDERS' | 'TRANSACTIONS';
+
 interface ChatHeaderProps {
   worker: any;
   lang: Language;
@@ -25,6 +27,8 @@ interface ChatHeaderProps {
   onToggleMessagePreview: () => void;
   setPreviewImageData: (d: { url: string; title: string } | null) => void;
   setShowWorkerModal: (v: boolean) => void;
+  activeChatFilter?: ChatFilterOption;
+  setActiveChatFilter?: (f: ChatFilterOption) => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -50,6 +54,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onToggleMessagePreview,
   setPreviewImageData,
   setShowWorkerModal,
+  activeChatFilter = 'ALL',
+  setActiveChatFilter,
 }) => {
   const t = getWorkAssignmentTranslation(lang);
 
@@ -103,8 +109,71 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         </div>
       </div>
 
-      {/* Center & Right: Fine Metal Balances & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+      {/* Center & Right: Chat Filter Pills, Fine Metal Balances & Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
+
+        {/* Chat Filter Pills (All / Orders / Transactions) */}
+        {setActiveChatFilter && (
+          <div style={{ display: 'flex', gap: '2px', background: '#f1f5f9', padding: '2px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+            <button
+              type="button"
+              onClick={() => setActiveChatFilter('ALL')}
+              style={{
+                padding: '2px 8px',
+                borderRadius: '6px',
+                border: 'none',
+                background: (activeChatFilter || 'ALL') === 'ALL' ? '#ffffff' : 'transparent',
+                color: (activeChatFilter || 'ALL') === 'ALL' ? '#0f172a' : '#64748b',
+                fontWeight: (activeChatFilter || 'ALL') === 'ALL' ? 800 : 600,
+                fontSize: '0.68rem',
+                cursor: 'pointer',
+                boxShadow: (activeChatFilter || 'ALL') === 'ALL' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveChatFilter('ORDERS')}
+              style={{
+                padding: '2px 8px',
+                borderRadius: '6px',
+                border: 'none',
+                background: activeChatFilter === 'ORDERS' ? '#d97706' : 'transparent',
+                color: activeChatFilter === 'ORDERS' ? '#ffffff' : '#64748b',
+                fontWeight: activeChatFilter === 'ORDERS' ? 800 : 600,
+                fontSize: '0.68rem',
+                cursor: 'pointer',
+                boxShadow: activeChatFilter === 'ORDERS' ? '0 1px 3px rgba(217,119,6,0.3)' : 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}
+            >
+              <i className="fa-solid fa-box-archive" style={{ fontSize: '0.6rem' }}></i> Orders
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveChatFilter('TRANSACTIONS')}
+              style={{
+                padding: '2px 8px',
+                borderRadius: '6px',
+                border: 'none',
+                background: activeChatFilter === 'TRANSACTIONS' ? '#0284c7' : 'transparent',
+                color: activeChatFilter === 'TRANSACTIONS' ? '#ffffff' : '#64748b',
+                fontWeight: activeChatFilter === 'TRANSACTIONS' ? 800 : 600,
+                fontSize: '0.68rem',
+                cursor: 'pointer',
+                boxShadow: activeChatFilter === 'TRANSACTIONS' ? '0 1px 3px rgba(2,132,199,0.3)' : 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}
+            >
+              <i className="fa-solid fa-receipt" style={{ fontSize: '0.6rem' }}></i> Transactions
+            </button>
+          </div>
+        )}
 
         {/* Strict 100% Fine Metal Balance summary pills */}
         <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', whiteSpace: 'nowrap' }}>

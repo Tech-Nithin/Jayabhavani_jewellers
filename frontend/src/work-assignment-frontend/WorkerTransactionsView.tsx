@@ -27,7 +27,7 @@ interface WorkerTransactionItem {
   worker_id: string;
   order_id?: string | null;
   direction: 'OUTGOING' | 'INCOMING';
-  category: 'CASH' | 'GOLD' | 'SILVER' | 'ORNAMENT' | 'CHAT';
+  category: 'CASH' | 'GOLD' | 'SILVER' | 'ORNAMENT' | 'CHAT' | 'ORDER';
   amount_cash?: number;
   weight_grams?: number;
   touch_percentage?: number;
@@ -181,6 +181,9 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   // In-Chat Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+
+  // Chat Filter State (All / Orders / Transactions)
+  const [activeChatFilter, setActiveChatFilter] = useState<'ALL' | 'ORDERS' | 'TRANSACTIONS'>('ALL');
 
   // Accordion Toggle State & Sidebar Collapse State
   const [isAccordionExpanded, setIsAccordionExpanded] = useState(true);
@@ -1045,6 +1048,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
             onToggleMessagePreview={toggleMessagePreview}
             setPreviewImageData={setPreviewImageData}
             setShowWorkerModal={setShowWorkerModal}
+            activeChatFilter={activeChatFilter}
+            setActiveChatFilter={setActiveChatFilter}
           />
 
           {/* ── CHAT MESSAGES TIMELINE (VIVID SLATE-PEARL WALLPAPER) ── */}
@@ -1098,21 +1103,48 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
               </div>
             )}
 
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.5rem', color: '#d97706', marginBottom: '0.5rem' }}></i>
-                <p style={{ margin: 0, fontSize: '0.82rem' }}>Loading transaction history...</p>
-              </div>
-            ) : transactions.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
-                <i className="fa-solid fa-comments" style={{ fontSize: '2.5rem', color: '#cbd5e1', marginBottom: '0.5rem' }}></i>
-                <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700 }}>No payment or gold transactions recorded yet</p>
-                <span style={{ fontSize: '0.75rem' }}>Use the input bar below to log outgoing cash/gold or incoming return ornaments.</span>
-              </div>
-            ) : (
-              (() => {
-                let lastDateHeader = "";
-                return transactions.map((t) => {
+            {(() => {
+              const filteredList = transactions.filter((t) => {
+                if (activeChatFilter === 'ORDERS') {
+                  return t.category === 'ORDER' || !!t.order_id || (t.notes && t.notes.toLowerCase().includes('new order'));
+                }
+                if (activeChatFilter === 'TRANSACTIONS') {
+                  return ['GOLD', 'SILVER', 'CASH', 'ORNAMENT'].includes((t.category || '').toUpperCase());
+                }
+                return true;
+              });
+
+              if (loading) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                    <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.5rem', color: '#d97706', marginBottom: '0.5rem' }}></i>
+                    <p style={{ margin: 0, fontSize: '0.82rem' }}>Loading transaction history...</p>
+                  </div>
+                );
+              }
+
+              if (filteredList.length === 0) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
+                    <i className="fa-solid fa-comments" style={{ fontSize: '2.5rem', color: '#cbd5e1', marginBottom: '0.5rem' }}></i>
+                    <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700 }}>
+                      {activeChatFilter === 'ORDERS'
+                        ? 'No order assignments found for this worker'
+                        : activeChatFilter === 'TRANSACTIONS'
+                        ? 'No cash, gold, or silver transactions recorded yet'
+                        : 'No payment or gold transactions recorded yet'}
+                    </p>
+                    <span style={{ fontSize: '0.75rem' }}>
+                      {activeChatFilter === 'ORDERS'
+                        ? 'Assign work to this worker from the Orders page to see orders here.'
+                        : 'Use the input bar below to log outgoing cash/gold or incoming return ornaments.'}
+                    </span>
+                  </div>
+                );
+              }
+
+              let lastDateHeader = "";
+              return filteredList.map((t) => {
                   const isMatched = matchedTxIds.includes(t.id);
                   const isCurrentActiveMatch = matchedTxIds[activeMatchIdx] === t.id;
                   const currentDateHeader = formatDateDivider(t.created_at);
@@ -1162,8 +1194,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     </React.Fragment>
                   );
                 });
-              })()
-            )}
+              })()}
             <div ref={chatBottomRef} />
           </div>
 
