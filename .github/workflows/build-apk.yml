@@ -2,7 +2,7 @@ name: Build Standalone Mobile APKs (Worker & Admin)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, nikhil-branch ]
   workflow_dispatch:
 
 jobs:
@@ -61,6 +61,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Worker APK to Supabase Public Storage (Auto-overwrite)
+        if: github.ref == 'refs/heads/main'
         run: |
           curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/apks/JayaBhavaniWorker.apk" \
             -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
@@ -69,6 +70,7 @@ jobs:
             --data-binary "@worker-frontend/android/app/build/outputs/apk/debug/app-debug.apk"
 
       - name: Register Worker App Version in Supabase DB
+        if: github.ref == 'refs/heads/main'
         run: |
           curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/rest/v1/app_versions" \
             -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
@@ -132,6 +134,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Admin APK to Supabase Public Storage (Auto-overwrite)
+        if: github.ref == 'refs/heads/main'
         run: |
           curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/storage/v1/object/apks/JayaBhavaniAdmin.apk" \
             -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
@@ -140,6 +143,7 @@ jobs:
             --data-binary "@frontend/android/app/build/outputs/apk/debug/app-debug.apk"
 
       - name: Register Admin App Version in Supabase DB
+        if: github.ref == 'refs/heads/main'
         run: |
           curl -X POST "https://wdlbeiqwbwnjywpqcfbq.supabase.co/rest/v1/app_versions" \
             -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbGJlaXF3Ynduanl3cHFjZmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA3NTE0NiwiZXhwIjoyMTAxNjUxMTQ2fQ.B0YPVbLgOaAEFpiHuP0Fx9100Pfy5fNtLkaaOc9q1_g" \
