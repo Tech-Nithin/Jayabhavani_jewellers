@@ -344,6 +344,28 @@ router.post('/calculate', (req: Request, res: Response) => {
   });
 });
 
+const directoryColumns = 'id,customer_name,customer_phone,customer_address,transaction_type,metal_type,product_name,weight_grams,purity_percentage,applied_rate_per_gram,pure_metal_weight,metal_value,making_charges,gst_amount,final_amount,paid_amount,due_amount,image_url,created_at,updated_at';
+
+// GET /api/billing/invoices/:id - Fetch single invoice with full receipt_json_data on demand
+router.get('/invoices/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { data: dbInvoice, error } = await supabase
+      .from('billing_invoices')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!error && dbInvoice) {
+      return res.json({ success: true, invoice: dbInvoice });
+    }
+    const mockMatch = invoicesList.find((inv) => inv.id === id);
+    return res.json({ success: true, invoice: mockMatch || null });
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 // GET /api/billing/customer-directory - 1:1 Individual Invoice Directory Records with Server-Side Pagination
 router.get('/customer-directory', async (req: Request, res: Response) => {
   try {
@@ -359,7 +381,7 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
 
     let query = supabase
       .from('billing_invoices')
-      .select('*', { count: 'exact' });
+      .select(directoryColumns, { count: 'estimated' });
 
     if (search) {
       query = query.or(`customer_name.ilike.%${search}%,customer_phone.ilike.%${search}%,product_name.ilike.%${search}%`);

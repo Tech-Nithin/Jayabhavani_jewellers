@@ -406,6 +406,43 @@ export const ExchangeModeForm: React.FC<ModeFormProps> = ({
               </div>
             )}
 
+            {/* Additional Charges (Stones, Beads, Pearls, Diamonds) & Additional Cost (₹) */}
+            {isSellItem && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                    Additional Charges
+                  </label>
+                  <CreatablePresetSelect
+                    value={it.additional_charges_name ?? ''}
+                    onChange={(val) => handleUpdateItem(it.id, 'additional_charges_name', toStartCase(val))}
+                    options={Array.from(new Set(['Stones', 'Beads', 'Pearls', 'Diamonds', ...(presets.additional_charge || [])]))}
+                    placeholder="e.g. Stones / Beads / Pearls / Diamonds"
+                    categoryName="additional_charge"
+                    onAddNewPreset={handleAddNewPreset}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                    Additional Cost
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>₹</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="e.g. 250"
+                      onFocus={(e) => e.target.select()}
+                      value={it.additional_charges_amount ? it.additional_charges_amount : ''}
+                      onChange={(e) => handleUpdateItem(it.id, 'additional_charges_amount', e.target.value)}
+                      style={{ width: '100%', padding: '0.55rem 0.75rem 0.55rem 1.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Row 6 (Making Charges for SELL) */}
             {isSellItem && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>

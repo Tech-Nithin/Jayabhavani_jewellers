@@ -95,7 +95,29 @@ const generateOrderId = () => `ORD-${new Date().toISOString().split('T')[0].repl
 
 // ── ORDERS ENDPOINTS ──
 
-// GET /api/orders (Supports server-side pagination & filtering)
+const orderListColumns = 'id,customer_name,customer_phone,customer_address,metal_type,item_name,gross_weight_grams,net_weight_grams,touch_percentage,fine_weight_grams,making_charges,estimated_delivery_date,notes,status,sold_status,paid_amount,due_amount,assigned_worker_id,assigned_worker_name,created_at,updated_at,applied_rate_per_gram,pure_metal_weight,metal_value,gst_amount,final_amount,submitted,returned_from_worker,returned_at,item_length_inches,quantity_unit,quantity_value,assigned_at,hmw_percentage,hmw_weight,additional_charge_name,additional_charge_value,return_purity_percentage,return_pure_gold,image_url';
+
+// GET /api/orders/:id (On-demand single order fetch with full receipt_json_data)
+router.get('/orders/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { data: dbOrder, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!error && dbOrder) {
+      return res.json({ success: true, order: dbOrder });
+    }
+    const mockMatch = mockOrders.find((o) => o.id === id);
+    return res.json({ success: true, order: mockMatch || null });
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// GET /api/orders (Supports server-side pagination & filtering - fast list view)
 router.get('/orders', async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -106,7 +128,7 @@ router.get('/orders', async (req: Request, res: Response) => {
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
 
-    let query = supabase.from('orders').select('*', { count: 'estimated' });
+    let query = supabase.from('orders').select(orderListColumns, { count: 'estimated' });
 
     if (status && status !== 'ALL') {
       if (status === 'PENDING') query = query.eq('status', 'PENDING');
@@ -928,56 +950,37 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
   const { workerId, days, beforeDate, search, fullHistory } = req.query;
 
   try {
-    let query = supabase.from('worker_transactions').select('*').order('created_at', { ascending: true });
+    let query = supabase.from('worker_transactions').select('*');
 
     if (workerId) {
       query = query.eq('worker_id', String(workerId));
     }
 
-    const { data: dbTxns, error: dbErr } = await query;
+    // 🔍 Database-level text search filter using indexes
+    if (search && String(search).trim() !== '') {
+      const q = String(search).trim();
+      query = query.or(`item_name.ilike.%${q}%,notes.ilike.%${q}%,category.ilike.%${q}%`);
+    } else if (fullHistory !== 'true' && fullHistory !== '1') {
+      // 📅 Database-level date cutoff filter using indexed created_at column
+      const cutoffDate = beforeDate ? new Date(String(beforeDate)) : new Date();
+      const daysCount = Number(days) || 7;
+      const startDate = new Date(cutoffDate.getTime() - daysCount * 24 * 60 * 60 * 1000);
+
+      if (beforeDate) {
+        query = query.lt('created_at', cutoffDate.toISOString());
+      } else {
+        query = query.gte('created_at', startDate.toISOString());
+      }
+    }
+
+    const { data: dbTxns, error: dbErr } = await query.order('created_at', { ascending: true });
 
     if (!dbErr && dbTxns) {
-      let filtered = Array.isArray(dbTxns) ? dbTxns : [];
-
-      // 🔍 SEARCH MODE: Search 100% full database history across all fields
-      if (search && String(search).trim() !== '') {
-        const q = String(search).toLowerCase().trim();
-        filtered = filtered.filter((t: any) => {
-          const item = (t.item_name || '').toLowerCase();
-          const notes = (t.notes || '').toLowerCase();
-          const category = (t.category || '').toLowerCase();
-          const amount = String(t.amount_cash || '');
-          const weight = String(t.weight_grams || '');
-          const touch = String(t.touch_percentage || '');
-          return item.includes(q) || notes.includes(q) || category.includes(q) || amount.includes(q) || weight.includes(q) || touch.includes(q);
-        });
-        return res.json({
-          success: true,
-          transactions: filtered,
-          total_count: filtered.length,
-          search_active: true,
-          source: 'supabase_database',
-        });
-      }
-
-      // 📅 DATE & PAGINATION MODE (7 Days Initial Load / Scroll Pagination)
-      if (fullHistory === 'true' || fullHistory === '1') {
-        // Return full history without date cutoff
-      } else {
-        const cutoffDate = beforeDate ? new Date(String(beforeDate)) : new Date();
-        const daysCount = Number(days) || 7;
-        const startDate = new Date(cutoffDate.getTime() - daysCount * 24 * 60 * 60 * 1000);
-
-        if (beforeDate) {
-          filtered = filtered.filter((t: any) => new Date(t.created_at) < cutoffDate);
-        } else {
-          filtered = filtered.filter((t: any) => new Date(t.created_at) >= startDate);
-        }
-      }
-
       return res.json({
         success: true,
-        transactions: filtered,
+        transactions: dbTxns,
+        total_count: dbTxns.length,
+        search_active: !!search,
         source: 'supabase_database',
       });
     }

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { ReceiptPreview, downloadReceiptAsPNG } from './ReceiptPreview';
 import { getTeluguTransliterationSync } from '../../utils/transliterate';
+
+const API_BASE = '/api';
 
 interface SeeBillModalProps {
   customer: CustomerDirectoryRecord | null;
@@ -12,10 +14,32 @@ interface SeeBillModalProps {
 export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onClose }) => {
   if (!customer) return null;
 
-  // Construct items from stored receipt_json_data JSON column or invoice fallback
   const inv = customer.latestInvoice;
-  let storedPayload: any = null;
-  if (inv?.receipt_json_data) {
+  const [fetchedPayload, setFetchedPayload] = useState<any>(null);
+
+  useEffect(() => {
+    if (inv?.id && !inv.receipt_json_data && !fetchedPayload) {
+      fetch(`${API_BASE}/billing/invoices/${inv.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.invoice?.receipt_json_data) {
+            try {
+              const parsed = typeof data.invoice.receipt_json_data === 'string'
+                ? JSON.parse(data.invoice.receipt_json_data)
+                : data.invoice.receipt_json_data;
+              setFetchedPayload(parsed);
+            } catch (e) {
+              console.warn('Failed to parse fetched receipt_json_data:', e);
+            }
+          }
+        })
+        .catch((err) => console.error('Error fetching single invoice on demand:', err));
+    }
+  }, [inv?.id]);
+
+  // Construct items from stored receipt_json_data JSON column, on-demand fetchedPayload, or invoice fallback
+  let storedPayload: any = fetchedPayload;
+  if (!storedPayload && inv?.receipt_json_data) {
     try {
       storedPayload = typeof inv.receipt_json_data === 'string'
         ? JSON.parse(inv.receipt_json_data)

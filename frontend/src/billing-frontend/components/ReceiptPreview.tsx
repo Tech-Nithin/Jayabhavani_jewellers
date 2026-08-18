@@ -523,16 +523,16 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
                   {isSell && (
                     <>
-                      {details.makingVal > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-                          <span>{t.makingChargesReceipt}</span>
-                          <strong>+ ₹{details.makingVal.toLocaleString('en-IN')}</strong>
-                        </div>
-                      )}
                       {details.additionalVal > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
                           <span>{it.additional_charges_name || 'Additional Charges'}:</span>
                           <strong>+ ₹{details.additionalVal.toLocaleString('en-IN')}</strong>
+                        </div>
+                      )}
+                      {details.makingVal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+                          <span>{t.makingChargesReceipt}</span>
+                          <strong>+ ₹{details.makingVal.toLocaleString('en-IN')}</strong>
                         </div>
                       )}
                     </>

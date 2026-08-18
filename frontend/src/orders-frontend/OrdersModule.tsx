@@ -9,6 +9,7 @@ import { AddWorkerView } from '../work-assignment-frontend/AddWorkerView';
 import { PaymentSettlementModal } from './components/PaymentSettlementModal';
 import { OrderDetailView } from './components/OrderDetailDrawer';
 import { ReceiptPreview, downloadReceiptAsPNG } from '../billing-frontend/components/ReceiptPreview';
+import { formatDDMMYYYY } from '../utils/dateUtils';
 
 const formatIndianCurrencyInput = (val: string): string => {
   const clean = val.replace(/[^0-9.]/g, '');
@@ -32,16 +33,55 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
   lang = 'EN',
 }) => {
   const t = getOrdersTranslation(lang);
+  const getInitialUrlParams = () => {
+    const params = new URLSearchParams(window.location.search);
+    const statusParam = params.get('status');
+    const searchParam = params.get('search');
+    const dateRangeParam = params.get('dateRange');
+    const startDateParam = params.get('startDate');
+    const endDateParam = params.get('endDate');
+    const pageSizeParam = params.get('pageSize');
+    const pageParam = params.get('page');
+
+    return {
+      status: (statusParam && ['ALL', 'PENDING', 'ASSIGNED', 'COMPLETED'].includes(statusParam)) ? (statusParam as any) : 'ALL',
+      search: searchParam || '',
+      dateRange: (dateRangeParam && ['ALL', 'TODAY', 'YESTERDAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_30_DAYS', 'CUSTOM'].includes(dateRangeParam)) ? (dateRangeParam as any) : 'ALL',
+      startDate: startDateParam || '',
+      endDate: endDateParam || '',
+      pageSize: pageSizeParam ? Number(pageSizeParam) || 10 : 10,
+      page: pageParam ? Number(pageParam) || 1 : 1,
+    };
+  };
+
+  const formatDDMMYYYYSpaced = (dateVal?: string | null): string => {
+    if (!dateVal) return 'DD - MM - YYYY';
+    const parts = dateVal.split('T')[0].split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      return `${parts[2]} - ${parts[1]} - ${parts[0]}`;
+    }
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return 'DD - MM - YYYY';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day} - ${month} - ${year}`;
+  };
+
+  const initialUrlParams = getInitialUrlParams();
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [workers, setWorkers] = useState<WorkerItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'ASSIGNED' | 'COMPLETED'>('ALL');
-  const [dateRange, setDateRange] = useState<DateRangeOption>('ALL');
-  const [customStartDate, setCustomStartDate] = useState<string>('');
-  const [customEndDate, setCustomEndDate] = useState<string>('');
-  const [pageSize, setPageSize] = useState<number>(10);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [searchTerm, setSearchTerm] = useState(initialUrlParams.search);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'ASSIGNED' | 'COMPLETED'>(initialUrlParams.status);
+  const [dateRange, setDateRange] = useState<DateRangeOption>(initialUrlParams.dateRange);
+  const [customStartDate, setCustomStartDate] = useState<string>(initialUrlParams.startDate);
+  const [customEndDate, setCustomEndDate] = useState<string>(initialUrlParams.endDate);
+  const [isFilterDateModalOpen, setIsFilterDateModalOpen] = useState(false);
+  const [modalFromDate, setModalFromDate] = useState(initialUrlParams.startDate || '');
+  const [modalToDate, setModalToDate] = useState(initialUrlParams.endDate || '');
+  const [pageSize, setPageSize] = useState<number>(initialUrlParams.pageSize);
+  const [currentPage, setCurrentPage] = useState<number>(initialUrlParams.page);
   const [activeView, setActiveView] = useState<'LIST' | 'ORDER_DETAILS' | 'SEE_BILL'>('LIST');
   const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
 
@@ -60,6 +100,18 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
 
     window.history.pushState({}, '', `?${params.toString()}`);
   };
+
+  useEffect(() => {
+    updateUrlParams({
+      status: statusFilter !== 'ALL' ? statusFilter : null,
+      search: searchTerm || null,
+      dateRange: dateRange !== 'ALL' ? dateRange : null,
+      startDate: dateRange === 'CUSTOM' ? customStartDate : null,
+      endDate: dateRange === 'CUSTOM' ? customEndDate : null,
+      page: currentPage > 1 ? currentPage : null,
+      pageSize: pageSize !== 10 ? pageSize : null,
+    });
+  }, [statusFilter, searchTerm, dateRange, customStartDate, customEndDate, currentPage, pageSize]);
 
   const [settlementModal, setSettlementModal] = useState<{
     open: boolean;
@@ -202,7 +254,6 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
         } else {
           setTotalOrdersCount(data.orders.length);
         }
-        syncFromUrl(data.orders);
       }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
@@ -239,7 +290,21 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     updateUrlParams({ view: 'order-details', order_id: order.id });
   };
 
-  const handleOpenSeeBill = (order: OrderItem) => {
+  const handleOpenSeeBill = async (order: OrderItem) => {
+    try {
+      if (!order.receipt_json_data) {
+        const res = await fetch(`${API_BASE}/work-assignment/orders/${order.id}`);
+        const data = await res.json();
+        if (data.success && data.order) {
+          setSelectedOrder(data.order);
+          setActiveView('SEE_BILL');
+          updateUrlParams({ view: 'see-bill', order_id: order.id });
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch bill details on demand:', err);
+    }
     setSelectedOrder(order);
     setActiveView('SEE_BILL');
     updateUrlParams({ view: 'see-bill', order_id: order.id });
@@ -445,81 +510,11 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     }
   };
 
-  const matchDate = (order: OrderItem): boolean => {
-    if (dateRange === 'ALL') return true;
 
-    const dateStr = order.created_at || order.assigned_at;
-    if (!dateStr) return true;
-    const orderDate = new Date(dateStr);
-    if (isNaN(orderDate.getTime())) return true;
-
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    if (dateRange === 'TODAY') {
-      return orderDate >= todayStart;
-    }
-    if (dateRange === 'YESTERDAY') {
-      const yestStart = new Date(todayStart);
-      yestStart.setDate(yestStart.getDate() - 1);
-      const yestEnd = new Date(todayStart);
-      return orderDate >= yestStart && orderDate < yestEnd;
-    }
-    if (dateRange === 'THIS_WEEK') {
-      const dayOfWeek = todayStart.getDay();
-      const weekStart = new Date(todayStart);
-      weekStart.setDate(weekStart.getDate() - dayOfWeek);
-      return orderDate >= weekStart;
-    }
-    if (dateRange === 'THIS_MONTH') {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      return orderDate >= monthStart;
-    }
-    if (dateRange === 'LAST_30_DAYS') {
-      const thirtyDaysAgo = new Date(todayStart);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      return orderDate >= thirtyDaysAgo;
-    }
-    if (dateRange === 'CUSTOM') {
-      if (customStartDate) {
-        const s = new Date(customStartDate);
-        if (orderDate < s) return false;
-      }
-      if (customEndDate) {
-        const e = new Date(customEndDate);
-        e.setHours(23, 59, 59, 999);
-        if (orderDate > e) return false;
-      }
-      return true;
-    }
-
-    return true;
-  };
-
-  const filteredOrders = orders.filter((o) => {
-    const term = searchTerm.toLowerCase();
-    const matchSearch =
-      !term ||
-      (o.customer_name || '').toLowerCase().includes(term) ||
-      (o.customer_phone || '').includes(term) ||
-      (o.item_name || '').toLowerCase().includes(term) ||
-      String(o.id || '').toLowerCase().includes(term);
-
-    const matchStatus =
-      statusFilter === 'ALL' ||
-      (statusFilter === 'PENDING' && o.status === 'PENDING') ||
-      (statusFilter === 'ASSIGNED' && o.status === 'ASSIGNED') ||
-      (statusFilter === 'COMPLETED' && o.status === 'COMPLETED');
-
-    const matchD = matchDate(o);
-
-    return matchSearch && matchStatus && matchD;
-  });
-
-  const totalDisplayCount = totalOrdersCount || filteredOrders.length;
+  const totalDisplayCount = totalOrdersCount || orders.length;
   const totalPages = Math.ceil(totalDisplayCount / pageSize) || 1;
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
-  const displayOrdersList = orders.length <= pageSize ? orders : filteredOrders.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+  const displayOrdersList = orders;
 
   // ── Standalone See Bill Screen View ──
   if (activeView === 'SEE_BILL' && selectedOrder) {
@@ -672,53 +667,197 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           />
         </div>
 
-        {/* Date Range Dropdown & Custom Range Pickers */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f8fafc', padding: '3px 8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-            <i className="fa-solid fa-calendar-days" style={{ color: '#d97706', fontSize: '0.75rem' }}></i>
-            <select
-              value={dateRange}
-              onChange={(e) => {
-                const opt = e.target.value as DateRangeOption;
-                setDateRange(opt);
-                setCurrentPage(1);
-                updateUrlParams({ dateRange: opt === 'ALL' ? null : opt, page: 1 });
-              }}
-              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.75rem', fontWeight: 700, color: '#334155', cursor: 'pointer' }}
-            >
-              <option value="ALL">All Time</option>
-              <option value="TODAY">Today</option>
-              <option value="YESTERDAY">Yesterday</option>
-              <option value="THIS_WEEK">This Week</option>
-              <option value="THIS_MONTH">This Month</option>
-              <option value="LAST_30_DAYS">Last 30 Days</option>
-              <option value="CUSTOM">Custom Range</option>
-            </select>
-          </div>
+        {/* Date Range Filter Trigger matching Purchase History Screen */}
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          {(() => {
+            const getDateRangeButtonLabel = (): string => {
+              if (dateRange === 'CUSTOM' && (customStartDate || customEndDate)) {
+                if (customStartDate && customEndDate) return `${formatDDMMYYYY(customStartDate)} → ${formatDDMMYYYY(customEndDate)}`;
+                if (customStartDate) return `From ${formatDDMMYYYY(customStartDate)}`;
+                if (customEndDate) return `Until ${formatDDMMYYYY(customEndDate)}`;
+              }
+              if (dateRange === 'TODAY') {
+                const now = new Date();
+                return formatDDMMYYYY(now);
+              }
+              if (dateRange === 'YESTERDAY') {
+                const yest = new Date();
+                yest.setDate(yest.getDate() - 1);
+                return formatDDMMYYYY(yest);
+              }
+              if (dateRange === 'THIS_WEEK') {
+                const now = new Date();
+                const weekStart = new Date(now);
+                weekStart.setDate(weekStart.getDate() - now.getDay());
+                return `${formatDDMMYYYY(weekStart)} → ${formatDDMMYYYY(now)}`;
+              }
+              if (dateRange === 'THIS_MONTH') {
+                const now = new Date();
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                return `${formatDDMMYYYY(monthStart)} → ${formatDDMMYYYY(now)}`;
+              }
+              if (dateRange === 'LAST_30_DAYS') {
+                const now = new Date();
+                const thirtyDaysAgo = new Date(now);
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                return `${formatDDMMYYYY(thirtyDaysAgo)} → ${formatDDMMYYYY(now)}`;
+              }
+              return 'Filter Date Range';
+            };
 
-          {dateRange === 'CUSTOM' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => {
-                  setCustomStartDate(e.target.value);
-                  setCurrentPage(1);
-                  updateUrlParams({ startDate: e.target.value || null, page: 1 });
+            const labelText = getDateRangeButtonLabel();
+            const isActive = dateRange !== 'ALL';
+
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  setModalFromDate(customStartDate);
+                  setModalToDate(customEndDate);
+                  setIsFilterDateModalOpen(!isFilterDateModalOpen);
                 }}
-                style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.72rem', color: '#0f172a' }}
-              />
-              <span>to</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => {
-                  setCustomEndDate(e.target.value);
-                  setCurrentPage(1);
-                  updateUrlParams({ endDate: e.target.value || null, page: 1 });
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: isActive ? '#eef2ff' : '#ffffff',
+                  color: isActive ? '#4338ca' : '#334155',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  whiteSpace: 'nowrap',
                 }}
-                style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.72rem', color: '#0f172a' }}
-              />
+              >
+                <i className="fa-solid fa-calendar-days" style={{ color: isActive ? '#4338ca' : '#6366f1' }}></i>
+                <span>{labelText}</span>
+                <i className={`fa-solid ${isFilterDateModalOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`} style={{ fontSize: '0.68rem', marginLeft: '2px', color: isActive ? '#4338ca' : '#64748b' }}></i>
+              </button>
+            );
+          })()}
+
+          {/* ── ANCHORED FLOATING DATE RANGE DROPDOWN (MATCHING PURCHASE HISTORY EXACT SIZE) ── */}
+          {isFilterDateModalOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                right: 0,
+                zIndex: 100,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '12px',
+                padding: '1rem',
+                boxShadow: '0 12px 28px -4px rgba(15, 23, 42, 0.18)',
+                width: '260px',
+                display: 'grid',
+                gap: '0.75rem',
+                fontFamily: "'Inter', 'Segoe UI', sans-serif",
+              }}
+            >
+              {/* Dropdown Header */}
+              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Filter Date Range</span>
+                <i className="fa-solid fa-xmark" style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => setIsFilterDateModalOpen(false)}></i>
+              </div>
+
+              {/* From Date Field */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                  From Date:
+                </label>
+                <div style={{ position: 'relative', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.35rem 0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: modalFromDate ? '#0f172a' : '#94a3b8', letterSpacing: '0.5px' }}>
+                    {modalFromDate ? formatDDMMYYYYSpaced(modalFromDate) : 'dd - mm - yyyy'}
+                  </span>
+                  <i className="fa-regular fa-calendar" style={{ fontSize: '0.85rem', color: '#0f172a' }}></i>
+                  <input
+                    type="date"
+                    value={modalFromDate}
+                    onChange={(e) => setModalFromDate(e.target.value)}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                  />
+                </div>
+              </div>
+
+              {/* To Date Field */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                  To Date:
+                </label>
+                <div style={{ position: 'relative', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.35rem 0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: modalToDate ? '#0f172a' : '#94a3b8', letterSpacing: '0.5px' }}>
+                    {modalToDate ? formatDDMMYYYYSpaced(modalToDate) : 'dd - mm - yyyy'}
+                  </span>
+                  <i className="fa-regular fa-calendar" style={{ fontSize: '0.85rem', color: '#0f172a' }}></i>
+                  <input
+                    type="date"
+                    value={modalToDate}
+                    onChange={(e) => setModalToDate(e.target.value)}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalFromDate('');
+                    setModalToDate('');
+                    setDateRange('ALL');
+                    setCustomStartDate('');
+                    setCustomEndDate('');
+                    setCurrentPage(1);
+                    updateUrlParams({ dateRange: null, startDate: null, endDate: null, page: 1 });
+                    setIsFilterDateModalOpen(false);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.4rem',
+                    borderRadius: '6px',
+                    border: '1px solid #fca5a5',
+                    background: '#fef2f2',
+                    color: '#dc2626',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateRange('CUSTOM');
+                    setCustomStartDate(modalFromDate);
+                    setCustomEndDate(modalToDate);
+                    setCurrentPage(1);
+                    updateUrlParams({ dateRange: 'CUSTOM', startDate: modalFromDate || null, endDate: modalToDate || null, page: 1 });
+                    setIsFilterDateModalOpen(false);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.4rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(79, 70, 229, 0.3)',
+                  }}
+                >
+                  Apply Filter
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -3,6 +3,7 @@ import type { OrderItem } from '../types';
 import { translations, type Language } from '../../utils/translations';
 import { getOrdersTranslation } from '../ordersTranslations';
 import { FullImagePreviewModal } from '../../inventory-frontend/components/FullImagePreviewModal';
+import { formatDDMMYYYY } from '../../utils/dateUtils';
 
 interface OrdersHistoryTableProps {
   orders: OrderItem[];
@@ -115,8 +116,8 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
                 <td style={{ padding: '0.55rem 0.4rem', textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
                   {idx + 1}
                 </td>
-                <td style={{ padding: '0.55rem 0.5rem', color: '#334155', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                  {ord.created_at ? ord.created_at.split('T')[0] : '-'}
+                <td style={{ padding: '0.55rem 0.5rem', color: '#334155', whiteSpace: 'nowrap', fontSize: '0.75rem', fontWeight: 600 }}>
+                  {formatDDMMYYYY(ord.created_at)}
                 </td>
                 <td style={{ padding: '0.55rem 0.5rem' }}>
                   <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.78rem' }}>{ord.customer_name}</div>
