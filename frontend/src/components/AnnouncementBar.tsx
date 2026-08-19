@@ -3,8 +3,9 @@ import { formatPrice } from '../utils';
 import { API_BASE } from '../config/apiConfig';
 import { CURRENT_APP_VERSION_CODE } from '../utils/appVersion';
 import { AppUpdateModal, type VersionInfo } from './AppUpdateModal';
-import { useMetalRates } from '../utils/metalRatesStore';
+import { useMetalRates, forceFetchMetalRates } from '../utils/metalRatesStore';
 import { translations } from '../utils/translations';
+import { HeaderRefreshButton } from './HeaderRefreshButton';
 
 interface AnnouncementBarProps {
   message?: string;
@@ -153,8 +154,9 @@ export default function AnnouncementBar({
             {displayMessage}
           </div>
 
-          {/* Right: Notification Bell, Language Toggle & User Profile Avatar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          {/* Right: Hard Refresh Button, Notification Bell, Language Toggle & User Profile Avatar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <HeaderRefreshButton onRefresh={forceFetchMetalRates} size="sm" title="Hard Refresh Live Metal Rates from Server" />
             {/* Pulsing Notification Bell Icon Button for App Updates */}
             <button
               type="button"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import type { LoanRecord, MetalRates } from './types';
+import { HeaderRefreshButton } from '../components/HeaderRefreshButton';
 import { IssueNewLoanModal, DeleteConfirmDialog, SettlementDialog } from './components';
 
 import { getFinanceTranslation } from './financeTranslations';
@@ -242,9 +243,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       {/* ── Header ── */}
       <div style={{ marginBottom: '1.15rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', color: '#0f172a', fontWeight: 800, margin: 0 }}>
+          <h2 style={{ fontSize: '1.5rem', color: '#0f172a', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-solid fa-scale-balanced" style={{ color: '#6366f1', marginRight: '8px' }} />
             {t.financeScreenTitle}
+            <HeaderRefreshButton onRefresh={fetchData} size="sm" title="Hard Refresh Finance & Pledge Loans from Server" />
           </h2>
           <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.8rem' }}>
             {t.financeScreenSub}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import { translations, type Language } from '../utils/translations';
 import { getOrdersTranslation } from './ordersTranslations';
+import { HeaderRefreshButton } from '../components/HeaderRefreshButton';
 import type { OrderItem, WorkerItem } from './types';
 import { OrdersHistoryTable } from './components/OrdersHistoryTable';
 import { AssignWorkerModal } from './components/AssignWorkerModal';
@@ -657,6 +658,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           <h1 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <i className="fa-solid fa-list-check" style={{ color: '#d97706' }}></i>
             {t.ordersScreenTitle}
+            <HeaderRefreshButton onRefresh={fetchOrders} size="sm" title="Hard Refresh Orders History from Server" />
           </h1>
           <p style={{ margin: '3px 0 0 0', color: '#64748b', fontSize: '0.78rem' }}>
             {t.ordersScreenSub}

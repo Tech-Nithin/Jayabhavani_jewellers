@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import { memoryCache } from './config/memoryCache';
 
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
@@ -103,6 +104,17 @@ app.get('/api/health', (req: Request, res: Response) => {
     modules: ['dashboard-backend', 'billing-backend', 'finance-backend', 'inventory-backend', 'work-assignment-backend'],
     timestamp: new Date().toISOString(),
   });
+});
+
+// Manual Hard-Refresh Cache Purge Endpoint
+app.post('/api/health/purge-cache', (req: Request, res: Response) => {
+  try {
+    memoryCache.clear();
+    console.log('🧹 [Manual Hard Refresh] RAM Cache purged successfully!');
+    res.json({ success: true, message: 'RAM Cache purged successfully' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 if (process.env.VERCEL !== '1') {

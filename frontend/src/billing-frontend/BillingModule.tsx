@@ -19,8 +19,9 @@ import { calculateSellItems } from './components/modes/SellModeForm';
 import { calculateBuyItems } from './components/modes/BuyModeForm';
 import { calculateExchangeItems } from './components/modes/ExchangeModeForm';
 
-import { useMetalRates, pushRatesUpdate } from '../utils/metalRatesStore';
+import { useMetalRates, pushRatesUpdate, forceFetchMetalRates } from '../utils/metalRatesStore';
 import { translations, type Language } from '../utils/translations';
+import { HeaderRefreshButton } from '../components/HeaderRefreshButton';
 
 interface BillingModuleProps {
   lang?: Language;
@@ -887,8 +888,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           {/* Title & Top Action Bar */}
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '0.5rem' }}>
-              <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.35rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
+              <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.35rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {t.billingScreenTitle}
+                <HeaderRefreshButton onRefresh={forceFetchMetalRates} size="sm" title="Hard Refresh Billing Rates from Server" />
               </h2>
 
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>

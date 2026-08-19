@@ -93,6 +93,20 @@ export async function getOrFetchMetalRates(): Promise<MetalRates> {
   return fetchPromise;
 }
 
+export async function forceFetchMetalRates(): Promise<MetalRates> {
+  try {
+    const res = await fetch(`${API_BASE}/billing/rates`);
+    const data = await res.json();
+    if (data.success && data.rates) {
+      updateLocalRates(data.rates);
+      isInitialized = true;
+    }
+  } catch (err) {
+    console.warn('⚠️ Metal rates fetch fallback warning:', err);
+  }
+  return currentRates;
+}
+
 /**
  * Setup Global Realtime Listeners (BroadcastChannel + CustomEvent)
  * Executes once on module load.

@@ -6,6 +6,7 @@ import type { Language } from '../../utils/translations';
 import { API_BASE } from '../../config/apiConfig';
 import { getTeluguTransliterationSync } from '../../utils/transliterate';
 import { FullImagePreviewModal } from '../../inventory-frontend/components/FullImagePreviewModal';
+import { HeaderRefreshButton } from '../../components/HeaderRefreshButton';
 
 const parseIndianCurrencyNumber = (val: string | number | undefined | null): number => {
   if (typeof val === 'number') return val;
@@ -521,6 +522,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           )}
           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-solid fa-address-book" style={{ color: '#0284c7' }}></i>{t.purchaseHistoryTitle} ({filtered.length})
+            <HeaderRefreshButton onRefresh={fetchOnDemand} size="sm" title="Hard Refresh Purchase History & KPI Cards from Server" />
           </h3>
         </div>
       </div>

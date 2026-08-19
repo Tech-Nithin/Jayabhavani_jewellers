@@ -3,6 +3,7 @@ import { API_BASE } from '../config/apiConfig';
 import { translations } from '../utils/translations';
 import type { Language } from '../utils/translations';
 import { getTeluguTransliterationSync } from '../utils/transliterate';
+import { HeaderRefreshButton } from '../components/HeaderRefreshButton';
 
 // Modular Child Components
 import { MetalCategorySelector } from './components/MetalCategorySelector';
@@ -495,8 +496,9 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
           {/* TOP PAGE HEADER */}
           <div style={{ marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
             <div>
-              <h2 className="admin-page-title inventory-title-heading" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
+              <h2 className="admin-page-title inventory-title-heading" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.5rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="fa-solid fa-boxes-stacked" style={{ color: '#d97706', marginRight: '8px' }}></i> {t.inventoryModuleTitle}
+                <HeaderRefreshButton onRefresh={fetchInventory} size="sm" title="Hard Refresh Inventory Stock from Server" />
               </h2>
               <p className="inventory-sub-text" style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.8rem' }}>
                 {t.inventoryModuleSub}
