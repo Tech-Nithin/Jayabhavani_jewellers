@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import { getCachedData, setCachedData, invalidateCacheKey } from '../../config/redis';
 
 const router = Router();
 
@@ -49,6 +50,15 @@ let invoicesList: any[] = [];
 
 // GET /api/billing/rates - Fetch active metal values with per-column timestamps (from updated_metal_values)
 router.get('/rates', async (req: Request, res: Response) => {
+  const cachedRates = await getCachedData<any>('metal_rates');
+  if (cachedRates) {
+    activeMetalValues = cachedRates;
+    return res.json({
+      success: true,
+      rates: activeMetalValues,
+    });
+  }
+
   try {
     const { data, error } = await supabase
       .from('updated_metal_values')
@@ -67,6 +77,7 @@ router.get('/rates', async (req: Request, res: Response) => {
         silver_sell_value: Number(data.silver_sell_value),
         silver_sell_value_updated_at: data.silver_sell_value_updated_at || new Date().toISOString(),
       };
+      await setCachedData('metal_rates', activeMetalValues, 86400);
     }
   } catch (err) {
     console.warn('⚠️ Supabase updated_metal_values fetch error:', err);
@@ -177,6 +188,7 @@ router.post('/rates', async (req: Request, res: Response) => {
     }
 
     await supabase.from('updated_metal_values').upsert(dbUpdateFields);
+    await setCachedData('metal_rates', activeMetalValues, 86400);
 
     if (dbHistoryInserts.length > 0) {
       await supabase.from('metal_history_rates').insert(dbHistoryInserts);
@@ -379,6 +391,16 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
     const isAll = rawLimit.toUpperCase() === 'ALL' || rawLimit === '0';
     const limit = isAll ? 0 : (parseInt(rawLimit, 10) || 10);
 
+    const isDefaultDirQuery = page === 1 && limit === 10 && !search && (!history || history === 'ALL') && !from && !to;
+    const cacheKey = isDefaultDirQuery ? 'customer_directory_page_1' : null;
+
+    if (cacheKey) {
+      const cached = await getCachedData<any>(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+    }
+
     let query = supabase
       .from('billing_invoices')
       .select(directoryColumns, { count: 'estimated' });
@@ -434,14 +456,20 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
 
     const totalPages = isAll || limit <= 0 ? 1 : Math.max(1, Math.ceil(totalCount / limit));
 
-    return res.json({
+    const responseObj = {
       success: true,
       customers,
       totalCount,
       page,
       limit: isAll ? 'ALL' : limit,
       totalPages,
-    });
+    };
+
+    if (cacheKey) {
+      await setCachedData(cacheKey, responseObj, 300);
+    }
+
+    return res.json(responseObj);
   } catch (err) {
     console.error('Error in customer-directory route:', err);
     return res.status(500).json({ success: false, message: 'Server error fetching customer directory.' });
@@ -706,6 +734,10 @@ router.post('/create', async (req: Request, res: Response) => {
 
   // Trigger automatic insert into customer_metal_transactions running ledger
   insertMetalTransactions(createdInvoice).catch(() => {});
+
+  // Invalidate Upstash Redis cache key instantly so all admins in all locations get fresh data
+  await invalidateCacheKey('customer_directory_page_1');
+  await invalidateCacheKey('orders_page_1');
 
   res.json({
     success: true,

@@ -234,7 +234,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div style={{ position: 'relative' }}>
             <button
               type="button"
-              onClick={() => setSettingsOpen(!settingsOpen)}
+              onClick={() => {
+                setSettingsOpen((prev) => !prev);
+                setIsCollapsed(false);
+                localStorage.setItem('jbj_sidebar_collapsed', 'false');
+              }}
               title="Account Settings & Logout"
               style={{
                 width: '40px',
@@ -505,7 +509,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div style={{ position: 'relative', marginTop: '1rem' }}>
           <button
             type="button"
-            onClick={() => setSettingsOpen(!settingsOpen)}
+            onClick={() => {
+              setSettingsOpen((prev) => !prev);
+              setIsCollapsed(false);
+              localStorage.setItem('jbj_sidebar_collapsed', 'false');
+            }}
             title={effectiveCollapsed ? 'Account Settings' : undefined}
             style={{
               width: '100%',
