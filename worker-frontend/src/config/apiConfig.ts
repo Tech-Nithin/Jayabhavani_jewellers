@@ -5,15 +5,15 @@ const getApiBase = (): string => {
     const cleaned = envUrl.trim().replace(/\/+$/, '');
     return cleaned.endsWith('/api') ? cleaned : `${cleaned}/api`;
   }
-  // Native Capacitor APK fallback
+  const defaultProdBackend = 'https://jbj-central-backend.onrender.com/api';
   if ((window as any).Capacitor?.isNativePlatform()) {
-    return 'https://jbj-backend.vercel.app/api';
+    return defaultProdBackend;
   }
   const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') {
     return 'http://localhost:5000/api';
   }
-  return `http://${host}:5000/api`;
+  return defaultProdBackend;
 };
 
 export const API_BASE = getApiBase();
