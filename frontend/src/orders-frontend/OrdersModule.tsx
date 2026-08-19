@@ -242,7 +242,11 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     fetchOrders();
   }, [currentPage, pageSize, statusFilter, debouncedSearchTerm, dateRange, customStartDate, customEndDate]);
 
+  const isFetchingOrdersRef = useRef(false);
+
   const fetchOrders = async () => {
+    if (isFetchingOrdersRef.current) return;
+    isFetchingOrdersRef.current = true;
     try {
       setLoading(true);
       const queryParams = new URLSearchParams();
@@ -268,6 +272,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       console.error('Failed to fetch orders:', err);
     } finally {
       setLoading(false);
+      isFetchingOrdersRef.current = false;
     }
   };
 

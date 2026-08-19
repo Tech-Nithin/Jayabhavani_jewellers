@@ -52,8 +52,15 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  const hasMountedRef = useRef(false);
+
   useEffect(() => { setSearchTerm(globalSearch); }, [globalSearch]);
-  useEffect(() => { fetchData(); fetchMetalRates(); }, []);
+  useEffect(() => {
+    if (hasMountedRef.current) return;
+    hasMountedRef.current = true;
+    fetchData();
+    fetchMetalRates();
+  }, []);
   useEffect(() => { setCurrentPage(1); }, [statusFilter, metalFilter, debouncedSearchTerm, startDate, endDate]);
 
   // Click outside listener for date range filters

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { verifySessionApi } from './services/api';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLoginPage from './components/AdminLoginPage';
@@ -12,8 +12,12 @@ export default function App() {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [checking, setChecking] = useState(true);
 
+  const isSessionCheckedRef = useRef(false);
+
   // Check saved admin session token on mount
   useEffect(() => {
+    if (isSessionCheckedRef.current) return;
+    isSessionCheckedRef.current = true;
     initNativeNotifications();
     async function checkSession() {
       const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN) || sessionStorage.getItem(STORAGE_KEY_TOKEN);
