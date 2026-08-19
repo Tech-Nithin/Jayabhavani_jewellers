@@ -4,7 +4,7 @@ export const getApiBase = (): string => {
     const cleaned = envUrl.trim().replace(/\/+$/, '');
     return cleaned.endsWith('/api') ? cleaned : `${cleaned}/api`;
   }
-  return '/api';
+  return 'https://jbj-central-backend.onrender.com/api';
 };
 
 export const API_BASE = getApiBase();

@@ -25,6 +25,7 @@ const envOrigins = process.env.ALLOWED_ORIGINS
   : [];
 
 const defaultOrigins = [
+  'https://jbj-central-backend.onrender.com',
   'https://jbjadmin.vercel.app',
   'http://jbjadmin.vercel.app',
   'https://jbjworkers.vercel.app',
