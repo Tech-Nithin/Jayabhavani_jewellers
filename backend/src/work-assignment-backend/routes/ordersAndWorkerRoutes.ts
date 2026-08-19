@@ -7,7 +7,6 @@ import { saveFcmToken } from '../../utils/fcmTokenStore';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 import { triggerFcmPushNotification } from '../../utils/pushService';
 import { insertMetalTransactions } from '../../billing-backend/routes/billingRoutes';
-import { getCachedData, setCachedData, invalidateCacheKey } from '../../config/redis';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -130,16 +129,6 @@ router.get('/orders', async (req: Request, res: Response) => {
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
 
-    const isDefaultQuery = page === 1 && limit === 10 && (!status || status === 'ALL') && !search && (!dateRange || dateRange === 'ALL');
-    const cacheKey = isDefaultQuery ? 'orders_page_1' : null;
-
-    if (cacheKey) {
-      const cached = await getCachedData<any>(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-    }
-
     let query = supabase.from('orders').select(orderListColumns, { count: 'estimated' });
 
     if (status && status !== 'ALL') {
@@ -188,18 +177,14 @@ router.get('/orders', async (req: Request, res: Response) => {
 
     if (!error && dbOrders) {
       const totalCount = count !== null ? count : dbOrders.length;
-      const responseObj = {
+      return res.json({
         success: true,
         orders: dbOrders,
         total: totalCount,
         page,
         limit,
         totalPages: Math.ceil(totalCount / limit) || 1,
-      };
-      if (cacheKey) {
-        await setCachedData(cacheKey, responseObj, 300);
-      }
-      return res.json(responseObj);
+      });
     }
   } catch (e) {
     console.warn('⚠️ Supabase GET /orders error, falling back to mockOrders:', e);
@@ -761,11 +746,6 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
 
 // GET /api/workers
 router.get('/workers', async (req: Request, res: Response) => {
-  const cachedWorkers = await getCachedData<any>('workers_list');
-  if (cachedWorkers) {
-    return res.json(cachedWorkers);
-  }
-
   let workerList: WorkerItem[] = mockWorkers;
   let allTxns: any[] = mockTransactions;
 
@@ -816,12 +796,10 @@ router.get('/workers', async (req: Request, res: Response) => {
     };
   });
 
-  const responseObj = {
+  res.json({
     success: true,
     workers: enrichedWorkers,
-  };
-  await setCachedData('workers_list', responseObj, 300);
-  res.json(responseObj);
+  });
 });
 
 // POST /api/workers
