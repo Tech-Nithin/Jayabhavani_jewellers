@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: jbj-central-backend
+    env: node
+    region: singapore
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.14.0
