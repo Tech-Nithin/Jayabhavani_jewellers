@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { supabase } from '../../config/supabase';
 import { uploadFinanceImageToCloudinary } from '../../utils/cloudinaryHelper';
+import { memoryCache } from '../../config/memoryCache';
 
 const router = Router();
 const BUCKET = 'loan-item-images';
@@ -271,6 +272,8 @@ router.post('/debt/create', async (req: Request, res: Response) => {
         message: `not stored: ${error?.message || 'Database insertion failed'}`,
       });
     }
+
+    memoryCache.clear();
 
     res.json({ success: true, message: 'Pledge loan record created successfully', record: data });
   } catch (err: any) {

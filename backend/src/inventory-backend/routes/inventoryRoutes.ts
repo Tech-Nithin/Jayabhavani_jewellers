@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { supabase } from '../../config/supabase';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
+import { memoryCache } from '../../config/memoryCache';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -223,6 +224,8 @@ router.post('/products', async (req: Request, res: Response) => {
     weight_to_grams: finalWeightTo,
     img: cloudinaryWebpUrl,
   };
+
+  memoryCache.clear();
 
   res.json({ success: true, product: responseProduct });
 });
