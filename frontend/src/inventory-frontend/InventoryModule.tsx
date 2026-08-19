@@ -415,10 +415,19 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     count: categoryCountsMap[catName],
   }));
 
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   const filteredProducts = metalProducts.filter((p) => {
     const matchesOrnament = selectedOrnament === 'ALL' || !selectedOrnament || p.category.toLowerCase() === selectedOrnament.toLowerCase();
     
-    const query = searchTerm.trim().toLowerCase();
+    const query = debouncedSearchTerm.trim().toLowerCase();
 
     const teCategory = getTeluguTransliterationSync(p.category).toLowerCase();
     const teName = getTeluguTransliterationSync(p.name).toLowerCase();

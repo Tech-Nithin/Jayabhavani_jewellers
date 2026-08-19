@@ -43,9 +43,18 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
   const [endCalendarViewDate, setEndCalendarViewDate] = useState<Date>(new Date());
   const endCalendarDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   useEffect(() => { setSearchTerm(globalSearch); }, [globalSearch]);
   useEffect(() => { fetchData(); fetchMetalRates(); }, []);
-  useEffect(() => { setCurrentPage(1); }, [statusFilter, metalFilter, searchTerm, startDate, endDate]);
+  useEffect(() => { setCurrentPage(1); }, [statusFilter, metalFilter, debouncedSearchTerm, startDate, endDate]);
 
   // Click outside listener for date range filters
   useEffect(() => {
@@ -176,7 +185,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
     if (statusFilter === 'completed' && rec.status !== 'CLOSED') return false;
     if (statusFilter === 'overdue' && !isRecordOverdue(rec)) return false;
 
-    const term = searchTerm.toLowerCase().trim();
+    const term = debouncedSearchTerm.toLowerCase().trim();
     const match =
       !term ||
       rec.customer_name?.toLowerCase().includes(term) ||

@@ -747,28 +747,24 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
 // GET /api/workers
 router.get('/workers', async (req: Request, res: Response) => {
   let workerList: WorkerItem[] = mockWorkers;
+  let allTxns: any[] = mockTransactions;
 
   try {
-    const { data: dbWorkers, error } = await supabase.from('workers').select('*').order('created_at', { ascending: false });
-    if (!error && dbWorkers && dbWorkers.length > 0) {
-      const dbIds = new Set(dbWorkers.map((w: any) => w.id));
-      workerList = [...dbWorkers, ...mockWorkers.filter((m) => !dbIds.has(m.id))];
+    const [workersRes, txnsRes] = await Promise.all([
+      supabase.from('workers').select('id, name, specialization, photo_url, phone, created_at').order('created_at', { ascending: false }),
+      supabase.from('worker_transactions').select('worker_id, direction, status_state, is_seen, created_at').order('created_at', { ascending: false }).limit(100),
+    ]);
+
+    if (!workersRes.error && workersRes.data && workersRes.data.length > 0) {
+      const dbIds = new Set(workersRes.data.map((w: any) => w.id));
+      workerList = [...(workersRes.data as any[]), ...mockWorkers.filter((m) => !dbIds.has(m.id))];
+    }
+
+    if (!txnsRes.error && txnsRes.data && txnsRes.data.length > 0) {
+      allTxns = txnsRes.data;
     }
   } catch (e) {
-    console.warn('Workers fetch from Supabase fallback:', e);
-  }
-
-  // Fetch transactions to compute unread_messages_count & last_message_at per worker
-  let allTxns: any[] = [];
-  try {
-    const { data: dbTxns } = await supabase.from('worker_transactions').select('worker_id, direction, status_state, is_seen, created_at').order('created_at', { ascending: false }).limit(100);
-    if (dbTxns && dbTxns.length > 0) {
-      allTxns = dbTxns;
-    } else {
-      allTxns = mockTransactions;
-    }
-  } catch {
-    allTxns = mockTransactions;
+    console.warn('Workers parallel fetch from Supabase fallback:', e);
   }
 
   const unreadMap: Record<string, number> = {};
@@ -787,17 +783,16 @@ router.get('/workers', async (req: Request, res: Response) => {
   });
 
   const enrichedWorkers = workerList.map((worker) => {
-    const assignedOrders = mockOrders.filter((o) => o.assigned_worker_id === worker.id);
-    const pendingOrders = assignedOrders.filter((o) => o.status !== 'COMPLETED');
-    const completedOrders = assignedOrders.filter((o) => o.status === 'COMPLETED');
-
     return {
-      ...worker,
-      assigned_orders_count: assignedOrders.length,
-      pending_orders_count: pendingOrders.length,
-      completed_orders_count: completedOrders.length,
+      id: worker.id,
+      name: worker.name,
+      specialization: worker.specialization,
+      photo_url: worker.photo_url || (worker as any).avatar_url || '',
+      phone: worker.phone || '',
+      status: (worker as any).status || 'ACTIVE',
       unread_messages_count: unreadMap[String(worker.id)] || 0,
       last_message_at: lastMessageTimeMap[String(worker.id)] || null,
+      created_at: (worker as any).created_at || null,
     };
   });
 

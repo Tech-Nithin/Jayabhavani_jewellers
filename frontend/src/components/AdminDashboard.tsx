@@ -8,7 +8,6 @@ import { OrdersModule } from '../orders-frontend/OrdersModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
 import AnnouncementBar from './AnnouncementBar';
 import { PwaInstallBanner } from './PwaInstallBanner';
-import { AppUpdateModal } from './AppUpdateModal';
 
 import { translations } from '../utils/translations';
 import type { Language } from '../utils/translations';
@@ -119,7 +118,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="admin-dashboard-root" style={{ display: 'flex', minHeight: '100vh', background: '#faf7f2', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
-      <AppUpdateModal />
 
       {/* 1. Backdrop Overlay for Tablet & Mobile Drawer */}
       {isTabletOrMobile && mobileMenuOpen && (

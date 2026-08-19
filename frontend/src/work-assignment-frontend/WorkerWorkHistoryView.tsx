@@ -241,6 +241,14 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED'>('ALL');
   const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
   const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>(worker?.id || 'ALL');
@@ -300,20 +308,16 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
   const filteredOrders = orders.filter((ord) => {
     // 1. Worker Filter from "Assigned To" Dropdown
     if (selectedWorkerFilter !== 'ALL') {
-      const matchId = ord.assigned_worker_id === selectedWorkerFilter;
-      const matchName = (ord.assigned_worker_name || '').toLowerCase() === selectedWorkerFilter.toLowerCase();
-      if (!matchId && !matchName) return false;
+      if (String(ord.assigned_worker_id) !== String(selectedWorkerFilter)) return false;
     }
 
-    // 2. Status Filter from KPI Card Clicks
-    const isCompleted = !!(ord.returned_at || ord.completed_at);
-    if (statusFilter === 'PENDING' && isCompleted) return false;
-    if (statusFilter === 'COMPLETED' && !isCompleted) return false;
+    // 2. Status Filter
+    if (statusFilter === 'PENDING' && ord.order_status === 'COMPLETED') return false;
+    if (statusFilter === 'COMPLETED' && ord.order_status !== 'COMPLETED') return false;
 
     // 3. Date Range Filter
-    const orderDateStr = ord.assigned_at || ord.created_at;
-    if (orderDateStr) {
-      const ordDate = new Date(orderDateStr);
+    if (startDate || endDate) {
+      const ordDate = new Date(ord.created_at || Date.now());
       if (startDate) {
         const s = new Date(startDate);
         s.setHours(0, 0, 0, 0);
@@ -327,8 +331,8 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
     }
 
     // 4. Search Term Filter
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase().trim();
+    if (!debouncedSearchTerm.trim()) return true;
+    const q = debouncedSearchTerm.toLowerCase().trim();
     const wName = (ord.assigned_worker_name || '').toLowerCase();
     const wId = (ord.assigned_worker_id || '').toLowerCase();
     const cName = (ord.customer_name || '').toLowerCase();

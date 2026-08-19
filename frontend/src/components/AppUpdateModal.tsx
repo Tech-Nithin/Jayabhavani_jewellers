@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { API_BASE } from '../config/apiConfig';
-import { CURRENT_APP_VERSION_CODE, CURRENT_APP_VERSION_NAME } from '../utils/appVersion';
+import React from 'react';
+import { CURRENT_APP_VERSION_NAME } from '../utils/appVersion';
 
-interface VersionInfo {
+export interface VersionInfo {
   latestVersionCode: number;
   latestVersionName: string;
   apkDownloadUrl: string;
@@ -10,30 +9,14 @@ interface VersionInfo {
   forceUpdate?: boolean;
 }
 
-export const AppUpdateModal: React.FC = () => {
-  const [updateInfo, setUpdateInfo] = useState<VersionInfo | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+interface AppUpdateModalProps {
+  isOpen: boolean;
+  updateInfo: VersionInfo | null;
+  onClose: () => void;
+}
 
-  useEffect(() => {
-    let isMounted = true;
-    const checkVersion = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/work-assignment/app-version?app=ADMIN`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (isMounted && data.success && data.latestVersionCode > CURRENT_APP_VERSION_CODE) {
-          setUpdateInfo(data);
-        }
-      } catch (err) {
-        console.warn('App version check notice:', err);
-      }
-    };
-
-    checkVersion();
-    return () => { isMounted = false; };
-  }, []);
-
-  if (!updateInfo || dismissed) return null;
+export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, updateInfo, onClose }) => {
+  if (!isOpen || !updateInfo) return null;
 
   const handleUpdate = () => {
     if (updateInfo.apkDownloadUrl) {
@@ -55,8 +38,10 @@ export const AppUpdateModal: React.FC = () => {
         padding: '1rem',
         animation: 'fadeIn 0.25s ease-out',
       }}
+      onClick={onClose}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: 'linear-gradient(135deg, #1f1915 0%, #110d0b 100%)',
           border: '1px solid #d97706',
@@ -67,8 +52,28 @@ export const AppUpdateModal: React.FC = () => {
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(217, 119, 6, 0.25)',
           color: '#ffffff',
           textAlign: 'center',
+          position: 'relative',
         }}
       >
+        {/* Close Icon in Top Corner */}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '14px',
+            background: 'transparent',
+            border: 'none',
+            color: '#a39284',
+            fontSize: '1rem',
+            cursor: 'pointer',
+            padding: '4px',
+          }}
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+
         <div
           style={{
             width: '54px',
@@ -88,10 +93,10 @@ export const AppUpdateModal: React.FC = () => {
         </div>
 
         <h3 style={{ margin: '0 0 0.4rem', fontSize: '1.2rem', fontWeight: 800, color: '#fffefb' }}>
-          Update Available!
+          New App Update Available!
         </h3>
         <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: '#c59b27', fontWeight: 700 }}>
-          Version {updateInfo.latestVersionName} (Current: v{CURRENT_APP_VERSION_NAME})
+          Version {updateInfo.latestVersionName} (Installed: v{CURRENT_APP_VERSION_NAME})
         </p>
 
         {updateInfo.releaseNotes && (
@@ -118,7 +123,7 @@ export const AppUpdateModal: React.FC = () => {
           {!updateInfo.forceUpdate && (
             <button
               type="button"
-              onClick={() => setDismissed(true)}
+              onClick={onClose}
               style={{
                 flex: 1,
                 padding: '0.65rem',
@@ -131,7 +136,7 @@ export const AppUpdateModal: React.FC = () => {
                 cursor: 'pointer',
               }}
             >
-              Later
+              Close
             </button>
           )}
 
@@ -155,7 +160,7 @@ export const AppUpdateModal: React.FC = () => {
               gap: '6px',
             }}
           >
-            <i className="fa-solid fa-download"></i> Update Now
+            <i className="fa-solid fa-download"></i> Download APK
           </button>
         </div>
       </div>

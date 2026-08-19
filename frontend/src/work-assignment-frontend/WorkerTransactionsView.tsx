@@ -143,37 +143,25 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     if (onSelectWorker) onSelectWorker(w);
   };
 
-  // Periodically refresh workers' unread counts & latest message timestamps
+  // Sync workers' unread counts & latest message timestamps from passed workers prop (0 duplicate HTTP calls)
   useEffect(() => {
-    const refreshWorkerUnreadCounts = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/work-assignment/workers`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.workers)) {
-          const counts: Record<string, number> = {};
-          const times: Record<string, string> = {};
-          data.workers.forEach((w: any) => {
-            if (worker?.id && String(w.id) === String(worker.id)) {
-              counts[w.id] = 0;
-            } else {
-              counts[w.id] = w.unread_messages_count || 0;
-            }
-            if (w.last_message_at) {
-              times[w.id] = w.last_message_at;
-            }
-          });
-          setUnreadCounts((prev) => ({ ...prev, ...counts }));
-          setLastMessageTimes((prev) => ({ ...prev, ...times }));
+    if (Array.isArray(workers) && workers.length > 0) {
+      const counts: Record<string, number> = {};
+      const times: Record<string, string> = {};
+      workers.forEach((w: any) => {
+        if (worker?.id && String(w.id) === String(worker.id)) {
+          counts[w.id] = 0;
+        } else {
+          counts[w.id] = w.unread_messages_count || 0;
         }
-      } catch (err) {
-        // silent catch
-      }
-    };
-
-    refreshWorkerUnreadCounts();
-    const interval = setInterval(refreshWorkerUnreadCounts, 4000);
-    return () => clearInterval(interval);
-  }, [worker?.id]);
+        if (w.last_message_at) {
+          times[w.id] = w.last_message_at;
+        }
+      });
+      setUnreadCounts((prev) => ({ ...prev, ...counts }));
+      setLastMessageTimes((prev) => ({ ...prev, ...times }));
+    }
+  }, [workers, worker?.id]);
 
   const [transactions, setTransactions] = useState<WorkerTransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -328,7 +316,6 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
   useEffect(() => {
     fetchInitialTransactions();
-    fetchUserSettings();
     initFcmPushNotifications('ADMIN', 'ADMIN');
   }, [worker?.id]);
 
@@ -353,21 +340,6 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [worker?.id]);
-
-  const fetchUserSettings = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/work-assignment/user-settings`);
-      const data = await res.json();
-      if (data.success && data.settings && typeof data.settings.message_preview_enabled === 'boolean') {
-        if (localStorage.getItem('jbj_message_preview_enabled') === null) {
-          setIsMessagePreviewEnabled(data.settings.message_preview_enabled);
-          localStorage.setItem('jbj_message_preview_enabled', String(data.settings.message_preview_enabled));
-        }
-      }
-    } catch (err) {
-      console.warn('Could not fetch user settings:', err);
-    }
-  };
 
   const toggleMessagePreview = async () => {
     const newValue = !isMessagePreviewEnabled;
@@ -567,14 +539,24 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     }
   }, [worker?.id, loading]);
 
-  // Search trigger: Queries 100% of full historical records for this worker, or restores full timeline when cleared
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // 1-Second (1000ms) Debounce Timer for Search Input
   useEffect(() => {
-    if (searchQuery.trim() !== '') {
-      fetchFullTransactions(searchQuery);
-    } else if (searchQuery === '' && !isSearchOpen) {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Search trigger: Queries 100% of full historical records for this worker 1s after typing completes
+  useEffect(() => {
+    if (debouncedSearchQuery.trim() !== '') {
+      fetchFullTransactions(debouncedSearchQuery);
+    } else if (debouncedSearchQuery === '' && !isSearchOpen) {
       fetchInitialTransactions();
     }
-  }, [searchQuery, isSearchOpen]);
+  }, [debouncedSearchQuery, isSearchOpen]);
 
   // Initial fetch: 0ms IndexedDB cache load + 7-day backend sync
   const fetchInitialTransactions = async () => {
@@ -952,8 +934,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
 
   // ── IN-CHAT SEARCH & AUTO SCROLL TO MATCH ──
   const matchedTxIds = transactions.filter((t) => {
-    if (!searchQuery.trim()) return false;
-    const q = searchQuery.toLowerCase().trim();
+    if (!debouncedSearchQuery.trim()) return false;
+    const q = debouncedSearchQuery.toLowerCase().trim();
     const item = (t.item_name || '').toLowerCase();
     const notesStr = (t.notes || '').toLowerCase();
     const cat = (t.category || '').toLowerCase();
@@ -975,12 +957,21 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
-  }, [searchQuery, activeMatchIdx]);
+  }, [debouncedSearchQuery, activeMatchIdx]);
+
+  const [debouncedSidebarSearchQuery, setDebouncedSidebarSearchQuery] = useState(sidebarSearchQuery);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSidebarSearchQuery(sidebarSearchQuery);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [sidebarSearchQuery]);
 
   const filteredSidebarWorkers = [...workers]
     .filter((w) =>
-      w.name?.toLowerCase().includes(sidebarSearchQuery.toLowerCase()) ||
-      w.specialization?.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
+      w.name?.toLowerCase().includes(debouncedSidebarSearchQuery.toLowerCase()) ||
+      w.specialization?.toLowerCase().includes(debouncedSidebarSearchQuery.toLowerCase())
     )
     .sort((a, b) => {
       const timeA = lastMessageTimes[a.id] || a.last_message_at || a.updated_at || a.created_at || '';

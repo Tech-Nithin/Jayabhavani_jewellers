@@ -223,6 +223,15 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     }
   }, []);
 
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   useEffect(() => {
     const handlePopState = () => syncFromUrl();
     window.addEventListener('popstate', handlePopState);
@@ -231,7 +240,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
 
   useEffect(() => {
     fetchOrders();
-  }, [currentPage, pageSize, statusFilter, searchTerm, dateRange, customStartDate, customEndDate]);
+  }, [currentPage, pageSize, statusFilter, debouncedSearchTerm, dateRange, customStartDate, customEndDate]);
 
   const fetchOrders = async () => {
     try {
@@ -240,7 +249,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       queryParams.set('page', String(currentPage));
       queryParams.set('limit', String(pageSize));
       if (statusFilter && statusFilter !== 'ALL') queryParams.set('status', statusFilter);
-      if (searchTerm) queryParams.set('search', searchTerm);
+      if (debouncedSearchTerm) queryParams.set('search', debouncedSearchTerm);
       if (dateRange && dateRange !== 'ALL') queryParams.set('dateRange', dateRange);
       if (dateRange === 'CUSTOM' && customStartDate) queryParams.set('startDate', customStartDate);
       if (dateRange === 'CUSTOM' && customEndDate) queryParams.set('endDate', customEndDate);

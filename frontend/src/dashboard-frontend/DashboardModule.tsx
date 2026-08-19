@@ -184,35 +184,47 @@ export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language 
     return true;
   };
 
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // Filtered Datasets
   const filteredInvoices = invoices.filter((inv) => {
+    const term = debouncedSearchTerm.toLowerCase();
     const matchesSearch =
-      !searchTerm ||
-      inv.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inv.customer_phone && inv.customer_phone.includes(searchTerm)) ||
-      (inv.customer_address && inv.customer_address.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      inv.product_name?.toLowerCase().includes(searchTerm.toLowerCase());
+      !term ||
+      inv.customer_name?.toLowerCase().includes(term) ||
+      (inv.customer_phone && inv.customer_phone.includes(term)) ||
+      (inv.customer_address && inv.customer_address.toLowerCase().includes(term)) ||
+      inv.product_name?.toLowerCase().includes(term);
     return matchesSearch && isWithinDateRange(inv.created_at);
   });
 
   const filteredOrders = orders.filter((ord) => {
+    const term = debouncedSearchTerm.toLowerCase();
     const matchesSearch =
-      !searchTerm ||
-      ord.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ord.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (ord.assigned_worker_name && ord.assigned_worker_name.toLowerCase().includes(searchTerm.toLowerCase()));
+      !term ||
+      ord.customer_name?.toLowerCase().includes(term) ||
+      ord.item_name?.toLowerCase().includes(term) ||
+      (ord.assigned_worker_name && ord.assigned_worker_name.toLowerCase().includes(term));
     return matchesSearch && isWithinDateRange(ord.created_at);
   });
 
   const filteredFinance = financeRecords.filter((fin) => {
+    const term = debouncedSearchTerm.toLowerCase();
     const bName = fin.borrower_name || fin.customer_name || '';
     const bPhone = fin.borrower_phone || fin.customer_phone || '';
     const bAddr = fin.borrower_address || fin.customer_address || '';
     const matchesSearch =
-      !searchTerm ||
-      bName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bPhone.includes(searchTerm) ||
-      bAddr.toLowerCase().includes(searchTerm.toLowerCase());
+      !term ||
+      bName.toLowerCase().includes(term) ||
+      bPhone.includes(term) ||
+      bAddr.toLowerCase().includes(term);
     return matchesSearch && isWithinDateRange(fin.created_at || fin.loan_date || '');
   });
 

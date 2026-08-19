@@ -19,8 +19,8 @@ import { calculateSellItems } from './components/modes/SellModeForm';
 import { calculateBuyItems } from './components/modes/BuyModeForm';
 import { calculateExchangeItems } from './components/modes/ExchangeModeForm';
 
-import { translations } from '../utils/translations';
-import type { Language } from '../utils/translations';
+import { useMetalRates, pushRatesUpdate } from '../utils/metalRatesStore';
+import { translations, type Language } from '../utils/translations';
 
 interface BillingModuleProps {
   lang?: Language;
@@ -28,8 +28,8 @@ interface BillingModuleProps {
 
 export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => {
   const t = translations[lang] || translations.EN;
-  // Global Rates
-  const [rates, setRates] = useState<GlobalRates | null>(null);
+  // Global Rates from Central Store (1-Time Startup Fetch + Realtime Webhook Push Updates)
+  const rates = useMetalRates() as unknown as GlobalRates;
   const [editingRates, setEditingRates] = useState(false);
   const [activeMetalTab, setActiveMetalTab] = useState<'GOLD' | 'SILVER'>('GOLD');
 
@@ -220,27 +220,28 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     }));
   };
 
-  const [customerDirectory, setCustomerDirectory] = useState<CustomerDirectoryRecord[]>([]);
-  const [calcResults, setCalcResults] = useState<{
-    itemDetails: Record<string, { metalVal: number; makingVal: number; gstVal: number; lineTotal: number; pureWeight?: number; rate?: number }>;
-    totalSellValue: number;
-    totalBuyCredit: number;
-    netPayable: number;
-  }>({
-    itemDetails: {},
-    totalSellValue: 0,
-    totalBuyCredit: 0,
-    netPayable: 0,
+  const PRESETS_STORAGE_KEY = 'jbj_billing_presets';
+  const [presets, setPresets] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem(PRESETS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          return parsed;
+        }
+      }
+    } catch { }
+    return {};
   });
 
-  const [presets, setPresets] = useState<Record<string, string[]>>({});
-
-  const fetchPresets = async () => {
+  const fetchPresets = async (force = false) => {
     try {
+      if (!force && Object.keys(presets).length > 0) return;
       const res = await fetch(`${API_BASE}/billing/presets`);
       const data = await res.json();
       if (data.success && data.presets) {
         setPresets(data.presets);
+        try { localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(data.presets)); } catch { }
       }
     } catch {
       // Fallback
@@ -255,7 +256,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     setPresets((prev) => {
       const currentList = prev[cleanCat] || [];
       if (!currentList.includes(cleanName)) {
-        return { ...prev, [cleanCat]: [...currentList, cleanName] };
+        const next = { ...prev, [cleanCat]: [...currentList, cleanName] };
+        try { localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(next)); } catch { }
+        return next;
       }
       return prev;
     });
@@ -271,10 +274,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     }
   };
 
-  // Fetch initial rates, presets & customer directory
+  // Fetch presets only if not cached in localStorage
   useEffect(() => {
-    fetchRates();
-    fetchCustomerDirectory();
     fetchPresets();
   }, []);
 
@@ -295,31 +296,17 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     setCalcResults(result);
   }, [items, rates, mode]);
 
-  const fetchRates = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/billing/rates`);
-      const data = await res.json();
-      if (data.success) {
-        setRates(data.rates);
-      }
-    } catch (err) {
-      console.error('Failed to fetch metal rates:', err);
-    }
-  };
-
-
-
-  const fetchCustomerDirectory = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/billing/customer-directory`);
-      const data = await res.json();
-      if (data.success) {
-        setCustomerDirectory(data.customers || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch customer directory:', err);
-    }
-  };
+  const [calcResults, setCalcResults] = useState<{
+    itemDetails: Record<string, { metalVal: number; makingVal: number; gstVal: number; lineTotal: number; pureWeight?: number; rate?: number }>;
+    totalSellValue: number;
+    totalBuyCredit: number;
+    netPayable: number;
+  }>({
+    itemDetails: {},
+    totalSellValue: 0,
+    totalBuyCredit: 0,
+    netPayable: 0,
+  });
 
   const openRatesModal = (tab: 'GOLD' | 'SILVER') => {
     setActiveMetalTab(tab);
@@ -348,22 +335,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         ? { gold_buy_value: goldBuy, gold_sell_value: goldSell }
         : { silver_buy_value: silverBuy, silver_sell_value: silverSell };
 
-    const res = await fetch(`${API_BASE}/billing/rates`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    if (data.success) {
-      setRates(data.rates);
-      // Forceful instant live update across all open pages & tabs (Groww stock app style)
-      window.dispatchEvent(new CustomEvent('jbj_metal_rates_updated', { detail: data.rates }));
-      try {
-        const channel = new BroadcastChannel('jbj_rates_channel');
-        channel.postMessage({ type: 'RATES_UPDATED', rates: data.rates });
-        channel.close();
-      } catch {}
+    const data = await pushRatesUpdate(payload);
+    if (!data.success) {
+      alert('Failed to update rates: ' + ((data as any).message || 'Server error'));
     }
   };
 
@@ -454,28 +428,42 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
   const handleItemImageUpload = (itemId: string, file: File) => {
     setUploadingImageItemId(itemId);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
+    setTimeout(() => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1200;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            setUploadingImageItemId(null);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          const webpDataUrl = canvas.toDataURL('image/webp', 0.85);
+          handleUpdateItem(itemId, 'image_url', webpDataUrl);
           setUploadingImageItemId(null);
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        const webpDataUrl = canvas.toDataURL('image/webp', 0.85);
-        handleUpdateItem(itemId, 'image_url', webpDataUrl);
-        setUploadingImageItemId(null);
+        };
+        img.onerror = () => setUploadingImageItemId(null);
+        img.src = event.target?.result as string;
       };
-      img.onerror = () => setUploadingImageItemId(null);
-      img.src = event.target?.result as string;
-    };
-    reader.onerror = () => setUploadingImageItemId(null);
-    reader.readAsDataURL(file);
+      reader.onerror = () => setUploadingImageItemId(null);
+      reader.readAsDataURL(file);
+    }, 50);
   };
 
   const { totalSellValue, totalBuyCredit, netPayable } = calcResults;
@@ -574,14 +562,15 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
     setCreating(true);
     try {
-      // Deferred Cloudinary upload: Upload local Base64/Blob WebP images to Cloudinary ONLY when submitting
+      // Deferred Cloudinary upload: Upload local WebP binary blob files to Cloudinary ONLY when submitting
       const itemsWithCloudinaryImages = await Promise.all(
         items.map(async (it) => {
           if (it.image_url && (it.image_url.startsWith('data:image/') || it.image_url.startsWith('blob:'))) {
             try {
+              const resBlob = await fetch(it.image_url);
+              const blob = await resBlob.blob();
               const formData = new FormData();
-              formData.append('file', it.image_url);
-              formData.append('image', it.image_url);
+              formData.append('file', blob, `ornament_${Date.now()}.webp`);
               const resUpload = await fetch(`${API_BASE}/inventory/upload-cloudinary`, {
                 method: 'POST',
                 body: formData,
@@ -724,7 +713,6 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         const dataOrder = await resOrder.json();
 
         if (resOrder.ok && dataOrder.success) {
-          fetchCustomerDirectory();
           printReceipt80mm('pos-realtime-receipt-card');
           setSuccessModal({
             open: true,
@@ -766,8 +754,6 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
       const data = await res.json();
       if (res.ok && data.success) {
-        fetchCustomerDirectory();
-
         // Trigger automatic 80mm thermal receipt printing
         printReceipt80mm('pos-realtime-receipt-card');
 
@@ -878,7 +864,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         />
       ) : activeView === 'CUSTOMERS' ? (
         <CustomerDirectoryView
-          customers={customerDirectory}
+          customers={[]}
           rates={rates}
           formatDate={formatDate}
           lang={lang}

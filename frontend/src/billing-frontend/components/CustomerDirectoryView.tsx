@@ -209,6 +209,15 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     } catch (e) { }
   };
 
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   // Fetch on-demand records from backend PostgreSQL database based on limit & page
   const fetchOnDemand = async () => {
     setLoadingRecords(true);
@@ -216,7 +225,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
       const params = new URLSearchParams();
       params.set('limit', String(pageSize));
       params.set('page', String(currentPage));
-      if (search.trim()) params.set('search', search.trim());
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (historyTab !== 'ALL') params.set('history', historyTab);
       if (startDate) params.set('from', startDate);
       if (endDate) params.set('to', endDate);
@@ -234,10 +243,15 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     }
   };
 
+  // Fetch table records on filter, search, or pagination changes
   useEffect(() => {
     fetchOnDemand();
+  }, [pageSize, currentPage, debouncedSearch, historyTab, startDate, endDate]);
+
+  // Fetch global KPI summaries ONLY on filter or search changes (NOT on page navigation)
+  useEffect(() => {
     fetchKpiSummary();
-  }, [pageSize, currentPage, search, historyTab, startDate, endDate]);
+  }, [debouncedSearch, historyTab, startDate, endDate]);
 
   // Handle Chrome swipe gestures & browser Back/Forward navigation in CustomerDirectoryView
   useEffect(() => {

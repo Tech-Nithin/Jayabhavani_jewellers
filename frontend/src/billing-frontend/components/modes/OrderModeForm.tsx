@@ -151,10 +151,10 @@ export const OrderModeForm: React.FC<ModeFormProps> = ({
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((blob) => {
         if (blob && handleItemImageUpload && activeCameraItemId) {
-          const file = new File([blob], `order-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+          const file = new File([blob], `order-photo-${Date.now()}.webp`, { type: 'image/webp' });
           handleItemImageUpload(activeCameraItemId, file);
         }
-      }, 'image/jpeg', 0.9);
+      }, 'image/webp', 0.85);
     }
     stopCamera();
   };
@@ -657,8 +657,8 @@ export const OrderModeForm: React.FC<ModeFormProps> = ({
                       }}
                       title="Take direct photo using device camera"
                     >
-                      <i className="fa-solid fa-camera"></i>
-                      <span>Camera</span>
+                      <i className={uploadingImageItemId === it.id ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-camera"}></i>
+                      <span>{uploadingImageItemId === it.id ? 'Converting...' : 'Camera'}</span>
                     </button>
 
                     {/* Hidden Fallback Camera File Input */}
@@ -697,8 +697,14 @@ export const OrderModeForm: React.FC<ModeFormProps> = ({
                       }}
                       title="Upload image from gallery or file storage"
                     >
-                      <i className="fa-solid fa-upload"></i>
-                      <span>{it.image_url ? 'Change File' : 'Upload File'}</span>
+                      <i className={uploadingImageItemId === it.id ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-upload"}></i>
+                      <span>
+                        {uploadingImageItemId === it.id
+                          ? 'Converting...'
+                          : it.image_url
+                          ? 'Change File'
+                          : 'Upload File'}
+                      </span>
                       <input
                         type="file"
                         accept="image/*"

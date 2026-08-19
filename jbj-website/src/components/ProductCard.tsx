@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Product } from '../types';
 import { useCart } from '../context/CartContext';
-import { API_BASE } from '../config/apiConfig';
+import { useMetalRates } from '../utils/metalRatesStore';
 
 interface ProductCardProps {
   product: Product;
+  onProductClick?: (p: Product) => void;
+  layout?: 'grid' | 'list';
 }
 
 function HeartIcon({ filled }: { filled: boolean }) {
@@ -33,64 +35,15 @@ function CartIcon() {
   );
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export const ProductCard: React.FC<ProductCardProps> = ({
+  product,
+  onProductClick: _onProductClick,
+  layout: _layout = 'grid',
+}) => {
   const { addToCart, toggleWishlist, wishlist } = useCart();
   const isWishlisted = wishlist.includes(product.id);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [todayRates, setTodayRates] = useState({
-    gold_sell_value: 0,
-    silver_sell_value: 0,
-  });
-
-  useEffect(() => {
-    async function fetchRates() {
-      try {
-        const res = await fetch(`${API_BASE}/product-card/rates`);
-        const data = await res.json();
-        if (data.success && data.rates) {
-          setTodayRates((prev) => ({
-            gold_sell_value: data.rates.gold_sell_value !== undefined ? Number(data.rates.gold_sell_value) : prev.gold_sell_value,
-            silver_sell_value: data.rates.silver_sell_value !== undefined ? Number(data.rates.silver_sell_value) : prev.silver_sell_value,
-          }));
-        }
-      } catch (err) {
-        // Fallback
-      }
-    }
-
-    fetchRates();
-
-    const handleLocalUpdate = (e: any) => {
-      if (e.detail) {
-        setTodayRates((prev) => ({
-          gold_sell_value: e.detail.gold_sell_value !== undefined ? Number(e.detail.gold_sell_value) : prev.gold_sell_value,
-          silver_sell_value: e.detail.silver_sell_value !== undefined ? Number(e.detail.silver_sell_value) : prev.silver_sell_value,
-        }));
-      } else {
-        fetchRates();
-      }
-    };
-    window.addEventListener('jbj_metal_rates_updated', handleLocalUpdate);
-
-    let channel: BroadcastChannel | null = null;
-    try {
-      channel = new BroadcastChannel('jbj_rates_channel');
-      channel.onmessage = (msg) => {
-        if (msg.data?.type === 'RATES_UPDATED' && msg.data?.rates) {
-          const r = msg.data.rates;
-          setTodayRates((prev) => ({
-            gold_sell_value: r.gold_sell_value !== undefined ? Number(r.gold_sell_value) : prev.gold_sell_value,
-            silver_sell_value: r.silver_sell_value !== undefined ? Number(r.silver_sell_value) : prev.silver_sell_value,
-          }));
-        }
-      };
-    } catch {}
-
-    return () => {
-      window.removeEventListener('jbj_metal_rates_updated', handleLocalUpdate);
-      if (channel) channel.close();
-    };
-  }, []);
+  const todayRates = useMetalRates();
 
   const isSilver = product.category?.toLowerCase().includes('silver') ||
                    product.name?.toLowerCase().includes('silver') ||
@@ -413,4 +366,6 @@ export default function ProductCard({ product }: ProductCardProps) {
       )}
     </>
   );
-}
+};
+
+export default ProductCard;

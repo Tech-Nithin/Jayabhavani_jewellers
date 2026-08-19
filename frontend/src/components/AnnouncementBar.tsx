@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 import { formatPrice } from '../utils';
+import { API_BASE } from '../config/apiConfig';
+import { CURRENT_APP_VERSION_CODE } from '../utils/appVersion';
+import { AppUpdateModal, type VersionInfo } from './AppUpdateModal';
+import { useMetalRates } from '../utils/metalRatesStore';
+import { translations } from '../utils/translations';
 
 interface AnnouncementBarProps {
   message?: string;
@@ -11,16 +16,6 @@ interface AnnouncementBarProps {
   lang?: 'EN' | 'TE';
   onToggleLang?: () => void;
 }
-
-interface MetalRates {
-  gold_buy_value: number;
-  gold_sell_value: number;
-  silver_buy_value: number;
-  silver_sell_value: number;
-}
-
-import { API_BASE } from '../config/apiConfig';
-import { translations } from '../utils/translations';
 
 export default function AnnouncementBar({
   message,
@@ -35,69 +30,56 @@ export default function AnnouncementBar({
   const [visible, setVisible] = useState(
     mode === 'admin' ? true : !sessionStorage.getItem('jaya_bhavani_ann_closed')
   );
-  const [rates, setRates] = useState<MetalRates>({
-    gold_buy_value: 0,
-    gold_sell_value: 0,
-    silver_buy_value: 0,
-    silver_sell_value: 0,
+  const rates = useMetalRates();
+  const SESSION_VERSION_KEY = 'jbj_app_version_session';
+  const [updateInfo, setUpdateInfo] = useState<VersionInfo | null>(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_VERSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.latestVersionCode === 'number' && parsed.latestVersionCode > CURRENT_APP_VERSION_CODE) {
+          return parsed;
+        }
+      }
+    } catch { }
+    return null;
   });
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
   useEffect(() => {
-    async function fetchMetalRates() {
+    let isMounted = true;
+    const checkVersion = async () => {
+      // If version is already saved in sessionStorage for this RAM session, skip HTTP request
       try {
-        const res = await fetch(`${API_BASE}/billing/rates`);
+        const saved = sessionStorage.getItem(SESSION_VERSION_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && isMounted) {
+            if (parsed.latestVersionCode > CURRENT_APP_VERSION_CODE && !updateInfo) {
+              setUpdateInfo(parsed);
+            }
+            return;
+          }
+        }
+      } catch { }
+
+      try {
+        const res = await fetch(`${API_BASE}/work-assignment/app-version?app=ADMIN`);
+        if (!res.ok) return;
         const data = await res.json();
-        if (data.success && data.rates) {
-          setRates((prev) => ({
-            gold_buy_value: data.rates.gold_buy_value !== undefined ? Number(data.rates.gold_buy_value) : prev.gold_buy_value,
-            gold_sell_value: data.rates.gold_sell_value !== undefined ? Number(data.rates.gold_sell_value) : prev.gold_sell_value,
-            silver_buy_value: data.rates.silver_buy_value !== undefined ? Number(data.rates.silver_buy_value) : prev.silver_buy_value,
-            silver_sell_value: data.rates.silver_sell_value !== undefined ? Number(data.rates.silver_sell_value) : prev.silver_sell_value,
-          }));
+        if (isMounted && data.success) {
+          try { sessionStorage.setItem(SESSION_VERSION_KEY, JSON.stringify(data)); } catch { }
+          if (data.latestVersionCode > CURRENT_APP_VERSION_CODE) {
+            setUpdateInfo(data);
+          }
         }
-      } catch {
-        // Fall back gracefully
-      }
-    }
-
-    fetchMetalRates();
-
-    // 1. Listen for local CustomEvent
-    const handleLocalUpdate = (e: any) => {
-      if (e.detail) {
-        setRates((prev) => ({
-          gold_buy_value: e.detail.gold_buy_value !== undefined ? Number(e.detail.gold_buy_value) : prev.gold_buy_value,
-          gold_sell_value: e.detail.gold_sell_value !== undefined ? Number(e.detail.gold_sell_value) : prev.gold_sell_value,
-          silver_buy_value: e.detail.silver_buy_value !== undefined ? Number(e.detail.silver_buy_value) : prev.silver_buy_value,
-          silver_sell_value: e.detail.silver_sell_value !== undefined ? Number(e.detail.silver_sell_value) : prev.silver_sell_value,
-        }));
-      } else {
-        fetchMetalRates();
+      } catch (err) {
+        console.warn('App version check notice:', err);
       }
     };
-    window.addEventListener('jbj_metal_rates_updated', handleLocalUpdate);
 
-    // 2. Listen for cross-tab BroadcastChannel
-    let channel: BroadcastChannel | null = null;
-    try {
-      channel = new BroadcastChannel('jbj_rates_channel');
-      channel.onmessage = (msg) => {
-        if (msg.data?.type === 'RATES_UPDATED' && msg.data?.rates) {
-          const r = msg.data.rates;
-          setRates((prev) => ({
-            gold_buy_value: r.gold_buy_value !== undefined ? Number(r.gold_buy_value) : prev.gold_buy_value,
-            gold_sell_value: r.gold_sell_value !== undefined ? Number(r.gold_sell_value) : prev.gold_sell_value,
-            silver_buy_value: r.silver_buy_value !== undefined ? Number(r.silver_buy_value) : prev.silver_buy_value,
-            silver_sell_value: r.silver_sell_value !== undefined ? Number(r.silver_sell_value) : prev.silver_sell_value,
-          }));
-        }
-      };
-    } catch {}
-
-    return () => {
-      window.removeEventListener('jbj_metal_rates_updated', handleLocalUpdate);
-      if (channel) channel.close();
-    };
+    checkVersion();
+    return () => { isMounted = false; };
   }, []);
 
   const handleClose = () => {
@@ -117,35 +99,32 @@ export default function AnnouncementBar({
         <style>{`
           @media (max-width: 1024px) {
             .announcement-bar-admin {
-              padding: 7px 12px !important;
+              padding: 6px 10px !important;
             }
             .announcement-bar-ticker {
-              font-size: 0.7rem !important;
+              font-size: 0.68rem !important;
               gap: 0.4rem !important;
               letter-spacing: 0.02em !important;
             }
-            .announcement-bar-avatar {
-              width: 22px !important;
-              height: 22px !important;
-              font-size: 0.58rem !important;
-            }
             .announcement-bar-name {
-              font-size: 0.65rem !important;
+              display: none !important;
             }
+          }
+          @keyframes bellPulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            50% { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
           }
         `}</style>
         <header
-          className="announcement-bar announcement-bar-admin"
+          className="announcement-bar-admin"
           style={{
             background: 'linear-gradient(90deg, var(--rose-deep), var(--rose-gold), var(--gold-deep))',
-            color: '#ffffff',
-            padding: isMobileScreen ? '8px 16px' : '10px 24px',
-            fontSize: '0.78rem',
-            letterSpacing: '0.06em',
+            padding: isMobileScreen ? '6px 10px' : '7px 20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '0.75rem',
+            gap: '12px',
             position: 'sticky',
             top: 0,
             zIndex: 1000,
@@ -174,8 +153,56 @@ export default function AnnouncementBar({
             {displayMessage}
           </div>
 
-          {/* Right: Language Toggle & User Profile Avatar */}
+          {/* Right: Notification Bell, Language Toggle & User Profile Avatar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            {/* Pulsing Notification Bell Icon Button for App Updates */}
+            <button
+              type="button"
+              onClick={() => {
+                if (updateInfo) {
+                  setIsUpdateModalOpen(true);
+                }
+              }}
+              title={updateInfo ? `New App Update Available: v${updateInfo.latestVersionName} (Click to View & Download)` : 'App Up to Date'}
+              style={{
+                position: 'relative',
+                background: updateInfo ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255, 255, 255, 0.18)',
+                border: updateInfo ? '1.5px solid #fef08a' : '1px solid rgba(255, 255, 255, 0.4)',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: updateInfo ? '#fef08a' : '#ffffff',
+                cursor: updateInfo ? 'pointer' : 'default',
+                animation: updateInfo ? 'bellPulse 1.8s infinite ease-in-out' : 'none',
+                boxShadow: updateInfo ? '0 0 12px rgba(245, 158, 11, 0.6)' : 'none',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <i className={`fa-solid ${updateInfo ? 'fa-bell' : 'fa-bell'}`} style={{ fontSize: '0.88rem' }}></i>
+              {updateInfo && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-4px',
+                    background: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: '0.58rem',
+                    fontWeight: 900,
+                    borderRadius: '10px',
+                    padding: '1px 5px',
+                    border: '1.5px solid #713f12',
+                    boxShadow: '0 2px 6px rgba(239, 68, 68, 0.5)',
+                  }}
+                >
+                  1
+                </span>
+              )}
+            </button>
+
             {onToggleLang && (
               <button
                 type="button"
@@ -210,6 +237,13 @@ export default function AnnouncementBar({
             </span>
           </div>
         </header>
+
+        {/* Update Available Popup Modal (Controlled by Bell Icon Click) */}
+        <AppUpdateModal
+          isOpen={isUpdateModalOpen}
+          updateInfo={updateInfo}
+          onClose={() => setIsUpdateModalOpen(false)}
+        />
       </>
     );
   }
