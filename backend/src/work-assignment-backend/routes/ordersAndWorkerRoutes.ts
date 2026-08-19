@@ -7,6 +7,7 @@ import { saveFcmToken } from '../../utils/fcmTokenStore';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 import { triggerFcmPushNotification } from '../../utils/pushService';
 import { insertMetalTransactions } from '../../billing-backend/routes/billingRoutes';
+import { memoryCache } from '../../config/memoryCache';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -129,6 +130,14 @@ router.get('/orders', async (req: Request, res: Response) => {
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
 
+    const isDefaultQuery = page === 1 && limit === 10 && (!status || status === 'ALL') && !search && (!dateRange || dateRange === 'ALL');
+    const cacheKey = isDefaultQuery ? 'orders_page_1' : null;
+
+    if (cacheKey) {
+      const cached = memoryCache.get<any>(cacheKey);
+      if (cached) return res.json(cached);
+    }
+
     let query = supabase.from('orders').select(orderListColumns, { count: 'estimated' });
 
     if (status && status !== 'ALL') {
@@ -177,14 +186,18 @@ router.get('/orders', async (req: Request, res: Response) => {
 
     if (!error && dbOrders) {
       const totalCount = count !== null ? count : dbOrders.length;
-      return res.json({
+      const responseObj = {
         success: true,
         orders: dbOrders,
         total: totalCount,
         page,
         limit,
         totalPages: Math.ceil(totalCount / limit) || 1,
-      });
+      };
+      if (cacheKey) {
+        memoryCache.set(cacheKey, responseObj, 300);
+      }
+      return res.json(responseObj);
     }
   } catch (e) {
     console.warn('⚠️ Supabase GET /orders error, falling back to mockOrders:', e);
@@ -746,6 +759,9 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
 
 // GET /api/workers
 router.get('/workers', async (req: Request, res: Response) => {
+  const cachedWorkers = memoryCache.get<any>('workers_list');
+  if (cachedWorkers) return res.json(cachedWorkers);
+
   let workerList: WorkerItem[] = mockWorkers;
   let allTxns: any[] = mockTransactions;
 
@@ -796,10 +812,12 @@ router.get('/workers', async (req: Request, res: Response) => {
     };
   });
 
-  res.json({
+  const responseObj = {
     success: true,
     workers: enrichedWorkers,
-  });
+  };
+  memoryCache.set('workers_list', responseObj, 300);
+  res.json(responseObj);
 });
 
 // POST /api/workers
@@ -841,6 +859,8 @@ router.post('/workers', async (req: Request, res: Response) => {
 
     const newWorker: WorkerItem = insertedRow as WorkerItem;
     mockWorkers.unshift(newWorker);
+
+    memoryCache.deletePattern('workers');
 
     res.json({
       success: true,
@@ -893,10 +913,12 @@ router.put('/workers/:id', async (req: Request, res: Response) => {
       mockWorkers[idx] = { ...mockWorkers[idx], ...updatedRow };
     }
 
+    memoryCache.deletePattern('workers');
+
     res.json({
       success: true,
-      message: 'Worker profile updated successfully!',
-      worker: updatedRow || { id, ...updatePayload },
+      message: 'Worker profile updated successfully',
+      worker: updatedRow,
     });
   } catch (err: any) {
     console.error('❌ PUT /workers/:id Exception:', err);

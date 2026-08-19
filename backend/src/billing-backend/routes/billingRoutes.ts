@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import { memoryCache } from '../../config/memoryCache';
 
 const router = Router();
 
@@ -49,6 +50,15 @@ let invoicesList: any[] = [];
 
 // GET /api/billing/rates - Fetch active metal values with per-column timestamps (from updated_metal_values)
 router.get('/rates', async (req: Request, res: Response) => {
+  const cachedRates = memoryCache.get<any>('metal_rates');
+  if (cachedRates) {
+    activeMetalValues = cachedRates;
+    return res.json({
+      success: true,
+      rates: activeMetalValues,
+    });
+  }
+
   try {
     const { data, error } = await supabase
       .from('updated_metal_values')
@@ -67,6 +77,7 @@ router.get('/rates', async (req: Request, res: Response) => {
         silver_sell_value: Number(data.silver_sell_value),
         silver_sell_value_updated_at: data.silver_sell_value_updated_at || new Date().toISOString(),
       };
+      memoryCache.set('metal_rates', activeMetalValues, 86400);
     }
   } catch (err) {
     console.warn('⚠️ Supabase updated_metal_values fetch error:', err);
@@ -188,25 +199,9 @@ router.post('/rates', async (req: Request, res: Response) => {
     if (dbHistoryInserts.length > 0) {
       console.log(` 📜 [DB INSPECTION] metal_history_rates (${dbHistoryInserts.length} new audit rows inserted into PostgreSQL)`);
     }
+    memoryCache.set('metal_rates', activeMetalValues, 86400);
   } catch (err) {
     console.error('Supabase DB rates update warning:', err);
-  }
-
-  // Sync to Supabase updated_metal_values table
-  try {
-    await supabase.from('updated_metal_values').upsert({
-      id: 1,
-      gold_buy_value: activeMetalValues.gold_buy_value,
-      gold_buy_value_updated_at: activeMetalValues.gold_buy_value_updated_at,
-      gold_sell_value: activeMetalValues.gold_sell_value,
-      gold_sell_value_updated_at: activeMetalValues.gold_sell_value_updated_at,
-      silver_buy_value: activeMetalValues.silver_buy_value,
-      silver_buy_value_updated_at: activeMetalValues.silver_buy_value_updated_at,
-      silver_sell_value: activeMetalValues.silver_sell_value,
-      silver_sell_value_updated_at: activeMetalValues.silver_sell_value_updated_at,
-    });
-  } catch (err) {
-    console.warn('⚠️ Failed to sync rates to Supabase updated_metal_values:', err);
   }
 
   res.json({
@@ -378,6 +373,14 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
     const isAll = rawLimit.toUpperCase() === 'ALL' || rawLimit === '0';
     const limit = isAll ? 0 : (parseInt(rawLimit, 10) || 10);
 
+    const isDefaultDirQuery = page === 1 && limit === 10 && !search && (!history || history === 'ALL') && !from && !to;
+    const cacheKey = isDefaultDirQuery ? 'customer_directory_page_1' : null;
+
+    if (cacheKey) {
+      const cached = memoryCache.get<any>(cacheKey);
+      if (cached) return res.json(cached);
+    }
+
     let query = supabase
       .from('billing_invoices')
       .select(directoryColumns, { count: 'estimated' });
@@ -433,14 +436,20 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
 
     const totalPages = isAll || limit <= 0 ? 1 : Math.max(1, Math.ceil(totalCount / limit));
 
-    return res.json({
+    const responseObj = {
       success: true,
       customers,
       totalCount,
       page,
       limit: isAll ? 'ALL' : limit,
       totalPages,
-    });
+    };
+
+    if (cacheKey) {
+      memoryCache.set(cacheKey, responseObj, 300);
+    }
+
+    return res.json(responseObj);
   } catch (err) {
     console.error('Error in customer-directory route:', err);
     return res.status(500).json({ success: false, message: 'Server error fetching customer directory.' });
@@ -703,8 +712,9 @@ router.post('/create', async (req: Request, res: Response) => {
 
   invoicesList.unshift(createdInvoice);
 
-  // Trigger automatic insert into customer_metal_transactions running ledger
-  insertMetalTransactions(createdInvoice).catch(() => {});
+  // Invalidate RAM cache instantly so all admins get fresh customer & order records
+  memoryCache.deletePattern('customer_directory');
+  memoryCache.deletePattern('orders');
 
   res.json({
     success: true,
