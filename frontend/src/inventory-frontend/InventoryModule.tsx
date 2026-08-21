@@ -11,7 +11,11 @@ import { OrnamentCategoryGrid } from './components/OrnamentCategoryGrid';
 import type { OrnamentCategoryItem } from './components/OrnamentCategoryGrid';
 import { ProductGridList } from './components/ProductGridList';
 import type { InventoryProduct } from './components/ProductGridList';
+import { ProductTableView } from './components/ProductTableView';
+import { CashHistoryTableView } from './components/CashHistoryTableView';
 import { AddEditProductModal } from './components/AddEditProductModal';
+import { LoadStockView } from './components/LoadStockView';
+import { LoadCashView } from './components/LoadCashView';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { FullImagePreviewModal } from './components/FullImagePreviewModal';
 
@@ -24,11 +28,15 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(globalSearch);
 
-  // View: 'list' = main inventory, 'add' = full-screen add form, 'edit' = full-screen edit form
-  const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
-  // Active Hierarchical Filter States
-  const [activeMetal, setActiveMetal] = useState<'GOLD' | 'SILVER'>('GOLD');
+  // View: 'list' = main inventory, 'add' = full-screen add form, 'edit' = full-screen edit form, 'load' = load stock, 'load-cash' = load cash
+  const [view, setView] = useState<'list' | 'add' | 'edit' | 'load' | 'load-cash'>('list');
+  const [preSelectedLoadItemId, setPreSelectedLoadItemId] = useState<string>('');
+  // Layout Mode: 'grid' = visual cards, 'table' = category accordion list
+  const [layoutMode, setLayoutMode] = useState<'grid' | 'table'>('grid');
+  // Active Hierarchical Filter States: 'GOLD' | 'SILVER' | 'CASH'
+  const [activeMetal, setActiveMetal] = useState<'GOLD' | 'SILVER' | 'CASH'>('GOLD');
   const [selectedOrnament, setSelectedOrnament] = useState<string>('ALL');
+  const [cashBalance, setCashBalance] = useState<number>(0);
 
   // Modal Dialog States
   const [editingProduct, setEditingProduct] = useState<InventoryProduct | null>(null);
@@ -52,13 +60,25 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const fetchCashStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/inventory/cash/status`);
+      const data = await res.json();
+      if (data.success) {
+        setCashBalance(Number(data.current_cash || 0));
+      }
+    } catch (err) {
+      console.error('Error fetching cash balance:', err);
+    }
+  };
+
   // 1. Initial URL Params Sync & PopState Gesture Navigation Handler
   useEffect(() => {
     const syncFromUrl = () => {
       const params = new URLSearchParams(window.location.search);
       const urlMetal = (params.get('metal') || 'GOLD').toUpperCase();
-      if (urlMetal === 'GOLD' || urlMetal === 'SILVER') {
-        setActiveMetal(urlMetal as 'GOLD' | 'SILVER');
+      if (urlMetal === 'GOLD' || urlMetal === 'SILVER' || urlMetal === 'CASH') {
+        setActiveMetal(urlMetal as 'GOLD' | 'SILVER' | 'CASH');
       }
 
       const urlCategory = params.get('category') || 'ALL';
@@ -88,9 +108,10 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
   useEffect(() => {
     fetchInventory();
     fetchCategories();
+    fetchCashStatus();
   }, []);
 
-  const updateUrlParams = (metal: 'GOLD' | 'SILVER', category: string, search: string, viewParam?: string) => {
+  const updateUrlParams = (metal: 'GOLD' | 'SILVER' | 'CASH', category: string, search: string, viewParam?: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set('module', 'inventory');
     url.searchParams.set('metal', metal.toLowerCase());
@@ -108,10 +129,13 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     window.history.pushState({}, '', url.toString());
   };
 
-  const handleSelectMetal = (metal: 'GOLD' | 'SILVER') => {
+  const handleSelectMetal = (metal: 'GOLD' | 'SILVER' | 'CASH') => {
     setActiveMetal(metal);
     setSelectedOrnament('ALL');
     updateUrlParams(metal, 'ALL', searchTerm);
+    if (metal === 'CASH') {
+      fetchCashStatus();
+    }
   };
 
   const handleSelectOrnament = (ornamentName: string) => {
@@ -335,6 +359,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
       weight_from_grams: productData.weight_from_grams,
       weight_to_grams: productData.weight_to_grams,
       weight_grams: productData.weight_grams,
+      current_stock_weight: productData.weight_grams,
       img: cloudinaryUrl,
     };
 
@@ -411,10 +436,12 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     categoryCountsMap[cat] = (categoryCountsMap[cat] || 0) + 1;
   });
 
-  const ornamentCategoriesList: OrnamentCategoryItem[] = Object.keys(categoryCountsMap).map((catName) => ({
-    name: catName,
-    count: categoryCountsMap[catName],
-  }));
+  const ornamentCategoriesList: OrnamentCategoryItem[] = Object.keys(categoryCountsMap)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+    .map((catName) => ({
+      name: catName,
+      count: categoryCountsMap[catName],
+    }));
 
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
 
@@ -425,31 +452,96 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const filteredProducts = metalProducts.filter((p) => {
-    const matchesOrnament = selectedOrnament === 'ALL' || !selectedOrnament || p.category.toLowerCase() === selectedOrnament.toLowerCase();
-    
-    const query = debouncedSearchTerm.trim().toLowerCase();
+  const filteredProducts = metalProducts
+    .filter((p) => {
+      const matchesOrnament = selectedOrnament === 'ALL' || !selectedOrnament || p.category.toLowerCase() === selectedOrnament.toLowerCase();
 
-    const teCategory = getTeluguTransliterationSync(p.category).toLowerCase();
-    const teName = getTeluguTransliterationSync(p.name).toLowerCase();
-    const teMetal = p.item_type === 'GOLD' ? 'బంగారం' : 'వెండి';
+      const query = debouncedSearchTerm.trim().toLowerCase();
 
-    const matchesSearch =
-      p.name.toLowerCase().includes(query) ||
-      p.category.toLowerCase().includes(query) ||
-      (p.item_type && p.item_type.toLowerCase().includes(query)) ||
-      teName.includes(query) ||
-      teCategory.includes(query) ||
-      teMetal.includes(query);
+      const teCategory = getTeluguTransliterationSync(p.category).toLowerCase();
+      const teName = getTeluguTransliterationSync(p.name).toLowerCase();
+      const teMetal = p.item_type === 'GOLD' ? 'బంగారం' : 'వెండి';
 
-    return matchesOrnament && matchesSearch;
-  });
+      const matchesSearch =
+        p.name.toLowerCase().includes(query) ||
+        p.category.toLowerCase().includes(query) ||
+        (p.item_type && p.item_type.toLowerCase().includes(query)) ||
+        teName.includes(query) ||
+        teCategory.includes(query) ||
+        teMetal.includes(query);
+
+      return matchesOrnament && matchesSearch;
+    })
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 
   return (
     <div className="admin-dashboard-root" style={{ color: '#181310', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
 
-      {/* -- ADD / EDIT VIEW (replaces full content area, same as Billing CUSTOMERS view) -- */}
-      {(view === 'add' || view === 'edit') ? (
+      {/* -- LOAD CASH VIEW (Full Screen) -- */}
+      {view === 'load-cash' ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
+            <button
+              onClick={closeFormView}
+              style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '7px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}
+            >
+              <i className="fa-solid fa-arrow-left"></i> {lang === 'TE' ? 'వెనక్కి' : 'Back'}
+            </button>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                <i className="fa-solid fa-money-bill-wave" style={{ color: '#16a34a', marginRight: '8px' }}></i>
+                {lang === 'TE' ? 'నగదు లోడ్ చేయండి' : 'Load Cash into Shop Drawer'}
+              </h2>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                Deposit cash into shop drawer and view historical daily cash flow records.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
+            <LoadCashView
+              onClose={closeFormView}
+              onCashUpdated={() => {
+                // optionally notify header or accounts
+              }}
+              lang={lang}
+            />
+          </div>
+        </>
+      ) : view === 'load' ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
+            <button
+              onClick={closeFormView}
+              style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '7px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}
+            >
+              <i className="fa-solid fa-arrow-left"></i> {lang === 'TE' ? 'వెనక్కి' : 'Back'}
+            </button>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                <i className="fa-solid fa-boxes-packing" style={{ color: '#0284c7', marginRight: '8px' }}></i>
+                {lang === 'TE' ? 'స్టాక్ లోడ్ చేయండి' : 'Load Stock to Existing Ornament'}
+              </h2>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                Append incoming stock weight to an existing ornament in inventory.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
+            <LoadStockView
+              products={products}
+              activeMetal={activeMetal === 'SILVER' ? 'SILVER' : 'GOLD'}
+              preSelectedProductId={preSelectedLoadItemId}
+              onClose={closeFormView}
+              onStockLoaded={async () => {
+                await fetchInventory();
+              }}
+              lang={lang}
+            />
+          </div>
+        </>
+      ) : (view === 'add' || view === 'edit') ? (
         <>
           {/* Back bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
@@ -467,22 +559,27 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
                   : (lang === 'TE' ? 'కొత్త వస్తువు జతచేయి' : 'Add New Stock Item')}
               </h2>
               <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
-                {activeMetal === 'GOLD' ? (lang === 'TE' ? 'బంగారం' : 'GOLD') : (lang === 'TE' ? 'వెండి' : 'SILVER')} • {selectedOrnament !== 'ALL' ? (lang === 'TE' ? getTeluguTransliterationSync(selectedOrnament) : selectedOrnament) : (lang === 'TE' ? 'అన్ని వర్గాలు' : 'All Categories')}
+                Fill in the ornament stock details below. New additions will be recorded in both inventory and stock logs.
               </p>
             </div>
           </div>
 
-          {/* Inline form */}
-          <div style={{ maxWidth: '580px', margin: '0 auto' }}>
+          {/* Full-width Inline form */}
+          <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
             <AddEditProductModal
               isOpen={true}
               isInlinePage={true}
               onClose={closeFormView}
               onSubmit={handleSaveProduct}
               editingProduct={editingProduct}
+              existingProducts={products}
               categoryOptions={categoryOptions}
               onAddNewCategory={handleAddNewCategory}
               onStartCamera={startCamera}
+              onSwitchToLoadStock={(productId) => {
+                setPreSelectedLoadItemId(productId);
+                setView('load');
+              }}
               imagePreview={imagePreview}
               setImagePreview={setImagePreview}
               fileInputRef={fileInputRef}
@@ -504,12 +601,12 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
                 {t.inventoryModuleSub}
               </p>
             </div>
-            <div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 className="inventory-add-btn"
                 onClick={openAddPage}
                 style={{
-                  padding: '10px 20px',
+                  padding: '10px 18px',
                   background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
                   color: '#ffffff',
                   border: 'none',
@@ -525,42 +622,161 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
               >
                 <i className="fa-solid fa-plus-circle"></i> {t.addStockItemBtn}
               </button>
+
+              <button
+                className="inventory-load-btn"
+                onClick={() => {
+                  setPreSelectedLoadItemId('');
+                  setView('load');
+                }}
+                style={{
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.3)',
+                }}
+              >
+                <i className="fa-solid fa-boxes-packing"></i> {lang === 'TE' ? 'స్టాక్ లోడ్' : 'Load Stock'}
+              </button>
+
+              <button
+                className="inventory-load-cash-btn"
+                onClick={() => setView('load-cash')}
+                style={{
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)',
+                }}
+              >
+                <i className="fa-solid fa-money-bill-wave"></i> {lang === 'TE' ? 'నగదు లోడ్' : 'Load Cash'}
+              </button>
             </div>
           </div>
 
-          {/* LEVEL 1: METAL SELECTOR */}
+          {/* LEVEL 1: METAL / CASH SELECTOR */}
           <MetalCategorySelector
             activeMetal={activeMetal}
             onSelectMetal={handleSelectMetal}
             goldCount={goldCount}
             silverCount={silverCount}
+            cashBalance={cashBalance}
             lang={lang}
           />
 
-          {/* LEVEL 2: ORNAMENT CATEGORY GRID */}
-          <OrnamentCategoryGrid
-            activeMetal={activeMetal}
-            selectedOrnament={selectedOrnament}
-            onSelectOrnament={handleSelectOrnament}
-            categories={ornamentCategoriesList}
-            totalMetalItemsCount={metalProducts.length}
-            searchTerm={searchTerm}
-            onSearchChange={handleSearchChange}
-            lang={lang}
-          />
+          {/* If CASH is selected: show Cash History & Ledger View */}
+          {activeMetal === 'CASH' ? (
+            <CashHistoryTableView
+              onOpenLoadCash={() => setView('load-cash')}
+              lang={lang}
+            />
+          ) : (
+            <>
+              {/* LEVEL 2: ORNAMENT CATEGORY GRID */}
+              <OrnamentCategoryGrid
+                activeMetal={activeMetal}
+                selectedOrnament={selectedOrnament}
+                onSelectOrnament={handleSelectOrnament}
+                categories={ornamentCategoriesList}
+                totalMetalItemsCount={metalProducts.length}
+                searchTerm={searchTerm}
+                onSearchChange={handleSearchChange}
+                lang={lang}
+              />
 
-          {/* LEVEL 3: PRODUCTS GRID */}
-          <ProductGridList
-            products={filteredProducts}
-            loading={loading}
-            activeMetal={activeMetal}
-            selectedOrnament={selectedOrnament}
-            searchTerm={searchTerm}
-            onEditProduct={(product) => openEditPage(product)}
-            onDeleteProduct={handleDeleteProduct}
-            onViewImage={(url) => setPreviewZoomImage(url)}
-            lang={lang}
-          />
+              {/* VIEW MODE TOGGLE (Grid vs Table / Accordion) */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', margin: '1rem 0 0.75rem 0' }}>
+                <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '12px', border: '1px solid #cbd5e1', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setLayoutMode('grid')}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '9px',
+                      border: 'none',
+                      background: layoutMode === 'grid' ? '#ffffff' : 'transparent',
+                      color: layoutMode === 'grid' ? '#0f172a' : '#64748b',
+                      fontWeight: layoutMode === 'grid' ? 800 : 600,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: layoutMode === 'grid' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                    }}
+                  >
+                    <i className="fa-solid fa-table-cells-large" style={{ color: layoutMode === 'grid' ? '#d97706' : '#94a3b8' }}></i>
+                    {lang === 'TE' ? 'గ్రిడ్ వ్యూ' : 'Grid View'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLayoutMode('table')}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '9px',
+                      border: 'none',
+                      background: layoutMode === 'table' ? '#ffffff' : 'transparent',
+                      color: layoutMode === 'table' ? '#0f172a' : '#64748b',
+                      fontWeight: layoutMode === 'table' ? 800 : 600,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: layoutMode === 'table' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                    }}
+                  >
+                    <i className="fa-solid fa-list-check" style={{ color: layoutMode === 'table' ? '#0284c7' : '#94a3b8' }}></i>
+                    {lang === 'TE' ? 'టేబుల్ వ్యూ' : 'Table View'}
+                  </button>
+                </div>
+              </div>
+
+              {/* LEVEL 3: PRODUCTS GRID OR TABLE / ACCORDION */}
+              {layoutMode === 'table' ? (
+                <ProductTableView
+                  products={filteredProducts}
+                  loading={loading}
+                  activeMetal={activeMetal as 'GOLD' | 'SILVER'}
+                  selectedOrnament={selectedOrnament}
+                  searchTerm={searchTerm}
+                  onEditProduct={(product) => openEditPage(product)}
+                  onDeleteProduct={handleDeleteProduct}
+                  onViewImage={(url) => setPreviewZoomImage(url)}
+                  lang={lang}
+                />
+              ) : (
+                <ProductGridList
+                  products={filteredProducts}
+                  loading={loading}
+                  activeMetal={activeMetal as 'GOLD' | 'SILVER'}
+                  selectedOrnament={selectedOrnament}
+                  searchTerm={searchTerm}
+                  onEditProduct={(product) => openEditPage(product)}
+                  onDeleteProduct={handleDeleteProduct}
+                  onViewImage={(url) => setPreviewZoomImage(url)}
+                  lang={lang}
+                />
+              )}
+            </>
+          )}
         </>
       )}
 

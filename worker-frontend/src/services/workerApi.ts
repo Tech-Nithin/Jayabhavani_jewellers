@@ -42,6 +42,7 @@ export async function sendWorkerTransaction(
   specDetails?: {
     category?: TransactionCategory;
     itemName?: string;
+    orderId?: string | null;
     weightGrams?: number;
     touchPercentage?: number;
     amountCash?: number;
@@ -55,6 +56,9 @@ export async function sendWorkerTransaction(
   
   if (specDetails?.category) {
     formData.append('category', specDetails.category);
+  }
+  if (specDetails?.orderId) {
+    formData.append('order_id', specDetails.orderId);
   }
   if (specDetails?.itemName) {
     formData.append('item_name', specDetails.itemName);
@@ -109,4 +113,34 @@ export async function deleteWorkerTransaction(transactionId: string) {
     method: 'DELETE',
   });
   return res.json();
+}
+
+export async function fetchWorkerAssignedOrders(workerId: string): Promise<any[]> {
+  try {
+    // 1. Try direct dedicated endpoint
+    const res = await fetch(`${API_BASE}/work-assignment/workers/${encodeURIComponent(workerId)}/all-orders`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.orders)) {
+        return data.orders;
+      }
+    }
+  } catch {
+    // fallback below
+  }
+
+  try {
+    // 2. Resilient fallback to universal orders list endpoint
+    const res = await fetch(`${API_BASE}/work-assignment/orders?limit=250`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.orders)) {
+        return data.orders.filter((o: any) => o.assigned_worker_id === workerId);
+      }
+    }
+  } catch (err) {
+    console.warn('Fallback orders fetch error:', err);
+  }
+
+  return [];
 }

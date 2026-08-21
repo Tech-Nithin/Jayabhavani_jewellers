@@ -198,6 +198,26 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [activeMenuTxId, setActiveMenuTxId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<'down' | 'up'>('down');
   const [replyTo, setReplyTo] = useState<ReplyMessageData | null>(null);
+  const [inventoryProducts, setInventoryProducts] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/inventory/products`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && Array.isArray(data.products)) {
+          setInventoryProducts(data.products);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const getItemNameOptions = (cat: string): string[] => {
+    const metal = (cat === 'SILVER' ? 'SILVER' : 'GOLD');
+    const filtered = inventoryProducts.filter((p: any) => (p.item_type || 'GOLD').toUpperCase() === metal);
+    const names = filtered.map((p: any) => p.name || p.item_name || p.category).filter(Boolean);
+    const defaultRaw = metal === 'GOLD' ? 'Raw Gold' : 'Raw Silver';
+    return Array.from(new Set([defaultRaw, ...names]));
+  };
 
   // Edit Message & Edit History Modal State
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
@@ -558,6 +578,28 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     }
   }, [debouncedSearchQuery, isSearchOpen]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Direct Supabase Refresh: Bypasses cache, pulls fresh data from Supabase and overwrites cache
+  const handleDirectSupabaseRefresh = async () => {
+    if (!worker?.id || isRefreshing) return;
+    try {
+      setIsRefreshing(true);
+      const res = await fetch(`${API_BASE}/work-assignment/worker-transactions?workerId=${worker.id}&fullHistory=true`);
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.transactions)) {
+        const validTxns = data.transactions.filter((t: any) => !t.is_deleted);
+        setTransactions(validTxns);
+        await saveCachedTransactions(worker.id, validTxns);
+        scrollToBottom(false);
+      }
+    } catch (err) {
+      console.warn('Direct Supabase refresh error:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Initial fetch: 0ms IndexedDB cache load + 7-day backend sync
   const fetchInitialTransactions = async () => {
     if (!worker?.id) return;
@@ -575,13 +617,11 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       const res = await fetch(`${API_BASE}/work-assignment/worker-transactions?workerId=${worker.id}&days=7`);
       const data = await res.json();
       if (data.success && Array.isArray(data.transactions)) {
-        setTransactions((prev) => {
-          const merged = mergeTransactions(prev, data.transactions, worker.id);
-          saveCachedTransactions(worker.id, merged);
-          return merged;
-        });
+        const validTxns = data.transactions.filter((t: any) => !t.is_deleted);
+        setTransactions(validTxns);
+        await saveCachedTransactions(worker.id, validTxns);
         scrollToBottom(false);
-        if (data.transactions.length < 5) {
+        if (validTxns.length < 5) {
           fetchFullTransactions();
         }
       } else {
@@ -612,11 +652,9 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.transactions)) {
-        setTransactions((prev) => {
-          const merged = mergeTransactions(prev, data.transactions, worker.id);
-          saveCachedTransactions(worker.id, merged);
-          return merged;
-        });
+        const validTxns = data.transactions.filter((t: any) => !t.is_deleted);
+        setTransactions(validTxns);
+        await saveCachedTransactions(worker.id, validTxns);
         setHasMoreOlderMessages(false);
       }
     } catch (err) {
@@ -1041,6 +1079,8 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
             setShowWorkerModal={setShowWorkerModal}
             activeChatFilter={activeChatFilter}
             setActiveChatFilter={setActiveChatFilter}
+            onRefresh={handleDirectSupabaseRefresh}
+            isRefreshing={isRefreshing}
           />
 
           {/* ── CHAT MESSAGES TIMELINE (VIVID SLATE-PEARL WALLPAPER) ── */}
@@ -1218,6 +1258,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
             photos={photos}
             setPhotos={setPhotos}
             setPhotoFiles={setPhotoFiles}
+            itemOptions={getItemNameOptions(category)}
             isSending={isSending}
             fileInputRef={fileInputRef}
             onFileChange={handleFileChange}

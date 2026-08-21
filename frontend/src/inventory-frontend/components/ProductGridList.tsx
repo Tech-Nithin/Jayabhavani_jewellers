@@ -12,6 +12,9 @@ export interface InventoryProduct {
   weight_grams?: number;
   weight_from_grams?: number;
   weight_to_grams?: number;
+  current_stock_weight?: number;
+  sold_quantity?: number;
+  sell_count?: number;
   img: string;
   stock_quantity?: number;
 }
@@ -158,8 +161,17 @@ export const ProductGridList: React.FC<ProductGridListProps> = ({
                       {lang === 'TE' ? getTeluguTransliterationSync(product.name) : product.name}
                     </h4>
 
-                    <div className="product-card-weight" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', marginBottom: '0.85rem' }}>
-                      <span><i className="fa-solid fa-weight-hanging" style={{ color: '#d97706', marginRight: '4px' }}></i>{t.weightGramsLabel}: <strong style={{ color: '#1e293b' }}>{displayWeight}</strong></span>
+                    <div className="product-card-weight" style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span><i className="fa-solid fa-weight-hanging" style={{ color: '#d97706', marginRight: '4px' }}></i>Stock: <strong style={{ color: '#0f172a', fontWeight: 800 }}>{product.current_stock_weight ?? product.weight_grams ?? 0}g</strong></span>
+                        <span style={{ fontSize: '0.72rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#475569', fontWeight: 700 }}>
+                          Range: {displayWeight}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: '#15803d', background: '#f0fdf4', padding: '3px 8px', borderRadius: '6px', border: '1px solid #dcfce7' }}>
+                        <span><i className="fa-solid fa-bag-shopping" style={{ marginRight: '4px' }}></i>Sold: <strong>{product.sold_quantity ?? 0}g</strong></span>
+                        <span>Sales: <strong>{product.sell_count ?? 0}</strong></span>
+                      </div>
                     </div>
                   </div>
 

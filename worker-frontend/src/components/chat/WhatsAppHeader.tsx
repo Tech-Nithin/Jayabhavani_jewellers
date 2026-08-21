@@ -7,6 +7,9 @@ interface Props {
   onLogout: () => void;
   onOpenProfile: () => void;
   onSearch?: (query: string) => void;
+  onBack?: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const WhatsAppHeader: React.FC<Props> = ({
@@ -15,6 +18,9 @@ export const WhatsAppHeader: React.FC<Props> = ({
   onLogout,
   onOpenProfile,
   onSearch,
+  onBack,
+  onRefresh,
+  isRefreshing = false,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showSearchInput, setShowSearchInput] = useState(false);
@@ -63,13 +69,16 @@ export const WhatsAppHeader: React.FC<Props> = ({
           <button
             type="button"
             onClick={closeSearch}
-            title="Close search"
+            className="wa-search-back-btn"
             style={{
               background: 'none',
               border: 'none',
-              fontSize: '1.2rem',
-              color: '#475569',
+              color: '#075e54',
+              fontSize: '1.1rem',
               cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               padding: '6px',
             }}
           >
@@ -118,7 +127,32 @@ export const WhatsAppHeader: React.FC<Props> = ({
       ) : (
         <>
           {/* Left side: Official JBJ Shop Admin Branding */}
-          <div className="wa-header-left">
+          <div className="wa-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                style={{
+                  background: 'rgba(7, 94, 84, 0.08)',
+                  border: 'none',
+                  color: '#075e54',
+                  fontSize: '1.1rem',
+                  cursor: 'pointer',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '4px',
+                  flexShrink: 0,
+                  transition: 'background 0.15s ease',
+                }}
+                title="Back to Channels List"
+              >
+                <i className="fa-solid fa-arrow-left" />
+              </button>
+            )}
             <div className="wa-jbj-logo-box">
               <img src="/JB_logo_mobile.png" alt="JBJ Admin" className="wa-jbj-logo-img" />
             </div>
@@ -138,8 +172,32 @@ export const WhatsAppHeader: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Right side: 3 Vertical Dots Menu Button */}
-          <div className="wa-header-right" style={{ position: 'relative' }}>
+          {/* Right side: Refresh & 3 Vertical Dots Menu Button */}
+          <div className="wa-header-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                title="Direct refresh from database"
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.92rem',
+                  color: '#075e54',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <i className={`fa-solid fa-rotate-right ${isRefreshing ? 'fa-spin' : ''}`} />
+              </button>
+            )}
+
             <button
               type="button"
               className="wa-header-menu-dots-btn"
@@ -148,13 +206,13 @@ export const WhatsAppHeader: React.FC<Props> = ({
               style={{
                 background: '#f1f5f9',
                 border: 'none',
-                width: '38px',
-                height: '38px',
+                width: '36px',
+                height: '36px',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1.2rem',
+                fontSize: '1.1rem',
                 color: '#334155',
                 cursor: 'pointer',
               }}

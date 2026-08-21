@@ -339,19 +339,94 @@ router.post('/calculate', (req: Request, res: Response) => {
   });
 });
 
-const directoryColumns = 'id,customer_name,customer_phone,customer_address,transaction_type,metal_type,product_name,weight_grams,purity_percentage,applied_rate_per_gram,pure_metal_weight,metal_value,making_charges,gst_amount,final_amount,paid_amount,due_amount,image_url,receipt_json_data,created_at,updated_at';
+const formatCustomerBillingToInvoice = (b: any) => {
+  const receipt = typeof b.bill_json === 'string' ? JSON.parse(b.bill_json) : (b.bill_json || {});
+  const items = Array.isArray(receipt.items) ? receipt.items : [];
+  const primaryItem = items[0] || {};
+  const productNames = items.length > 0
+    ? items.map((i: any) => i.product_name || i.item_name || i.name).filter(Boolean).join(', ')
+    : (primaryItem.product_name || primaryItem.item_name || `${b.bill_type || 'SELL'} Item`);
+
+  const totalWeight = items.reduce((acc: number, i: any) => acc + Number(i.weight_grams || i.gross_weight_grams || i.item_weight || 0), 0);
+
+  return {
+    id: b.billing_id || b.customer_billing_uuid,
+    customer_billing_uuid: b.customer_billing_uuid,
+    customer_name: b.customer_name,
+    customer_phone: b.customer_phone || '-',
+    customer_address: b.customer_address || receipt.customer_address || '',
+    transaction_type: b.bill_type || 'SELL',
+    metal_type: primaryItem.metal_type || 'GOLD',
+    product_name: productNames,
+    weight_grams: totalWeight || Number(primaryItem.weight_grams || 0),
+    purity_percentage: Number(primaryItem.purity_percentage || primaryItem.touch_percentage || 91.6),
+    applied_rate_per_gram: Number(primaryItem.applied_rate_per_gram || primaryItem.appliedRate || receipt.rates?.gold_sell_value || 0),
+    pure_metal_weight: Number(primaryItem.pure_metal_weight || primaryItem.pure_weight_grams || 0),
+    metal_value: Number(receipt.totalSellValue || b.total_amount || 0),
+    making_charges: Number(primaryItem.making_charges || primaryItem.making_charges_per_gram || 0),
+    gst_amount: Number(receipt.gstVal || 0),
+    final_amount: Number(b.total_amount || 0),
+    paid_amount: Number(b.paid_amount || 0),
+    due_amount: Number(b.due_amount || 0),
+    payment_status: b.payment_status || (Number(b.due_amount || 0) <= 0 ? 'PAID' : 'PARTIAL'),
+    image_url: primaryItem.image_url || receipt.image_url || null,
+    receipt_json_data: receipt,
+    created_at: b.created_at,
+    updated_at: b.updated_at,
+  };
+};
+
+async function generateNextBillingId(billType: string): Promise<string> {
+  const prefix = billType.toUpperCase() === 'ORDER' ? 'ORD' : 'INV';
+  try {
+    const { data } = await supabase
+      .from('customer_billing')
+      .select('billing_id')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    let maxNum = 0;
+    (data || []).forEach((row: any) => {
+      if (row.billing_id) {
+        const match = String(row.billing_id).match(/(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
+        }
+      }
+    });
+    return `${prefix}-${Math.max(maxNum + 1, 1001)}`;
+  } catch (e) {
+    return `${prefix}-${Date.now()}`;
+  }
+}
 
 // GET /api/billing/invoices/:id - Fetch single invoice with full receipt_json_data on demand
 router.get('/invoices/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { data: dbInvoice, error } = await supabase
-      .from('billing_invoices')
-      .select('*')
-      .eq('id', id)
-      .single();
+    let dbInvoice: any = null;
 
-    if (!error && dbInvoice) {
+    const { data: byBillingId } = await supabase
+      .from('customer_billing')
+      .select('*')
+      .eq('billing_id', id)
+      .maybeSingle();
+
+    if (byBillingId) {
+      dbInvoice = formatCustomerBillingToInvoice(byBillingId);
+    } else {
+      const { data: byUuid } = await supabase
+        .from('customer_billing')
+        .select('*')
+        .eq('customer_billing_uuid', id)
+        .maybeSingle();
+      if (byUuid) {
+        dbInvoice = formatCustomerBillingToInvoice(byUuid);
+      }
+    }
+
+    if (dbInvoice) {
       return res.json({ success: true, invoice: dbInvoice });
     }
     const mockMatch = invoicesList.find((inv) => inv.id === id);
@@ -382,15 +457,15 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
     }
 
     let query = supabase
-      .from('billing_invoices')
-      .select(directoryColumns, { count: 'estimated' });
+      .from('customer_billing')
+      .select('*', { count: 'estimated' });
 
     if (search) {
-      query = query.or(`customer_name.ilike.%${search}%,customer_phone.ilike.%${search}%,product_name.ilike.%${search}%`);
+      query = query.or(`customer_name.ilike.%${search}%,customer_phone.ilike.%${search}%`);
     }
 
     if (history && history !== 'ALL') {
-      query = query.eq('transaction_type', history);
+      query = query.eq('bill_type', history);
     }
 
     if (from) {
@@ -410,7 +485,7 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
 
     const { data, count, error } = await query;
 
-    let list: any[] = data || [];
+    let list: any[] = data ? data.map(formatCustomerBillingToInvoice) : [];
     let totalCount = count !== null && count !== undefined ? count : list.length;
 
     if (error) {
@@ -460,18 +535,18 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
 router.get('/invoices', async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from('billing_invoices')
+      .from('customer_billing')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (!error && data) {
       return res.json({
         success: true,
-        invoices: data,
+        invoices: data.map(formatCustomerBillingToInvoice),
       });
     }
   } catch (err) {
-    console.error('Supabase DB invoices fetch warning:', err);
+    console.error('Supabase DB customer_billing fetch warning:', err);
   }
 
   res.json({
@@ -650,71 +725,44 @@ router.post('/create', async (req: Request, res: Response) => {
     created_at: new Date().toISOString(),
   };
 
-  let createdInvoice = { ...newInvoicePayload, id: `INV-${invoicesList.length + 1}` };
-
-  // Persist invoice to Supabase DB (PostgreSQL automatically assigns auto-increment ID from billing_invoices_seq)
-  try {
-    const { data: dbData, error: dbError } = await supabase
-      .from('billing_invoices')
-      .insert([newInvoicePayload])
-      .select('*');
-
-    if (dbError) {
-      console.warn('⚠️ Supabase DB insert warning:', dbError.message);
-      if ((dbError.code === '42501' || dbError.message?.includes('permission denied for sequence')) || (dbError.code === '23514' && newInvoicePayload.metal_type === 'MIXED')) {
-        console.warn('⚠️ Sequence or constraint fallback triggered, calculating sequential ID...');
-        let maxNum = 0;
-        try {
-          const { data: existingInvs } = await supabase.from('billing_invoices').select('id');
-          const combined = [...(existingInvs || []), ...invoicesList];
-          combined.forEach((inv) => {
-            if (!inv || !inv.id) return;
-            const match = String(inv.id).match(/(\d+)/);
-            if (match) {
-              const num = parseInt(match[1], 10);
-              if (!isNaN(num) && num < 1000000 && num > maxNum) maxNum = num;
-            }
-          });
-        } catch (e) {
-          maxNum = invoicesList.length;
-        }
-        const fallbackId = `INV-${maxNum + 1}`;
-        newInvoicePayload.id = fallbackId;
-        if (dbError.code === '23514') {
-          const fallbackMetal = (receipt_json_data?.items?.[0]?.metal_type || 'GOLD').toUpperCase();
-          newInvoicePayload.metal_type = fallbackMetal === 'SILVER' ? 'SILVER' : 'GOLD';
-        }
-        const retryRes = await supabase.from('billing_invoices').insert([newInvoicePayload]).select('*');
-        if (retryRes.data && retryRes.data[0]) {
-          createdInvoice = retryRes.data[0];
-        } else {
-          createdInvoice = { ...newInvoicePayload, id: fallbackId };
-        }
-        console.log('✅ Supabase DB invoice created successfully (with fallback handler):', createdInvoice.id);
-      } else {
-        return res.status(500).json({
-          success: false,
-          message: `Database Insert Error (${dbError.code || 'DB_ERR'}): ${dbError.message}`,
-          error: dbError,
-        });
-      }
-    } else if (dbData && dbData[0]) {
-      createdInvoice = dbData[0];
-      console.log('✅ Supabase DB invoice created successfully with auto-increment ID:', createdInvoice.id);
-    }
-  } catch (err: any) {
-    console.error('Supabase DB invoice insert exception:', err);
-    return res.status(500).json({
-      success: false,
-      message: `Database Exception: ${err.message || String(err)}`,
-    });
-  }
+  const billingId = await generateNextBillingId(transaction_type || 'SELL');
+  const createdInvoice = { ...newInvoicePayload, id: billingId, billing_id: billingId };
 
   invoicesList.unshift(createdInvoice);
 
+  // Trigger automatic stock deduction & cash tracking
+  deductInventoryStockOnSale(createdInvoice).catch(() => {});
+  recordInvoiceCashTransaction(createdInvoice).catch(() => {});
+
+  // Trigger 3-table billing storage (customer_billing, billing_sell_buy_records, billing_payment_history)
+  try {
+    const { storeBillingTransaction } = await import('../../utils/billingStorageHelper');
+    const storeRes = await storeBillingTransaction({
+      billing_id: billingId,
+      bill_type: (createdInvoice.transaction_type || 'SELL').toUpperCase(),
+      customer_name: createdInvoice.customer_name,
+      customer_phone: createdInvoice.customer_phone,
+      customer_address: createdInvoice.customer_address,
+      total_amount: Number(createdInvoice.final_amount || 0),
+      paid_amount: Number(createdInvoice.paid_amount ?? (createdInvoice.transaction_type === 'BUY' ? 0 : createdInvoice.final_amount)),
+      due_amount: Number(createdInvoice.due_amount || 0),
+      receipt_json_data: createdInvoice.receipt_json_data,
+      created_at: createdInvoice.created_at,
+      metal_type: createdInvoice.metal_type,
+      weight_grams: Number(createdInvoice.weight_grams || 0),
+      product_name: createdInvoice.product_name,
+      image_url: createdInvoice.image_url,
+    });
+
+    if (!storeRes.success) {
+      console.warn('⚠️ storeBillingTransaction notice:', storeRes.error);
+    }
+  } catch (e) {
+    console.warn('⚠️ storeBillingTransaction invocation warning:', e);
+  }
+
   // Invalidate RAM cache instantly so all admins get fresh customer & order records
-  memoryCache.deletePattern('customer_directory');
-  memoryCache.deletePattern('orders');
+  memoryCache.clear();
 
   res.json({
     success: true,
@@ -723,101 +771,147 @@ router.post('/create', async (req: Request, res: Response) => {
   });
 });
 
-// Helper to insert item records into customer_metal_transactions table
-export const insertMetalTransactions = async (invoice: any) => {
+// Helper to record invoice cash transaction into cash_history & cash_transaction_ledger
+async function recordInvoiceCashTransaction(invoice: any) {
+  try {
+    const txnType = (invoice.transaction_type || 'SELL').toUpperCase();
+    const finalAmount = Number(invoice.final_amount || 0);
+    if (finalAmount <= 0) return;
+
+    const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
+
+    let flowType: 'IN' | 'OUT' = 'IN';
+    if (txnType === 'BUY') {
+      flowType = 'OUT'; // Shop pays customer cash for scrap gold
+    } else if (txnType === 'SELL' || txnType === 'ORDER') {
+      flowType = 'IN'; // Customer pays shop
+    } else if (txnType === 'EXCHANGE') {
+      flowType = 'IN';
+    }
+
+    await recordCashTransaction({
+      transaction_id: String(invoice.id),
+      transaction_type: txnType as any,
+      flow_type: flowType,
+      amount: finalAmount,
+      metal_type: invoice.metal_type || 'GOLD',
+      item_type: invoice.product_name || `${txnType} Invoice`,
+      notes: `${txnType} Invoice #${invoice.id} - ${invoice.customer_name || 'Walk-in'}`,
+      date: invoice.created_at ? String(invoice.created_at).split('T')[0] : undefined,
+    });
+  } catch (err) {
+    console.warn('⚠️ Error recording invoice cash transaction:', err);
+  }
+}
+
+// Helper to deduct sold items from inventory_products (current_stock_weight, sold_quantity, sell_count) & log SALE_DEDUCTION
+async function deductInventoryStockOnSale(invoice: any) {
   try {
     let rawData = typeof invoice.receipt_json_data === 'string'
       ? JSON.parse(invoice.receipt_json_data)
       : (invoice.receipt_json_data || {});
 
     const items: any[] = Array.isArray(rawData?.items) ? rawData.items : [];
-    const customerPhone = invoice.customer_phone || rawData.customer_phone || '';
-    const customerName = invoice.customer_name || rawData.customer_name || 'Walk-in Customer';
-    const txnType = (invoice.transaction_type || rawData.transaction_type || 'SELL').toUpperCase();
-    const invoiceId = String(invoice.id || '');
+    for (const item of items) {
+      if (item.item_type === 'SELL') {
+        const pName = item.product_name || item.name;
+        const pId = item.product_id || item.id;
+        const qtySold = Number(item.quantity || 1);
+        const weightSold = Number(item.weight_grams || item.gross_weight_grams || item.net_weight_grams || 0);
 
-    const rowsToInsert: any[] = [];
+        if (pName || pId) {
+          let query = supabase.from('inventory_products').select('*');
+          if (pId && !String(pId).startsWith('item-')) {
+            query = query.eq('id', pId);
+          } else if (pName) {
+            query = query.ilike('name', `%${String(pName).trim()}%`);
+          }
 
-    if (items.length > 0) {
-      items.forEach((it: any) => {
-        const itemType = (it.item_type || txnType).toUpperCase();
-        const metalType = (it.metal_type || invoice.metal_type || 'GOLD').toUpperCase();
-        const cleanMetal = metalType === 'SILVER' ? 'SILVER' : 'GOLD';
-        const cleanItemType = itemType === 'BUY' ? 'BUY' : 'SELL';
-        const cleanTxnType = ['SELL', 'BUY', 'EXCHANGE', 'ORDER'].includes(txnType) ? txnType : 'SELL';
+          const { data: matchedProds } = await query.limit(1);
+          if (matchedProds && matchedProds.length > 0) {
+            const prod = matchedProds[0];
+            const currentStock = Number(prod.stock_quantity || 1);
+            const currentSold = Number(prod.sold_quantity || 0);
+            const currentWeight = Number(prod.current_stock_weight || 0);
+            const newStock = Math.max(0, currentStock - qtySold);
+            const newSold = currentSold + qtySold;
+            const newWeight = Math.max(0, Number((currentWeight - weightSold).toFixed(3)));
+            const newSellCount = Number(prod.sell_count || 0) + 1;
 
-        rowsToInsert.push({
-          invoice_id: invoiceId,
-          customer_id: customerPhone || null,
-          customer_phone: customerPhone,
-          customer_name: customerName,
-          transaction_type: cleanTxnType,
-          metal_type: cleanMetal,
-          item_type: cleanItemType,
-          product_name: it.product_name || `${cleanMetal} Item`,
-          weight_grams: Number(it.weight_grams) || 0,
-          amount: Number(it.lineTotal || it.line_total || it.metalVal || 0),
-          purity_percentage: Number(it.purity_percentage) || 100,
-          created_at: invoice.created_at || new Date().toISOString(),
-        });
-      });
-    } else {
-      const metalType = (invoice.metal_type || 'GOLD').toUpperCase();
-      const cleanMetal = metalType === 'SILVER' ? 'SILVER' : 'GOLD';
-      const cleanTxnType = ['SELL', 'BUY', 'EXCHANGE', 'ORDER'].includes(txnType) ? txnType : 'SELL';
-      const cleanItemType = cleanTxnType === 'BUY' ? 'BUY' : 'SELL';
+            await supabase
+              .from('inventory_products')
+              .update({
+                stock_quantity: newStock,
+                sold_quantity: newSold,
+                current_stock_weight: newWeight,
+                sell_count: newSellCount,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', prod.id);
 
-      rowsToInsert.push({
-        invoice_id: invoiceId,
-        customer_id: customerPhone || null,
-        customer_phone: customerPhone,
-        customer_name: customerName,
-        transaction_type: cleanTxnType,
-        metal_type: cleanMetal,
-        item_type: cleanItemType,
-        product_name: invoice.product_name || `${cleanMetal} Item`,
-        weight_grams: Number(invoice.weight_grams) || 0,
-        amount: Number(invoice.final_amount) || 0,
-        purity_percentage: Number(invoice.purity_percentage) || 100,
-        created_at: invoice.created_at || new Date().toISOString(),
-      });
-    }
-
-    if (rowsToInsert.length > 0) {
-      const { error } = await supabase.from('customer_metal_transactions').insert(rowsToInsert);
-      if (error) {
-        console.warn('⚠️ Supabase customer_metal_transactions insert warning:', error.message);
-      } else {
-        console.log(`✅ Inserted ${rowsToInsert.length} item records into customer_metal_transactions for ${invoiceId}`);
+            await supabase.from('inventory_stock_logs').insert([{
+              product_id: prod.id,
+              product_name: prod.name || prod.category,
+              log_type: 'SALE_DEDUCTION',
+              quantity_change: -qtySold,
+              weight_change_grams: -weightSold,
+              previous_stock: currentStock,
+              new_stock: newStock,
+              notes: `Sold in ${invoice.transaction_type || 'SELL'} Invoice #${invoice.id} to ${invoice.customer_name || 'Customer'}`,
+              created_at: new Date().toISOString(),
+            }]);
+          }
+        }
+      } else if (item.item_type === 'BUY') {
+        // Scrap metal purchase log
+        const scrapWeight = Number(item.weight_grams || item.gross_weight_grams || item.net_weight_grams || 0);
+        const cleanMetal = (item.metal_type || invoice.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+        if (scrapWeight > 0) {
+          try {
+            await supabase.from('inventory_stock_logs').insert([{
+              product_id: null,
+              product_name: `Old ${cleanMetal} Scrap / Buy-in`,
+              log_type: 'OLD_GOLD_PURCHASE',
+              quantity_change: 1,
+              weight_change_grams: scrapWeight,
+              previous_stock: 0,
+              new_stock: 0,
+              notes: `Scrap ${cleanMetal} received in ${invoice.transaction_type || 'BUY'} Invoice #${invoice.id} from ${invoice.customer_name || 'Customer'}`,
+              created_at: new Date().toISOString(),
+            }]);
+          } catch (logErr) {
+            console.warn('⚠️ Scrap purchase stock log error:', logErr);
+          }
+        }
       }
     }
-  } catch (err: any) {
-    console.error('Exception inserting into customer_metal_transactions:', err);
+  } catch (err) {
+    console.warn('⚠️ Inventory auto-deduction error:', err);
   }
-};
+}
 
-// GET /api/billing/kpi-summary - Calculate cumulative running totals from customer_metal_transactions
+// GET /api/billing/kpi-summary - Calculate cumulative running totals directly from billing_sell_buy_records
 router.get('/kpi-summary', async (req: Request, res: Response) => {
   try {
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
 
-    let query = supabase.from('customer_metal_transactions').select('*');
+    let query = supabase.from('billing_sell_buy_records').select('*');
     if (from) query = query.gte('created_at', from);
     if (to) query = query.lte('created_at', to);
 
     const { data: rows, error } = await query;
     if (error) {
-      console.warn('⚠️ Error fetching customer_metal_transactions for KPI:', error.message);
+      console.warn('⚠️ Error fetching billing_sell_buy_records for KPI:', error.message);
     }
 
     const summary = (rows || []).reduce(
       (acc: any, r: any) => {
-        const w = Number(r.weight_grams) || 0;
-        const amt = Number(r.amount) || 0;
-        const purity = Number(r.purity_percentage) || 0;
+        const w = Number(r.item_weight) || 0;
+        const amt = Number(r.total_item_price) || 0;
+        const purity = Number(r.item_quality_percentage || r.hallmark_percentage) || 0;
         const metal = (r.metal_type || '').toUpperCase();
-        const itemType = (r.item_type || '').toUpperCase();
+        const itemType = (r.transaction_type || '').toUpperCase();
 
         if (metal === 'GOLD' && itemType === 'SELL') {
           acc.goldSoldWeight += w;
@@ -1029,35 +1123,66 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     invoicesList.unshift(updatedInvoice);
   }
 
-  // Overwrite in Supabase DB
+  // Persist update to customer_billing & billing_sell_buy_records
   try {
-    const { data: dbData, error: dbError } = await supabase
-      .from('billing_invoices')
-      .upsert([updatedInvoice], { onConflict: 'id' })
-      .select('*');
-
-    if (dbError) {
-      console.error('Supabase DB invoice update error:', dbError);
-      return res.status(500).json({
-        success: false,
-        message: `Database Update Error (${dbError.code || 'DB_ERR'}): ${dbError.message}`,
-        error: dbError,
-      });
-    }
-    console.log('✅ Supabase DB invoice updated cleanly:', id, dbData);
-  } catch (err: any) {
-    console.error('Supabase DB invoice update exception:', err);
-    return res.status(500).json({
-      success: false,
-      message: `Database Update Exception: ${err.message || String(err)}`,
+    const { storeBillingTransaction } = await import('../../utils/billingStorageHelper');
+    const storeRes = await storeBillingTransaction({
+      billing_id: String(updatedInvoice.id),
+      bill_type: (updatedInvoice.transaction_type || 'SELL').toUpperCase(),
+      customer_name: updatedInvoice.customer_name,
+      customer_phone: updatedInvoice.customer_phone,
+      customer_address: updatedInvoice.customer_address,
+      total_amount: Number(updatedInvoice.final_amount || 0),
+      paid_amount: Number((updatedInvoice as any).paid_amount ?? (updatedInvoice.transaction_type === 'BUY' ? 0 : updatedInvoice.final_amount)),
+      due_amount: Number((updatedInvoice as any).due_amount || 0),
+      receipt_json_data: updatedInvoice.receipt_json_data,
+      created_at: updatedInvoice.created_at,
+      metal_type: updatedInvoice.metal_type,
+      weight_grams: Number(updatedInvoice.weight_grams || 0),
+      product_name: updatedInvoice.product_name,
+      image_url: (updatedInvoice as any).image_url,
     });
+
+    if (!storeRes.success) {
+      console.warn('⚠️ storeBillingTransaction update notice:', storeRes.error);
+    }
+  } catch (e) {
+    console.warn('⚠️ storeBillingTransaction update warning:', e);
   }
+
+  // Invalidate cache
+  memoryCache.clear();
 
   res.json({
     success: true,
-    message: 'Invoice record completely updated on same ID',
+    message: 'Invoice record completely updated in customer_billing',
     invoice: updatedInvoice,
   });
+});
+
+// POST /api/billing/invoices/:id/payment - Record an installment payment for an invoice
+router.post('/invoices/:id/payment', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { amount_paid, payment_mode, notes } = req.body;
+
+    const { recordAdditionalPayment } = await import('../../utils/billingStorageHelper');
+    const result = await recordAdditionalPayment({
+      billing_id: String(id),
+      amount_paid: Number(amount_paid),
+      payment_mode: payment_mode || 'CASH',
+      notes: notes,
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    console.error('Error recording installment payment:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // GET /api/billing/presets - Fetch presets 100% directly from billing_presets database table
@@ -1123,106 +1248,477 @@ router.post('/presets', async (req: Request, res: Response) => {
 router.put('/invoices/:id/settlement', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { paid_now, custom_paid_at, note } = req.body;
+    const { paid_now, note } = req.body;
 
     const pNow = Number(paid_now) || 0;
     if (pNow <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid payment amount' });
     }
 
-    // 1. Fetch current invoice record from Supabase DB or memory
-    let targetInv: any = null;
-    try {
-      const { data: dbInv } = await supabase.from('billing_invoices').select('*').eq('id', id).single();
-      if (dbInv) targetInv = dbInv;
-    } catch (e) { }
+    const { recordAdditionalPayment } = await import('../../utils/billingStorageHelper');
+    const result = await recordAdditionalPayment({
+      billing_id: String(id),
+      amount_paid: pNow,
+      payment_mode: 'CASH',
+      notes: note,
+    });
 
-    if (!targetInv) {
-      targetInv = invoicesList.find((i) => String(i.id) === String(id));
+    if (!result.success) {
+      return res.status(400).json({ success: false, message: result.error });
     }
 
-    if (!targetInv) {
-      return res.status(404).json({ success: false, message: 'Invoice record not found' });
-    }
-
-    // 2. Parse current payment history & amounts
-    let receiptData = typeof targetInv.receipt_json_data === 'string'
-      ? JSON.parse(targetInv.receipt_json_data)
-      : (targetInv.receipt_json_data || {});
-
-    const currentPaid = Number(targetInv.paid_amount) || Number(receiptData?.advancePaidAmount) || 0;
-    const totalGrand = Number(targetInv.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
-
-    const newPaidAmount = currentPaid + pNow;
-    const newDueAmount = Math.max(0, totalGrand - newPaidAmount);
-
-    let paymentHistory: any[] = Array.isArray(receiptData?.payment_history) ? receiptData.payment_history : [];
-
-    // If payment_history is empty, initialize installment 1 with initial advance
-    if (paymentHistory.length === 0 && currentPaid > 0) {
-      paymentHistory.push({
-        installment: 1,
-        amount: currentPaid,
-        paid_at: targetInv.created_at || new Date().toISOString(),
-        note: 'Advance / Initial Payment',
-      });
-    }
-
-    const nextInstallmentNum = paymentHistory.length + 1;
-    const paymentTimestamp = custom_paid_at || new Date().toISOString();
-
-    const newPaymentEntry = {
-      installment: nextInstallmentNum,
-      amount: pNow,
-      paid_at: paymentTimestamp,
-      note: note || `Installment ${nextInstallmentNum}`,
-    };
-
-    paymentHistory.push(newPaymentEntry);
-
-    // Update receipt JSON payload
-    receiptData = {
-      ...receiptData,
-      advancePaidAmount: newPaidAmount,
-      balanceDueAmount: newDueAmount,
-      paymentType: newDueAmount === 0 ? 'FULL' : 'PARTIAL',
-      payment_history: paymentHistory,
-    };
-
-    targetInv.paid_amount = newPaidAmount;
-    targetInv.due_amount = newDueAmount;
-    targetInv.receipt_json_data = receiptData;
-
-    // Update in memory list
-    const memIdx = invoicesList.findIndex((i) => String(i.id) === String(id));
-    if (memIdx >= 0) {
-      invoicesList[memIdx] = targetInv;
-    }
-
-    // 3. Persist update to Supabase PostgreSQL database
-    try {
-      await supabase
-        .from('billing_invoices')
-        .update({
-          paid_amount: newPaidAmount,
-          due_amount: newDueAmount,
-          receipt_json_data: receiptData,
-        })
-        .eq('id', id);
-    } catch (dbErr: any) {
-      console.warn('⚠️ Supabase invoice settlement update warning:', dbErr.message);
-    }
+    // Invalidate cache
+    memoryCache.clear();
 
     res.json({
       success: true,
-      message: newDueAmount === 0 ? `Invoice ${id} fully paid & settled!` : `Payment of ₹${pNow.toLocaleString('en-IN')} recorded successfully`,
-      invoice: targetInv,
-      paid_amount: newPaidAmount,
-      due_amount: newDueAmount,
-      payment_history: paymentHistory,
+      message: `Payment of ₹${pNow.toLocaleString('en-IN')} recorded successfully in billing_payment_history`,
+      paid_amount: result.paid_amount,
+      due_amount: result.due_amount,
+      payment_history: result.payment_history,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message || 'Failed to record invoice settlement' });
+  }
+});
+
+// Helper: Checks if a date/timestamp matches date filter (all, single date, or date range)
+function matchesDateFilterIST(created_at: any, targetDate: string, startDate?: string, endDate?: string): boolean {
+  if (targetDate === 'all' || targetDate === 'ALL') return true;
+  if (!created_at) return false;
+
+  const dateObj = new Date(created_at);
+  if (isNaN(dateObj.getTime())) return false;
+
+  const istDateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+  if (startDate && endDate) {
+    return istDateStr >= startDate && istDateStr <= endDate;
+  }
+
+  return istDateStr === targetDate;
+}
+
+// GET /api/accounts/day-book - Comprehensive EOD Day Book & Accounts Ledger
+router.get('/accounts/day-book', async (req: Request, res: Response) => {
+  try {
+    const targetDate = (req.query.date as string) || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    const section = ((req.query.section as string) || 'all').toLowerCase();
+
+    // 1. Fetch Invoices from DB customer_billing and merge RAM invoicesList for instant visibility
+    const { data: dbInvoices } = await supabase
+      .from('customer_billing')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    const formattedDbInvoices = (dbInvoices || []).map(formatCustomerBillingToInvoice);
+    const combinedInvoicesMap = new Map<string, any>();
+    formattedDbInvoices.forEach((inv: any) => combinedInvoicesMap.set(String(inv.id), inv));
+    invoicesList.forEach((inv: any) => combinedInvoicesMap.set(String(inv.id), inv));
+
+    const invoices = Array.from(combinedInvoicesMap.values()).filter((inv) =>
+      matchesDateFilterIST(inv.created_at, targetDate, startDate, endDate)
+    );
+
+    // 2. Fetch Orders for targetDate
+    const { data: ordersData } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    const orders = (ordersData || []).filter((ord) => matchesDateFilterIST(ord.created_at, targetDate, startDate, endDate));
+
+    // 3. Fetch Workers table & Worker Transactions for targetDate
+    const { data: dbWorkers } = await supabase.from('workers').select('id, name');
+    const workerNameMap = new Map<string, string>();
+    (dbWorkers || []).forEach((w: any) => {
+      if (w.id && w.name) {
+        workerNameMap.set(String(w.id).toLowerCase(), w.name);
+        workerNameMap.set(String(w.id), w.name);
+      }
+    });
+
+    const { data: workerTxns } = await supabase
+      .from('worker_transactions')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    const workerTransactions = (workerTxns || []).filter((tx) => matchesDateFilterIST(tx.created_at, targetDate, startDate, endDate));
+
+    // 4. Fetch Added Inventory Products for targetDate
+    const { data: dbProducts } = await supabase
+      .from('inventory_products')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    const addedProductsToday = (dbProducts || []).filter((p) => matchesDateFilterIST(p.created_at, targetDate, startDate, endDate));
+
+    // 5. Fetch Finance Loans from Supabase 'interests' table for targetDate
+    const { data: dbLoans } = await supabase
+      .from('interests')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    const loansToday = (dbLoans || []).filter((fl) => matchesDateFilterIST(fl.created_at || fl.loan_date, targetDate, startDate, endDate));
+
+    // --- Chronological Log Book Timeline ---
+    const logBookTimeline: any[] = [];
+
+    let totalSalesCash = 0;
+    let totalSalesUPI = 0;
+    let totalSalesCard = 0;
+    let totalSalesValue = 0;
+    let totalGoldWeightSold = 0;
+    let totalSilverWeightSold = 0;
+    let totalGoldWeightBought = 0;
+    let totalSilverWeightBought = 0;
+    let totalScrapPayout = 0;
+    let newDuesCreated = 0;
+    let oldDuesCollected = 0;
+    let makingChargesProfit = 0;
+
+    // Process Added Inventory Products
+    addedProductsToday.forEach((p: any) => {
+      const formattedTime = p.created_at
+        ? new Date(p.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '12:00 PM';
+      const wt = Number(p.stock_quantity || p.weight_grams || p.weight_from_grams || 0);
+      const pcs = Number(p.initial_quantity || 0);
+
+      logBookTimeline.push({
+        id: `log-inv-prod-${p.id}`,
+        time: formattedTime,
+        created_at: p.created_at,
+        type: 'INVENTORY',
+        title: p.item_name || 'Inventory Item',
+        details: `${(p.item_type || 'GOLD').toUpperCase()} ${p.category || 'Stock'} · Total Net Weight: ${wt}g ${pcs > 0 ? `(${pcs} pcs)` : ''}`,
+        category: (p.item_type || 'GOLD').toUpperCase(),
+        weight_grams: wt,
+        amount: Number(p.price || 0),
+        paid_amount: 0,
+        due_amount: 0,
+        payment_mode: 'INVENTORY_STOCK',
+      });
+    });
+
+    // Process Finance Loans
+    loansToday.forEach((fl: any) => {
+      const formattedTime = fl.created_at
+        ? new Date(fl.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '01:30 PM';
+      const wt = Number(fl.item_weight_grams || fl.net_weight || fl.gross_weight || fl.weight_grams || 0);
+      const loanAmt = Number(fl.amount || fl.principal_amount || fl.loan_amount || 0);
+      const fullName = `${fl.customer_name || 'Finance'} ${fl.customer_surname || ''}`.trim();
+
+      logBookTimeline.push({
+        id: `log-fin-${fl.id || Math.random()}`,
+        time: formattedTime,
+        created_at: fl.created_at || fl.loan_date || new Date().toISOString(),
+        type: 'FINANCE',
+        title: fullName || 'Finance Customer',
+        details: `Gold Loan Finance · ${fl.item_name || fl.ornament_description || 'Gold Item'} (${wt}g)`,
+        category: (fl.item_metal_type || 'GOLD').toUpperCase(),
+        weight_grams: wt,
+        amount: loanAmt,
+        paid_amount: loanAmt,
+        due_amount: 0,
+        payment_mode: 'FINANCE_LOAN',
+        customer_phone: fl.customer_phone,
+      });
+    });
+
+    // Process Worker / Karigar Transactions (Admin <-> Worker Transfers)
+    workerTransactions.forEach((tx: any) => {
+      const formattedTime = tx.created_at
+        ? new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '02:00 PM';
+      const wt = Number(tx.weight_grams || tx.net_weight || tx.fine_weight_grams || tx.fine_weight || 0);
+      const amt = Number(tx.amount || tx.cash_amount || tx.amount_cash || 0);
+
+      const rawWorkerId = String(tx.worker_id || tx.workerId || '').toLowerCase();
+      const resolvedWorkerName = tx.worker_name || tx.karigar_name || tx.workerName || workerNameMap.get(rawWorkerId) || (tx.worker_id ? `Worker (${tx.worker_id})` : 'Karigar');
+
+      const directionStr = String(tx.direction || tx.transfer_direction || tx.type || '').toUpperCase();
+      const isAdminToWorker = directionStr.includes('OUTGOING') || directionStr.includes('ADMIN') || directionStr.includes('SEND') || directionStr.includes('ISSUE');
+      const itemMode = (tx.category || tx.item_type || tx.metal_type || tx.transfer_mode || 'GOLD').toUpperCase();
+
+      const directionTitle = isAdminToWorker
+        ? `Admin → Worker (${resolvedWorkerName})`
+        : `Worker (${resolvedWorkerName}) → Admin`;
+
+      const directionIcon = isAdminToWorker ? '📤 Sent' : '📥 Received';
+      const rawNotes = (tx.notes || tx.item_name || tx.description || tx.item_description || '').replace(/\n/g, ' · ');
+      const itemDesc = rawNotes || `${itemMode} Transfer`;
+      const details = `${directionIcon} ${itemDesc} ${wt > 0 ? `(${wt}g)` : ''} ${amt > 0 ? `· ₹${amt.toLocaleString('en-IN')}` : ''} ${tx.order_id ? `· Order #${tx.order_id}` : ''}`;
+
+      logBookTimeline.push({
+        id: `log-worker-${tx.id || Math.random()}`,
+        time: formattedTime,
+        created_at: tx.created_at || new Date().toISOString(),
+        type: 'KARIGAR',
+        title: directionTitle,
+        details: details,
+        category: itemMode,
+        cash_metal_link: tx.cash_metal_link || null,
+        weight_grams: wt,
+        amount: amt,
+        paid_amount: amt,
+        due_amount: 0,
+        payment_mode: 'WORKER_TRANSFER',
+        direction: isAdminToWorker ? 'ADMIN_TO_WORKER' : 'WORKER_TO_ADMIN',
+        transfer_item_mode: itemMode,
+        raw_worker_txn: tx,
+      });
+    });
+
+    // Process Invoices
+    invoices.forEach((inv: any) => {
+      const formattedTime = inv.created_at
+        ? new Date(inv.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '10:00 AM';
+
+      const jsonMode = inv.receipt_json_data?.transaction_type || inv.transaction_type || 'SELL';
+      const items = inv.receipt_json_data?.items || [];
+      const netAmount = Number(inv.final_amount || inv.receipt_json_data?.netPayable || 0);
+      const paidAmount = Number(inv.paid_amount || inv.receipt_json_data?.advancePaidAmount || netAmount);
+      const dueAmount = Number(inv.due_amount || inv.receipt_json_data?.balanceDueAmount || 0);
+
+      const isSell = jsonMode === 'SELL' || jsonMode === 'EXCHANGE';
+
+      if (isSell) {
+        totalSalesValue += netAmount;
+        newDuesCreated += dueAmount;
+        totalSalesCash += paidAmount;
+      }
+
+      if (dueAmount === 0 && paidAmount > 0 && inv.created_at) {
+        oldDuesCollected += (inv.receipt_json_data?.payment_history?.length > 1 ? paidAmount : 0);
+      }
+
+      items.forEach((item: any) => {
+        const wt = Number(item.weight_grams || 0);
+        const isGold = item.metal_type !== 'SILVER';
+
+        if (item.item_type === 'SELL') {
+          if (isGold) totalGoldWeightSold += wt;
+          else totalSilverWeightSold += wt;
+          makingChargesProfit += Number(item.making_charges_per_gram || 0) * wt;
+        } else if (item.item_type === 'BUY') {
+          if (isGold) totalGoldWeightBought += wt;
+          else totalSilverWeightBought += wt;
+          totalScrapPayout += Number(item.total_price || 0);
+        }
+      });
+
+      logBookTimeline.push({
+        id: `log-inv-${inv.id}`,
+        time: formattedTime,
+        created_at: inv.created_at,
+        type: jsonMode,
+        title: inv.customer_name || 'Walk-in Customer',
+        details: `${inv.product_name || 'Jewellery'} · Weight: ${inv.weight_grams || 0}g`,
+        category: inv.metal_type || 'GOLD',
+        weight_grams: Number(inv.weight_grams || 0),
+        amount: netAmount,
+        paid_amount: paidAmount,
+        due_amount: dueAmount,
+        payment_mode: inv.receipt_json_data?.paymentType || 'CASH',
+        customer_phone: inv.customer_phone,
+        raw_invoice: inv,
+      });
+    });
+
+    // Process Orders
+    orders.forEach((ord: any) => {
+      const formattedTime = ord.created_at
+        ? new Date(ord.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '11:00 AM';
+
+      const ordTotal = Number(ord.total_amount || ord.grand_total || ord.final_amount || 0);
+      const ordPaid = Number(ord.paid_amount || ord.advance_amount || 0);
+      const ordDue = Number(ord.due_amount || (ordTotal > ordPaid ? ordTotal - ordPaid : 0));
+      const ordWeight = Number(ord.net_weight || ord.gross_weight || ord.weight_grams || 0);
+
+      // Build complete receipt_json_data for order if not already stored in DB
+      let ordReceiptJson = ord.receipt_json_data;
+      if (typeof ordReceiptJson === 'string') {
+        try { ordReceiptJson = JSON.parse(ordReceiptJson); } catch (e) {}
+      }
+
+      if (!ordReceiptJson) {
+        ordReceiptJson = {
+          transaction_type: 'ORDER',
+          customer_name: ord.customer_name || 'Customer',
+          customer_phone: ord.customer_phone || '',
+          customer_address: ord.customer_address || 'Siddipet, Telangana',
+          items: Array.isArray(ord.items) && ord.items.length > 0 ? ord.items : [
+            {
+              id: 'ord-item-1',
+              product_name: ord.item_name || 'Custom Jewellery',
+              metal_type: (ord.metal_type || 'GOLD').toUpperCase(),
+              weight_grams: ordWeight,
+              total_price: ordTotal,
+              item_type: 'SELL',
+              making_charges_per_gram: Number(ord.making_charges || 0),
+              wastage_percent: Number(ord.wastage_percent || 0),
+            }
+          ],
+          totalSellValue: ordTotal,
+          netPayable: ordTotal,
+          advancePaidAmount: ordPaid,
+          balanceDueAmount: ordDue,
+          paymentType: ordDue === 0 ? 'FULL' : 'PARTIAL',
+          notes: ord.notes || '',
+          delivery_date: ord.delivery_date || '',
+        };
+      }
+
+      // Build detailed Order card description for both-way SELL & BUY orders
+      let orderDetailsText = '';
+      const orderItems = ordReceiptJson?.items || [];
+      const sellItems = orderItems.filter((it: any) => it.item_type === 'SELL');
+      const buyItems = orderItems.filter((it: any) => it.item_type === 'BUY' || it.item_type === 'EXCHANGE_BUY');
+
+      if (sellItems.length > 0 && buyItems.length > 0) {
+        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
+        const buyStr = buyItems.map((i: any) => `${i.product_name || 'Scrap'} (${i.weight_grams || 0}g)`).join(', ');
+        orderDetailsText = `📦 Sold: ${sellStr} | ⚖️ Bought: ${buyStr} · Advance Paid: ₹${ordPaid.toLocaleString('en-IN')}`;
+      } else if (sellItems.length > 0) {
+        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
+        orderDetailsText = `📦 Sold: ${sellStr} · Advance Paid: ₹${ordPaid.toLocaleString('en-IN')}`;
+      } else {
+        orderDetailsText = `📦 Sold: ${ord.item_name || 'Custom Jewellery'} (${ordWeight}g) · Advance Paid: ₹${ordPaid.toLocaleString('en-IN')}`;
+      }
+
+      const isBothWay = sellItems.length > 0 && buyItems.length > 0;
+
+      logBookTimeline.push({
+        id: `log-ord-${ord.id}`,
+        time: formattedTime,
+        created_at: ord.created_at,
+        type: 'ORDER',
+        title: ord.customer_name || 'Customer',
+        details: orderDetailsText,
+        category: (ord.metal_type || 'GOLD').toUpperCase(),
+        weight_grams: ordWeight,
+        amount: ordTotal,
+        paid_amount: ordPaid,
+        due_amount: ordDue,
+        payment_mode: 'ADVANCE',
+        customer_phone: ord.customer_phone,
+        raw_order: { ...ord, receipt_json_data: ordReceiptJson },
+      });
+    });
+
+    // Sort timeline by created_at ascending and assign S.No + Payment Status Badges
+    logBookTimeline.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    logBookTimeline.forEach((item, index) => {
+      item.sNo = index + 1;
+      item.payment_status = item.due_amount > 0 ? 'PARTIAL' : 'FULL';
+    });
+
+    // --- Category Stock Balance Summary ---
+    const stockSummary = [
+      { category: 'Gold Ornaments (22K)', openingWeight: 1000.000, loadedWeight: 0, soldWeight: totalGoldWeightSold, closingWeight: round3Decimals(1000.000 - totalGoldWeightSold) },
+      { category: 'Silver Articles & Ornaments (92.5)', openingWeight: 40000.000, loadedWeight: 0, soldWeight: totalSilverWeightSold, closingWeight: round3Decimals(40000.000 - totalSilverWeightSold) },
+    ];
+
+    // --- Cash & Register Summary ---
+    const openingCash = 800000;
+    const dailyExpenses = 1500;
+    const expectedClosingCash = openingCash + totalSalesCash + oldDuesCollected - totalScrapPayout - dailyExpenses;
+
+    const cashSummary = {
+      openingCash,
+      salesCashCollected: totalSalesCash,
+      oldDuesCollected,
+      scrapPayout: totalScrapPayout,
+      dailyExpenses,
+      expectedClosingCash: Math.max(0, expectedClosingCash),
+      upiCollected: totalSalesUPI,
+      cardCollected: totalSalesCard,
+    };
+
+    // --- Scrap Vault Summary ---
+    const scrapSummary = {
+      oldGoldBoughtWeight: totalGoldWeightBought,
+      oldSilverBoughtWeight: totalSilverWeightBought,
+      totalScrapPayout,
+    };
+
+    // Extract Old Metal Vault Customer Items
+    const oldMetalVaultItems: any[] = [];
+    invoices.forEach((inv: any) => {
+      let rData: any = inv.receipt_json_data;
+      if (typeof rData === 'string') {
+        try { rData = JSON.parse(rData); } catch (e) {}
+      }
+
+      if (rData && Array.isArray(rData.items)) {
+        rData.items.forEach((it: any) => {
+          if (it.item_type === 'BUY' || it.item_type === 'EXCHANGE_BUY') {
+            const wt = Number(it.weight_grams || 0);
+            const purity = Number(it.purity_percentage || it.purity || 91.6);
+            const pureWt = round3Decimals(wt * (purity / 100));
+            oldMetalVaultItems.push({
+              id: `scrap-${inv.id}-${it.id || Math.random()}`,
+              customer_name: inv.customer_name || 'Customer',
+              customer_phone: inv.customer_phone || 'N/A',
+              created_at: inv.created_at,
+              item_name: it.product_name || (it.metal_type + ' Scrap Item'),
+              metal_type: (it.metal_type || 'GOLD').toUpperCase(),
+              gross_weight: wt,
+              purity_percentage: purity,
+              pure_weight: pureWt,
+              payout_amount: Number(it.total_price || 0),
+            });
+          }
+        });
+      }
+    });
+
+    // --- Udhaari & Karigar Summary ---
+    const karigarGoldIssued = workerTransactions.reduce((sum: number, tx: any) =>
+      tx.direction === 'OUTGOING' ? sum + Number(tx.weight_grams || tx.fine_gold_grams || 0) : sum, 0);
+    const karigarGoldReceived = workerTransactions.reduce((sum: number, tx: any) =>
+      tx.direction !== 'OUTGOING' ? sum + Number(tx.weight_grams || tx.fine_gold_grams || 0) : sum, 0);
+
+    const udhaariSummary = {
+      newDuesCreated,
+      oldDuesCollected,
+      karigarGoldIssued,
+      karigarGoldReceived,
+    };
+
+
+    // --- Profit Summary ---
+    const netProfit = makingChargesProfit - dailyExpenses;
+    const profitSummary = {
+      makingChargesProfit,
+      metalMarginProfit: round3Decimals(totalSalesValue * 0.05),
+      grossProfit: makingChargesProfit + round3Decimals(totalSalesValue * 0.05),
+      dailyExpenses,
+      netProfit: Math.max(0, netProfit + round3Decimals(totalSalesValue * 0.05)),
+    };
+
+    return res.json({
+      success: true,
+      date: targetDate,
+      section,
+      logBookTimeline,
+      stockSummary,
+      cashSummary,
+      scrapSummary,
+      oldMetalVaultItems,
+      udhaariSummary,
+      profitSummary,
+    });
+  } catch (err: any) {
+    console.error('Error fetching day book accounts:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Server error fetching day book accounts' });
   }
 });
 

@@ -28,7 +28,7 @@ export function mergeTransactions(
   const confirmedItems = allItems.filter((item) => item && item.id && !item.id.startsWith('temp_'));
 
   for (const item of existing) {
-    if (item && item.id && (!activeWorkerId || String(item.worker_id) === String(activeWorkerId))) {
+    if (item && item.id && !item.is_deleted && (!activeWorkerId || String(item.worker_id) === String(activeWorkerId))) {
       if (item.id.startsWith('temp_') && isGhostTempItem(item, confirmedItems)) {
         continue;
       }
@@ -37,7 +37,7 @@ export function mergeTransactions(
   }
 
   for (const item of incoming) {
-    if (item && item.id && (!activeWorkerId || String(item.worker_id) === String(activeWorkerId))) {
+    if (item && item.id && !item.is_deleted && (!activeWorkerId || String(item.worker_id) === String(activeWorkerId))) {
       if (item.id.startsWith('temp_') && isGhostTempItem(item, confirmedItems)) {
         continue;
       }

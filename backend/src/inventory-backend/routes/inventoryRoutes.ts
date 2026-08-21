@@ -41,7 +41,10 @@ router.get('/products', async (req: Request, res: Response) => {
       category: item.category,
       item_type: item.item_type || 'GOLD',
       price: Number(item.price || 0),
-      weight_grams: Number(item.weight_from_grams || 0),
+      weight_grams: Number(item.current_stock_weight ?? item.weight_from_grams ?? 0),
+      current_stock_weight: Number(item.current_stock_weight ?? item.weight_from_grams ?? 0),
+      sold_quantity: Number(item.sold_quantity ?? 0),
+      sell_count: Number(item.sell_count ?? 0),
       weight_from_grams: Number(item.weight_from_grams || 0),
       weight_to_grams: Number(item.weight_to_grams || item.weight_from_grams || 0),
       img: item.img,
@@ -172,12 +175,16 @@ router.post('/products', async (req: Request, res: Response) => {
     weight_grams,
     weight_from_grams,
     weight_to_grams,
+    stock_quantity,
     img = '/classic_gold_band_ring.jpeg',
   } = req.body;
 
   const finalCategory = category || 'General Product';
-  const finalWeightFrom = Number(weight_from_grams || weight_grams || 0);
-  const finalWeightTo = Number(weight_to_grams || weight_grams || finalWeightFrom);
+  const finalWeightFrom = Number(weight_from_grams || 0);
+  const finalWeightTo = Number(weight_to_grams || finalWeightFrom);
+  const finalTotalWeight = Number(weight_grams || finalWeightFrom || 0);
+  const finalStockQty = Number(stock_quantity || 0);
+
   const id = `prod-${Date.now()}`;
   const itemName = name || `${item_type === 'GOLD' ? 'Gold' : 'Silver'} ${finalCategory}`;
 
@@ -187,47 +194,141 @@ router.post('/products', async (req: Request, res: Response) => {
   // Automatically upload image to Cloudinary in WebP format if base64 data URL
   const cloudinaryWebpUrl = await uploadToCloudinaryHelper(img);
 
-  const newProductObj = {
-    id,
-    item_name: itemName,
-    category: finalCategory,
-    item_type: item_type || 'GOLD',
-    weight_from_grams: finalWeightFrom,
-    weight_to_grams: finalWeightTo,
-    img: cloudinaryWebpUrl,
-    price: Number(price || 0),
-  };
+    const newProductObj = {
+      id,
+      item_name: itemName,
+      category: finalCategory,
+      item_type: item_type || 'GOLD',
+      weight_from_grams: finalWeightFrom,
+      weight_to_grams: finalWeightTo,
+      current_stock_weight: finalTotalWeight,
+      sold_quantity: 0.000,
+      sell_count: 0,
+      img: cloudinaryWebpUrl,
+      price: Number(price || 0),
+    };
 
+    try {
+      const { data, error } = await supabase
+        .from('inventory_products')
+        .insert([newProductObj])
+        .select();
+
+      if (error) {
+        console.warn('Supabase insert warning:', error.message);
+      } else {
+        console.log('✨ Successfully inserted into inventory_products table:', data);
+        
+        // Insert opening log into inventory_stock_logs (item_id is Foreign Key to inventory_products.id)
+        const { error: logErr } = await supabase
+          .from('inventory_stock_logs')
+          .insert([{
+            item_id: id,
+            item_name: itemName,
+            metal_category: item_type || 'GOLD',
+            item_category: finalCategory,
+            previous_stock_weight: 0.000,
+            new_stock_weight: finalTotalWeight,
+            notes: `Initial stock loaded (${finalTotalWeight}g)`,
+          }]);
+
+        if (logErr) {
+          console.warn('⚠️ Stock log insert warning:', logErr.message);
+        } else {
+          console.log(`✨ Successfully created initial stock log for item_id: ${id}`);
+        }
+      }
+    } catch (dbErr) {
+      console.error('Database connection error:', dbErr);
+    }
+
+    const responseProduct = {
+      id,
+      name: itemName,
+      category: finalCategory,
+      item_type,
+      price: Number(price || 0),
+      weight_grams: finalTotalWeight,
+      current_stock_weight: finalTotalWeight,
+      sold_quantity: 0.000,
+      sell_count: 0,
+      weight_from_grams: finalWeightFrom,
+      weight_to_grams: finalWeightTo,
+      img: cloudinaryWebpUrl,
+    };
+
+    memoryCache.clear();
+
+    res.json({ success: true, product: responseProduct });
+  });
+
+// POST /api/inventory/products/:id/restock - Restock existing inventory quantity
+router.post('/products/:id/restock', async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
+    const { id } = req.params;
+    const { restock_weight, notes } = req.body;
+    const weightToAdd = Math.max(0, Number(restock_weight || 0));
+
+    const { data: existing, error: findErr } = await supabase
       .from('inventory_products')
-      .insert([newProductObj])
-      .select();
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (findErr || !existing) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const currentStockWeight = Number(existing.current_stock_weight ?? existing.weight_from_grams ?? 0);
+    const newStockWeight = Number((currentStockWeight + weightToAdd).toFixed(3));
+
+    await supabase
+      .from('inventory_products')
+      .update({
+        current_stock_weight: newStockWeight,
+      })
+      .eq('id', id);
+
+    await supabase.from('inventory_stock_logs').insert([{
+      item_id: id,
+      item_name: existing.item_name || existing.name || existing.category,
+      metal_category: existing.item_type || 'GOLD',
+      item_category: existing.category || 'General',
+      previous_stock_weight: currentStockWeight,
+      new_stock_weight: newStockWeight,
+      notes: notes || `Restocked +${weightToAdd}g by shop owner`,
+    }]);
+
+    memoryCache.clear();
+
+    res.json({
+      success: true,
+      message: `Successfully restocked +${weightToAdd}g!`,
+      current_stock_weight: newStockWeight,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to restock product' });
+  }
+});
+
+// GET /api/inventory/products/:id/logs - Fetch chronological stock history logs
+router.get('/products/:id/logs', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('inventory_stock_logs')
+      .select('*')
+      .eq('item_id', id)
+      .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('Supabase insert warning:', error.message);
-    } else {
-      console.log('✨ Successfully inserted Cloudinary WebP record into Supabase inventory_products table:', data);
+      return res.json({ success: true, logs: [] });
     }
-  } catch (dbErr) {
-    console.error('Database connection error:', dbErr);
+
+    res.json({ success: true, logs: data || [] });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const responseProduct = {
-    id,
-    name: itemName,
-    category: finalCategory,
-    item_type,
-    price: Number(price || 0),
-    weight_grams: finalWeightFrom,
-    weight_from_grams: finalWeightFrom,
-    weight_to_grams: finalWeightTo,
-    img: cloudinaryWebpUrl,
-  };
-
-  memoryCache.clear();
-
-  res.json({ success: true, product: responseProduct });
 });
 
 // POST /api/inventory/upload-cloudinary (Supports direct binary WebP file via multipart/form-data or legacy payload)
@@ -291,36 +392,54 @@ router.put('/products/:id', async (req: Request, res: Response) => {
     weight_grams,
     weight_from_grams,
     weight_to_grams,
+    current_stock_weight,
     img,
   } = req.body;
 
-  const finalCategory = category || 'General';
-  const finalWeightFrom = Number(weight_from_grams || weight_grams || 0);
-  const finalWeightTo = Number(weight_to_grams || weight_grams || finalWeightFrom);
-  const itemName = name || `${item_type === 'GOLD' ? 'Gold' : 'Silver'} ${finalCategory}`;
-
-  // Auto-save category to Supabase inventory_category table
-  await autoSaveCategoryToSupabase(finalCategory);
-
-  let finalImgUrl = img;
-  if (img && img.startsWith('data:')) {
-    finalImgUrl = await uploadToCloudinaryHelper(img);
-  }
-
-  const updatedProductObj: any = {
-    item_name: itemName,
-    category: finalCategory,
-    item_type: item_type || 'GOLD',
-    weight_from_grams: finalWeightFrom,
-    weight_to_grams: finalWeightTo,
-    price: Number(price || 0),
-  };
-
-  if (finalImgUrl) {
-    updatedProductObj.img = finalImgUrl;
-  }
-
   try {
+    // 1. Fetch existing item to check previous stock weight
+    const { data: existingData } = await supabase
+      .from('inventory_products')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    const finalCategory = category || existingData?.category || 'General';
+    const finalWeightFrom = Number(weight_from_grams ?? existingData?.weight_from_grams ?? 0);
+    const finalWeightTo = Number(weight_to_grams ?? existingData?.weight_to_grams ?? finalWeightFrom);
+    const itemName = name || existingData?.item_name || `${item_type === 'GOLD' ? 'Gold' : 'Silver'} ${finalCategory}`;
+    const previousStockWeight = Number(existingData?.current_stock_weight ?? existingData?.weight_from_grams ?? 0);
+
+    const newStockWeight = Number(
+      current_stock_weight !== undefined
+        ? current_stock_weight
+        : weight_grams !== undefined
+        ? weight_grams
+        : previousStockWeight
+    );
+
+    // Auto-save category to Supabase inventory_category table
+    await autoSaveCategoryToSupabase(finalCategory);
+
+    let finalImgUrl = img;
+    if (img && img.startsWith('data:')) {
+      finalImgUrl = await uploadToCloudinaryHelper(img);
+    }
+
+    const updatedProductObj: any = {
+      item_name: itemName,
+      category: finalCategory,
+      item_type: item_type || existingData?.item_type || 'GOLD',
+      weight_from_grams: finalWeightFrom,
+      weight_to_grams: finalWeightTo,
+      current_stock_weight: newStockWeight,
+      price: Number(price || 0),
+    };
+
+    if (finalImgUrl) {
+      updatedProductObj.img = finalImgUrl;
+    }
+
     const { data, error } = await supabase
       .from('inventory_products')
       .update(updatedProductObj)
@@ -332,16 +451,38 @@ router.put('/products/:id', async (req: Request, res: Response) => {
       return res.status(500).json({ success: false, message: error.message });
     }
 
+    // 2. Insert update/adjustment log into inventory_stock_logs
+    const { error: logErr } = await supabase
+      .from('inventory_stock_logs')
+      .insert([{
+        item_id: id,
+        item_name: itemName,
+        metal_category: item_type || existingData?.item_type || 'GOLD',
+        item_category: finalCategory,
+        previous_stock_weight: previousStockWeight,
+        new_stock_weight: newStockWeight,
+        notes: `Updated item details (Stock: ${previousStockWeight}g ➔ ${newStockWeight}g)`,
+      }]);
+
+    if (logErr) {
+      console.warn('⚠️ Stock log edit insert warning:', logErr.message);
+    }
+
+    memoryCache.clear();
+
     const updatedProduct = {
       id,
       name: itemName,
       category: finalCategory,
-      item_type,
+      item_type: item_type || existingData?.item_type || 'GOLD',
       price: Number(price || 0),
-      weight_grams: finalWeightFrom,
+      weight_grams: newStockWeight,
+      current_stock_weight: newStockWeight,
+      sold_quantity: Number(existingData?.sold_quantity || 0),
+      sell_count: Number(existingData?.sell_count || 0),
       weight_from_grams: finalWeightFrom,
       weight_to_grams: finalWeightTo,
-      img: finalImgUrl || (data && data[0] ? data[0].img : ''),
+      img: finalImgUrl || (data && data[0] ? data[0].img : existingData?.img || ''),
     };
 
     return res.json({ success: true, product: updatedProduct });
@@ -429,6 +570,93 @@ router.post('/categories', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Category insert error:', err);
     return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==============================================================================
+// CASH MANAGEMENT ENDPOINTS (Daily cash_history & cash_transaction_ledger)
+// ==============================================================================
+
+// GET /api/inventory/cash/status - Get today's live cash status
+router.get('/cash/status', async (_req: Request, res: Response) => {
+  try {
+    const { getTodayCashStatus } = await import('../../utils/cashLedgerHelper');
+    const status = await getTodayCashStatus();
+    res.json({ success: true, ...status });
+  } catch (err: any) {
+    console.error('Error fetching cash status:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/inventory/cash/load - Load cash into shop drawer
+router.post('/cash/load', async (req: Request, res: Response) => {
+  try {
+    const { amount, notes, date } = req.body;
+    const loadAmount = Number(amount);
+    if (isNaN(loadAmount) || loadAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid cash amount greater than 0' });
+    }
+
+    const { recordCashTransaction, getTodayCashStatus } = await import('../../utils/cashLedgerHelper');
+    const result = await recordCashTransaction({
+      transaction_type: 'LOADING',
+      flow_type: 'IN',
+      amount: loadAmount,
+      metal_type: 'N/A',
+      item_type: 'Cash Loaded',
+      notes: notes || 'Cash loaded into drawer by shop owner',
+      date: date || undefined,
+    });
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error || 'Failed to record cash loading' });
+    }
+
+    const status = await getTodayCashStatus();
+
+    res.json({
+      success: true,
+      message: `Successfully loaded ₹${loadAmount.toLocaleString('en-IN')} cash into shop drawer!`,
+      ...status,
+      current_cash: result.new_balance ?? status.current_cash,
+    });
+  } catch (err: any) {
+    console.error('Error loading cash:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/inventory/cash/history - Fetch daily cash history records
+router.get('/cash/history', async (_req: Request, res: Response) => {
+  try {
+    const { getDailyCashHistoryList } = await import('../../utils/cashLedgerHelper');
+    const history = await getDailyCashHistoryList();
+    res.json({ success: true, history });
+  } catch (err: any) {
+    console.error('Error fetching cash history:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/inventory/cash/transactions/:cash_history_uuid - Fetch individual transactions for a day
+router.get('/cash/transactions/:cash_history_uuid', async (req: Request, res: Response) => {
+  try {
+    const { cash_history_uuid } = req.params;
+    const { data: transactions, error } = await supabase
+      .from('cash_transaction_ledger')
+      .select('*')
+      .eq('cash_history_uuid', cash_history_uuid)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    res.json({ success: true, transactions: transactions || [] });
+  } catch (err: any) {
+    console.error('Error fetching transactions for cash history row:', err);
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

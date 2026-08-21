@@ -275,6 +275,23 @@ router.post('/debt/create', async (req: Request, res: Response) => {
 
     memoryCache.clear();
 
+    // Record cash disbursement in cash_history & cash_transaction_ledger
+    try {
+      const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
+      await recordCashTransaction({
+        transaction_id: String(data.id || data.customer_id),
+        transaction_type: 'FINANCE',
+        flow_type: 'OUT',
+        amount: Number(data.amount || amount),
+        metal_type: (data.item_metal_type || 'GOLD').toUpperCase() as any,
+        item_type: `Pledge Loan: ${data.item_name || 'Gold'}`,
+        notes: `Loan disbursed to ${data.customer_name} ${data.customer_surname || ''}`,
+        date: loan_date || undefined,
+      });
+    } catch (cashErr) {
+      console.warn('⚠️ Error recording loan cash disbursement:', cashErr);
+    }
+
     res.json({ success: true, message: 'Pledge loan record created successfully', record: data });
   } catch (err: any) {
     console.error('❌ Error creating loan record:', err);
@@ -327,6 +344,30 @@ router.patch('/debt/:id/close', async (req: Request, res: Response) => {
         }
       }
       return res.json({ success: true, message: 'Loan closed (fallback mode)' });
+    }
+
+    if (data) {
+      try {
+        const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
+        const principalAmount = Number(data.amount || 0);
+        const interestAmount = Number(data.final_consideration_interest_amount ?? data.total_interest ?? 0);
+        const totalSettlement = principalAmount + interestAmount;
+
+        if (totalSettlement > 0) {
+          await recordCashTransaction({
+            transaction_id: String(data.id || id),
+            transaction_type: 'FINANCE',
+            flow_type: 'IN',
+            amount: totalSettlement,
+            metal_type: (data.item_metal_type || 'GOLD').toUpperCase() as any,
+            item_type: `Loan Closed: ${data.item_name || 'Gold'}`,
+            notes: `Loan #${id} principal + interest repaid by ${data.customer_name || 'Borrower'}`,
+            date: closeDate || undefined,
+          });
+        }
+      } catch (cashErr) {
+        console.warn('⚠️ Error recording loan close repayment cash:', cashErr);
+      }
     }
 
     res.json({ success: true, message: 'Loan closed successfully', record: data });

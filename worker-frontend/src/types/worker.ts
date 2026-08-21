@@ -17,7 +17,7 @@ export interface ReplyMessageData {
   photos?: string[];
 }
 
-export type TransactionCategory = 'CASH' | 'GOLD' | 'SILVER' | 'ORNAMENT';
+export type TransactionCategory = 'CASH' | 'GOLD' | 'SILVER';
 
 export interface WorkerTransaction {
   id: string;

@@ -278,16 +278,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             ) : t.category === 'CASH' ? (
               <div style={{ margin: '4px 0', padding: '5px 8px', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                 <div style={{ fontSize: '0.62rem', color: '#166534', fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>💵 CASH PAYMENT</span>
+                  <span>💵 CASH {t.cash_metal_link === 'FOR_GOLD' ? 'FOR GOLD' : t.cash_metal_link === 'FOR_SILVER' ? 'FOR SILVER' : 'PAYMENT'}</span>
                   {t.cash_metal_link && (
                     <span style={{ fontSize: '0.58rem', background: '#dcfce7', padding: '1px 5px', borderRadius: '4px', color: '#15803d' }}>
-                      {t.cash_metal_link === 'FOR_GOLD' ? '🥇 For Gold' : t.cash_metal_link === 'FOR_SILVER' ? '🥈 For Silver' : '💵 General Cash'}
+                      {t.cash_metal_link === 'FOR_GOLD' ? '🥇 Raw Gold' : t.cash_metal_link === 'FOR_SILVER' ? '🥈 Raw Silver' : '💵 General'}
                     </span>
                   )}
                 </div>
                 <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#15803d', marginTop: '1px' }}>
                   💵 ₹{t.amount_cash?.toLocaleString('en-IN') || '0'}
                 </div>
+                {t.item_name && (
+                  <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, marginTop: '2px' }}>
+                    For {toSentenceCase(t.item_name)}
+                  </div>
+                )}
                 {t.applied_rate_per_gram && t.applied_rate_per_gram > 0 ? (
                   <div style={{ marginTop: '3px', fontSize: '0.66rem', background: '#ffffff', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span><strong>Rate:</strong> ₹{t.applied_rate_per_gram.toLocaleString('en-IN')}/g</span>
@@ -299,9 +304,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             ) : Number(t.weight_grams) > 0 ? (
               <div style={{ margin: '4px 0', padding: '5px 8px', background: t.category === 'GOLD' ? '#fffbe8' : t.category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '8px', border: t.category === 'GOLD' ? '1px solid #fde68a' : t.category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{t.category === 'GOLD' ? '🥇' : t.category === 'SILVER' ? '🥈' : '👑'}</span>
-                  <span>{toSentenceCase(t.item_name || (t.category === 'GOLD' ? 'Raw Gold Bar' : t.category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item'))}</span>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>{t.category === 'GOLD' ? '🥇 Raw Gold' : t.category === 'SILVER' ? '🥈 Raw Silver' : '👑 Ornament'}</span>
+                  </div>
+                  {t.item_name && (
+                    <div style={{ fontSize: '0.72rem', color: t.category === 'GOLD' ? '#b45309' : '#0369a1', fontWeight: 700, marginTop: '1px' }}>
+                      For {toSentenceCase(t.item_name)}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '4px', fontSize: '0.70rem', background: '#ffffff', padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
                   <div>

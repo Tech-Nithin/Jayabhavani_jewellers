@@ -84,6 +84,7 @@ export interface ModeFormProps {
   handleRemoveItem?: (itemId: string) => void;
   calcResults: any;
   presets: Record<string, string[]>;
+  getItemNameOptions?: (metalType: 'GOLD' | 'SILVER') => string[];
   handleAddNewPreset: (name: string, category: string) => void;
   rates: GlobalRates | null;
   lang: Language;

@@ -6,7 +6,6 @@ import { supabase } from '../../config/supabase';
 import { saveFcmToken } from '../../utils/fcmTokenStore';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 import { triggerFcmPushNotification } from '../../utils/pushService';
-import { insertMetalTransactions } from '../../billing-backend/routes/billingRoutes';
 import { memoryCache } from '../../config/memoryCache';
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -331,6 +330,103 @@ router.post('/orders', async (req: Request, res: Response) => {
 
       if (!dbErr && dbOrder) {
         // ✅ Success — record inserted and confirmed
+        if (Number(newOrder.paid_amount || 0) > 0) {
+          try {
+            const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
+            await recordCashTransaction({
+              transaction_id: String(newOrder.id),
+              transaction_type: 'ORDER',
+              flow_type: 'IN',
+              amount: Number(newOrder.paid_amount),
+              metal_type: (newOrder.metal_type || 'GOLD').toUpperCase() as any,
+              item_type: `Order Advance: ${newOrder.item_name}`,
+              notes: `Advance for Order #${newOrder.id} - ${newOrder.customer_name}`,
+              date: newOrder.created_at ? String(newOrder.created_at).split('T')[0] : undefined,
+            });
+          } catch (cashErr) {
+            console.warn('⚠️ Error recording order advance cash:', cashErr);
+          }
+        }
+
+        // Record old gold / scrap metal received from customer towards this order
+        try {
+          const rawReceipt = typeof newOrder.receipt_json_data === 'string'
+            ? JSON.parse(newOrder.receipt_json_data)
+            : (newOrder.receipt_json_data || {});
+
+          const items: any[] = Array.isArray(rawReceipt?.items) ? rawReceipt.items : [];
+          for (const it of items) {
+            if ((it.item_type || '').toUpperCase() === 'BUY') {
+              const scrapWeight = Number(it.weight_grams || it.gross_weight_grams || it.net_weight_grams || 0);
+              const cleanMetal = (it.metal_type || newOrder.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+              if (scrapWeight > 0) {
+                await supabase.from('customer_metal_transactions').insert([{
+                  invoice_id: String(newOrder.id),
+                  customer_id: newOrder.customer_phone || null,
+                  customer_phone: newOrder.customer_phone,
+                  customer_name: newOrder.customer_name,
+                  transaction_type: 'ORDER',
+                  metal_type: cleanMetal,
+                  item_type: 'BUY',
+                  product_name: it.product_name || `Old ${cleanMetal} Scrap`,
+                  weight_grams: scrapWeight,
+                  amount: Number(it.lineTotal || it.line_total || it.metalVal || 0),
+                  purity_percentage: Number(it.purity_percentage) || 100,
+                  created_at: new Date().toISOString(),
+                }]);
+
+                await supabase.from('inventory_stock_logs').insert([{
+                  product_id: null,
+                  product_name: `Old ${cleanMetal} Scrap / Buy-in`,
+                  log_type: 'OLD_GOLD_PURCHASE',
+                  quantity_change: 1,
+                  weight_change_grams: scrapWeight,
+                  previous_stock: 0,
+                  new_stock: 0,
+                  notes: `Scrap ${cleanMetal} received towards Order #${newOrder.id} from ${newOrder.customer_name}`,
+                  created_at: new Date().toISOString(),
+                }]);
+              }
+            }
+          }
+        } catch (scrapErr) {
+          console.warn('⚠️ Error recording order scrap metal intake:', scrapErr);
+        }
+
+        // Sync into customer_billing, billing_sell_buy_records, billing_payment_history
+        try {
+          import('../../utils/billingStorageHelper').then(({ storeBillingTransaction }) => {
+            const anyOrder = newOrder as any;
+            storeBillingTransaction({
+              billing_id: String(newOrder.id),
+              bill_type: 'ORDER',
+              customer_name: newOrder.customer_name,
+              customer_phone: newOrder.customer_phone,
+              customer_address: newOrder.customer_address,
+              total_amount: Number(newOrder.final_amount || newOrder.metal_value || 0),
+              paid_amount: Number(newOrder.paid_amount || 0),
+              due_amount: Number(newOrder.due_amount || 0),
+              receipt_json_data: newOrder.receipt_json_data,
+              created_at: newOrder.created_at,
+              metal_type: newOrder.metal_type,
+              metal_rate: Number(anyOrder.applied_rate_per_gram || 0),
+              weight_grams: Number(newOrder.gross_weight_grams || 0),
+              product_name: newOrder.item_name,
+              deduction_name: anyOrder.deduction_name || undefined,
+              deduction_weight: Number(anyOrder.deduction_weight || 0),
+              making_charges: Number(anyOrder.making_charges_per_gram || anyOrder.making_charges || 0),
+              additional_charges: anyOrder.additional_charge_name || anyOrder.additional_charges_name || undefined,
+              additional_cost: Number(anyOrder.additional_charge_value || anyOrder.additional_charges_amount || 0),
+              hallmark_percentage: Number(anyOrder.hmw_percentage || anyOrder.wastage_percent || 0),
+              item_quality_percentage: Number(newOrder.touch_percentage || anyOrder.purity_percentage || 0),
+              quantity_unit: anyOrder.quantity_unit || 'PIECES',
+              item_length_inches: anyOrder.item_length_inches ? String(anyOrder.item_length_inches) : undefined,
+              image_url: newOrder.image_url,
+              notes: newOrder.notes,
+            }).catch((e) => console.warn('⚠️ Order storeBillingTransaction warning:', e));
+          });
+        } catch (e) {}
+
         return res.json({ success: true, message: 'Order created & stored in database successfully!', order: dbOrder });
       }
 
@@ -686,61 +782,28 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
     if (newSubmitted === 'yes' || newSoldStatus === 'SOLD') {
       if (newSubmitted === 'yes') {
         try {
-          const orderInvoicePayload = {
-            id: order.id,
-            customer_phone: order.customer_phone,
-            customer_name: order.customer_name,
-            transaction_type: 'ORDER',
-            metal_type: order.metal_type || 'GOLD',
-            product_name: order.item_name || 'Custom Jewelry Order',
-            weight_grams: Number(order.net_weight_grams || order.gross_weight_grams) || 0,
-            final_amount: Number((order as any).total_amount || order.final_amount || order.paid_amount) || 0,
-            purity_percentage: Number(order.touch_percentage) || 91.6,
-            receipt_json_data: updatedReceiptJSON,
-            created_at: new Date().toISOString(),
-          };
-
-          insertMetalTransactions(orderInvoicePayload).catch(() => {});
-        } catch (e) {
-          console.warn('⚠️ customer_metal_transactions order trigger warning:', e);
-        }
-      }
-
-      const grossW = order.gross_weight_grams || 0;
-      const netW = order.net_weight_grams || grossW;
-      const mc = order.making_charges || 0;
-      const totalVal = order.final_amount || order.paid_amount || 0;
-
-      try {
-        const { data: dbInvoice, error: dbErr } = await supabase
-          .from('billing_invoices')
-          .insert([{
+          const { storeBillingTransaction } = await import('../../utils/billingStorageHelper');
+          storeBillingTransaction({
+            billing_id: String(order.id),
+            bill_type: 'ORDER',
             customer_name: order.customer_name,
             customer_phone: order.customer_phone,
             customer_address: order.customer_address,
-            transaction_type: 'ORDER',
-            metal_type: order.metal_type,
-            product_name: `${order.item_name} (Order ${order.id})`,
-            weight_grams: grossW,
-            purity_percentage: order.touch_percentage,
-            making_charges: mc,
-            applied_rate_per_gram: order.applied_rate_per_gram || 0,
-            pure_metal_weight: order.pure_metal_weight || order.fine_weight_grams || 0,
-            metal_value: order.metal_value || 0,
-            gst_amount: order.gst_amount || 0,
-            final_amount: totalVal,
-            paid_amount: order.paid_amount,
-            due_amount: order.due_amount,
+            total_amount: Number((order as any).total_amount || order.final_amount || order.paid_amount) || 0,
+            paid_amount: Number(order.paid_amount || 0),
+            due_amount: Number(order.due_amount || 0),
             receipt_json_data: updatedReceiptJSON,
             created_at: new Date().toISOString(),
-          }])
-          .select('*');
-
-        if (!dbErr && dbInvoice) {
+            metal_type: order.metal_type,
+            weight_grams: Number(order.net_weight_grams || order.gross_weight_grams) || 0,
+            product_name: order.item_name,
+            image_url: order.image_url,
+            notes: order.notes,
+          }).catch(() => {});
           invoicePersisted = true;
+        } catch (e) {
+          console.warn('⚠️ storeBillingTransaction order trigger warning:', e);
         }
-      } catch (err) {
-        console.warn('billing_invoices Supabase insertion notice:', err);
       }
     }
 
@@ -926,6 +989,46 @@ router.put('/workers/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/work-assignment/workers/:id/pending-orders - Fetch pending unreturned orders assigned to a worker
+router.get('/workers/:id/pending-orders', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { data: dbOrders, error } = await supabase
+      .from('orders')
+      .select('id,customer_name,metal_type,item_name,gross_weight_grams,touch_percentage,status,returned_from_worker,created_at')
+      .eq('assigned_worker_id', id)
+      .neq('returned_from_worker', 'yes')
+      .neq('status', 'COMPLETED')
+      .order('created_at', { ascending: false });
+
+    if (!error && dbOrders) {
+      return res.json({ success: true, orders: dbOrders });
+    }
+    return res.json({ success: true, orders: [] });
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// GET /api/work-assignment/workers/:id/all-orders - Fetch all assigned orders (both pending and completed) for a worker
+router.get('/workers/:id/all-orders', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { data: dbOrders, error } = await supabase
+      .from('orders')
+      .select('id,customer_name,customer_phone,customer_address,metal_type,item_name,gross_weight_grams,net_weight_grams,touch_percentage,fine_weight_grams,making_charges,estimated_delivery_date,notes,status,returned_from_worker,returned_at,created_at,image_url')
+      .eq('assigned_worker_id', id)
+      .order('created_at', { ascending: false });
+
+    if (!error && dbOrders) {
+      return res.json({ success: true, orders: dbOrders });
+    }
+    return res.json({ success: true, orders: [] });
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 // ── FIREBASE CLOUD MESSAGING (FCM) TOKEN REGISTRATION & PUSH ENGINE ──
 const fcmTokensMap = new Map<string, string>();
 
@@ -1051,7 +1154,10 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
   const { workerId, days, beforeDate, search, fullHistory } = req.query;
 
   try {
-    let query = supabase.from('worker_transactions').select('*');
+    let query = supabase
+      .from('worker_transactions')
+      .select('*')
+      .or('is_deleted.is.null,is_deleted.eq.false');
 
     if (workerId) {
       query = query.eq('worker_id', String(workerId));
@@ -1077,10 +1183,11 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
     const { data: dbTxns, error: dbErr } = await query.order('created_at', { ascending: true });
 
     if (!dbErr && dbTxns) {
+      const validTxns = dbTxns.filter((t: any) => !t.is_deleted);
       return res.json({
         success: true,
-        transactions: dbTxns,
-        total_count: dbTxns.length,
+        transactions: validTxns,
+        total_count: validTxns.length,
         search_active: !!search,
         source: 'supabase_database',
       });
@@ -1094,7 +1201,7 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
   }
 
   // 2. In-memory fallback if database query fails
-  let combined = [...mockTransactions];
+  let combined = mockTransactions.filter((t: any) => !t.is_deleted);
   if (workerId) {
     combined = combined.filter((t) => t.worker_id === String(workerId));
   }

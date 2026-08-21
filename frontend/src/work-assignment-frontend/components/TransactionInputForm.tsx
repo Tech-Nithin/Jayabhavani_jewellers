@@ -29,12 +29,169 @@ interface TransactionInputFormProps {
   photos: string[];
   setPhotos: (fn: (prev: string[]) => string[]) => void;
   setPhotoFiles: (fn: (prev: File[]) => File[]) => void;
+  itemOptions?: string[];
   isSending: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (e: React.FormEvent) => void;
   toSentenceCase: (str?: string | null) => string;
 }
+
+const DropUpCreatableSelect: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  required?: boolean;
+}> = ({ value, onChange, options, placeholder = 'Select or type item...', required = false }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [query, setQuery] = React.useState(value || '');
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setQuery(value || '');
+    }
+  }, [value, isOpen]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter((opt) =>
+    opt.toLowerCase().includes(query.trim().toLowerCase())
+  );
+
+  const exactMatchExists = options.some(
+    (opt) => opt.toLowerCase() === query.trim().toLowerCase()
+  );
+
+  const handleSelectOption = (optName: string) => {
+    onChange(optName);
+    setQuery(optName);
+    setIsOpen(false);
+  };
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={isOpen ? query : (value || '')}
+        required={required}
+        onFocus={() => {
+          setIsOpen(true);
+          setQuery(value || '');
+        }}
+        onChange={(e) => {
+          const val = e.target.value;
+          setQuery(val);
+          onChange(val);
+          if (!isOpen) setIsOpen(true);
+        }}
+        style={{
+          width: '100%',
+          padding: '0.55rem 2rem 0.55rem 0.75rem',
+          borderRadius: '8px',
+          border: '1px solid #cbd5e1',
+          fontSize: '0.82rem',
+          color: '#0f172a',
+          background: '#ffffff',
+          outline: 'none',
+          fontWeight: 700,
+        }}
+      />
+      <i
+        className="fa-solid fa-chevron-up"
+        onClick={() => setIsOpen((prev) => !prev)}
+        style={{
+          position: 'absolute',
+          right: '10px',
+          top: '50%',
+          transform: isOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
+          color: '#64748b',
+          fontSize: '0.68rem',
+          pointerEvents: 'none',
+          transition: 'transform 0.2s ease',
+        }}
+      />
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            right: 0,
+            marginBottom: '4px',
+            background: '#ffffff',
+            border: '1px solid #cbd5e1',
+            borderRadius: '8px',
+            boxShadow: '0 -6px 20px rgba(0, 0, 0, 0.15)',
+            maxHeight: '170px',
+            overflowY: 'auto',
+            zIndex: 9999,
+          }}
+        >
+          {query.trim() !== '' && !exactMatchExists && (
+            <div
+              onClick={() => handleSelectOption(query.trim())}
+              style={{
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.80rem',
+                fontWeight: 700,
+                color: '#2563eb',
+                background: '#eff6ff',
+                cursor: 'pointer',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <i className="fa-solid fa-plus-circle"></i> Use "{query.trim()}"
+            </div>
+          )}
+
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((opt) => (
+              <div
+                key={opt}
+                onClick={() => handleSelectOption(opt)}
+                style={{
+                  padding: '0.45rem 0.75rem',
+                  fontSize: '0.80rem',
+                  color: opt === value ? '#2563eb' : '#334155',
+                  fontWeight: opt === value ? 800 : 500,
+                  background: opt === value ? '#f0f9ff' : 'transparent',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderBottom: '1px solid #f8fafc',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = opt === value ? '#f0f9ff' : 'transparent')}
+              >
+                <span>{opt}</span>
+                {opt === value && <i className="fa-solid fa-check" style={{ color: '#2563eb', fontSize: '0.70rem' }} />}
+              </div>
+            ))
+          ) : (
+            <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
+              No matches found
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
   isAccordionExpanded,
@@ -64,6 +221,7 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
   photos,
   setPhotos,
   setPhotoFiles,
+  itemOptions = [],
   isSending,
   fileInputRef,
   onFileChange,
@@ -93,19 +251,18 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
   };
 
   const CATEGORY_ITEMS: Array<{
-    key: 'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT';
+    key: 'GOLD' | 'SILVER' | 'CASH' | 'CHAT';
     label: string;
     emoji: string;
     color: string;
     bg: string;
     border: string;
   }> = [
-    { key: 'GOLD', label: 'Gold', emoji: '🥇', color: '#b45309', bg: '#fffbe8', border: '#fde68a' },
-    { key: 'SILVER', label: 'Silver', emoji: '🥈', color: '#334155', bg: '#f8fafc', border: '#cbd5e1' },
-    { key: 'CASH', label: 'Cash', emoji: '💵', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-    { key: 'ORNAMENT', label: 'Ornament', emoji: '👑', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
-    { key: 'CHAT', label: 'Plain Message', emoji: '💬', color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd' },
-  ];
+      { key: 'GOLD', label: 'Gold', emoji: '🥇', color: '#b45309', bg: '#fffbe8', border: '#fde68a' },
+      { key: 'SILVER', label: 'Silver', emoji: '🥈', color: '#334155', bg: '#f8fafc', border: '#cbd5e1' },
+      { key: 'CASH', label: 'Cash', emoji: '💵', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
+      { key: 'CHAT', label: 'Plain Message', emoji: '💬', color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd' },
+    ];
 
   const currentCat = CATEGORY_ITEMS.find((c) => c.key === category) || CATEGORY_ITEMS[0];
 
@@ -201,14 +358,19 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                   ) : category === 'CASH' ? (
                     <div style={{ margin: '2px 0', padding: '4px 8px', background: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
                       <div style={{ fontSize: '0.60rem', color: '#166534', fontWeight: 800, display: 'flex', justifyContent: 'space-between' }}>
-                        <span>CASH PAYMENT</span>
+                        <span>💵 CASH {cashMetalLink === 'FOR_GOLD' ? 'FOR GOLD' : cashMetalLink === 'FOR_SILVER' ? 'FOR SILVER' : 'PAYMENT'}</span>
                         <span style={{ fontSize: '0.58rem', color: '#15803d' }}>
-                          {cashMetalLink === 'FOR_GOLD' ? '🥇 For Gold' : cashMetalLink === 'FOR_SILVER' ? '🥈 For Silver' : '💵 General'}
+                          {cashMetalLink === 'FOR_GOLD' ? '🥇 Raw Gold' : cashMetalLink === 'FOR_SILVER' ? '🥈 Raw Silver' : '💵 General'}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#15803d' }}>
                         💵 ₹{amountCash ? Number(amountCash).toLocaleString('en-IN') : '0'}
                       </div>
+                      {itemName && itemName.trim() && (
+                        <div style={{ fontSize: '0.70rem', color: '#166534', fontWeight: 700, marginTop: '2px' }}>
+                          For {toSentenceCase(itemName.trim())}
+                        </div>
+                      )}
                       {Number(amountCash) > 0 && Number(appliedRatePerGram) > 0 && (
                         <div style={{ marginTop: '2px', fontSize: '0.62rem', background: '#ffffff', padding: '2px 5px', borderRadius: '4px', border: '1px solid #cbd5e1', display: 'flex', justifyContent: 'space-between' }}>
                           <span>Rate: ₹{Number(appliedRatePerGram).toLocaleString('en-IN')}/g</span>
@@ -219,8 +381,12 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                   ) : Number(weightGrams) > 0 ? (
                     <div style={{ margin: '2px 0', padding: '4px 8px', background: category === 'GOLD' ? '#fffbe8' : category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '6px', border: category === 'GOLD' ? '1px solid #fde68a' : category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
                       <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '2px' }}>
-                        {category === 'GOLD' ? '🥇' : category === 'SILVER' ? '🥈' : '👑'}{' '}
-                        {toSentenceCase(itemName.trim()) || (category === 'GOLD' ? 'Raw Gold Bar' : category === 'SILVER' ? 'Raw Silver Bar' : 'Ornament Item')}
+                        <div>{category === 'GOLD' ? '🥇 Raw Gold' : category === 'SILVER' ? '🥈 Raw Silver' : '👑 Ornament'}</div>
+                        {itemName && itemName.trim() && (
+                          <div style={{ fontSize: '0.70rem', color: category === 'GOLD' ? '#b45309' : '#0369a1', fontWeight: 700 }}>
+                            For {toSentenceCase(itemName.trim())}
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '4px', fontSize: '0.66rem', background: '#ffffff', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
                         <div>
@@ -376,7 +542,7 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                           type="button"
                           onClick={() => {
                             setCategory(item.key);
-                            if (item.key === 'GOLD' || item.key === 'SILVER' || item.key === 'ORNAMENT') setTouchPercentage('100');
+                            if (item.key === 'GOLD' || item.key === 'SILVER') setTouchPercentage('100');
                             setIsCategoryMenuOpen(false);
                           }}
                           style={{
@@ -413,26 +579,29 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
 
             {category === 'CHAT' ? null : category === 'CASH' ? (
               <>
-                <div style={{ flex: '1 1 130px', minWidth: '120px' }}>
+                <div style={{ flex: '1 1 120px', minWidth: '110px' }}>
                   <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                    Amount (₹)
+                    Amount (₹) <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <input
                     type="number"
                     placeholder="Amount Cash (₹)..."
                     value={amountCash}
                     onChange={(e) => setAmountCash(e.target.value)}
+                    required
+                    min="1"
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
                   />
                 </div>
 
-                <div style={{ flex: '1 1 130px', minWidth: '120px' }}>
+                <div style={{ flex: '1 1 120px', minWidth: '110px' }}>
                   <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                    Purpose
+                    Purpose <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <select
                     value={cashMetalLink}
                     onChange={(e) => setCashMetalLink(e.target.value as 'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH')}
+                    required
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#ffffff', color: '#0f172a', fontWeight: 700 }}
                   >
                     <option value="FOR_GOLD">For Gold</option>
@@ -441,38 +610,39 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                   </select>
                 </div>
 
-                <div style={{ flex: '1 1 130px', minWidth: '120px' }}>
+                <div style={{ flex: '1 1 110px', minWidth: '100px' }}>
                   <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                    Rate per grm
+                    Rate per gram <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <input
                     type="number"
                     placeholder="eg 14500"
                     value={appliedRatePerGram}
                     onChange={(e) => setAppliedRatePerGram(e.target.value)}
+                    required
+                    min="1"
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                  />
+                </div>
+
+                <div style={{ flex: '1.4 1 150px', minWidth: '140px' }}>
+                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                    🏷️ For Which Item
+                  </label>
+                  <DropUpCreatableSelect
+                    value={itemName}
+                    onChange={(v) => setItemName(toSentenceCase(v))}
+                    options={itemOptions}
+                    placeholder="e.g. Raw Gold, Necklace..."
                   />
                 </div>
               </>
             ) : (
               <>
-                <div style={{ flex: '1.2 1 140px', minWidth: '130px' }}>
+                {/* 1. Metal Weight */}
+                <div style={{ flex: '1 1 120px', minWidth: '110px' }}>
                   <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                    🏷️ Item Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={category === 'ORNAMENT' ? 'Ornament Name...' : 'Gold Item...'}
-                    value={itemName}
-                    autoCapitalize="sentences"
-                    onChange={(e) => setItemName(toSentenceCase(e.target.value))}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
-                  />
-                </div>
-
-                <div style={{ flex: '1 1 110px', minWidth: '100px' }}>
-                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                    Weight
+                    {category === 'SILVER' ? '🥈 Silver Weight (g)' : '🥇 Gold Weight (g)'} <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <input
                     type="number"
@@ -480,13 +650,16 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                     placeholder="Weight (g)..."
                     value={weightGrams}
                     onChange={(e) => setWeightGrams(e.target.value)}
+                    required
+                    min="0.001"
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
                   />
                 </div>
 
-                <div style={{ flex: '1 1 100px', minWidth: '90px' }}>
+                {/* 2. Touch (%) */}
+                <div style={{ flex: '1 1 95px', minWidth: '85px' }}>
                   <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                    Touch (%)
+                    Touch (%) <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <input
                     type="number"
@@ -494,27 +667,48 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                     placeholder="Touch %"
                     value={touchPercentage}
                     onChange={(e) => setTouchPercentage(e.target.value)}
+                    required
+                    min="0.1"
+                    max="100"
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                  />
+                </div>
+
+                {/* 3. For Which Item (Drop-up from inventory) */}
+                <div style={{ flex: '1.4 1 150px', minWidth: '140px' }}>
+                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                    🏷️ For Which Item <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <DropUpCreatableSelect
+                    value={itemName}
+                    onChange={(v) => setItemName(toSentenceCase(v))}
+                    options={itemOptions}
+                    placeholder={category === 'SILVER' ? 'e.g. Raw Silver, Silver Glass...' : 'e.g. Raw Gold, Necklace, Ring...'}
+                    required
                   />
                 </div>
               </>
             )}
 
-            <div style={{ flex: '1.5 1 160px', minWidth: '140px' }}>
-              <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                Notes
-              </label>
-              <input
-                type="text"
-                placeholder="Add notes..."
-                value={notes}
-                autoCapitalize="sentences"
-                onChange={(e) => setNotes(toSentenceCase(e.target.value))}
-                style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
-              />
-            </div>
+            {/* 4. Notes */}
+            {category !== 'CHAT' && (
+              <div style={{ flex: '1.5 1 160px', minWidth: '140px' }}>
+                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                  Notes <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Add notes / purpose..."
+                  value={notes}
+                  autoCapitalize="sentences"
+                  onChange={(e) => setNotes(toSentenceCase(e.target.value))}
+                  required
+                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                />
+              </div>
+            )}
 
-            {/* Photo attachment & Send Button */}
+            {/* 5. Photo attachment (optional) & Send Button */}
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexShrink: 0 }}>
               <button
                 type="button"

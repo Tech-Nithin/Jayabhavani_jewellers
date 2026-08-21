@@ -1340,7 +1340,6 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                     const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
                                     const itemType = (item.item_type || mode).toUpperCase();
                                     const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
-                                    const itemRate = Number(item.applied_rate_per_gram || item.appliedRate || item.custom_rate_per_gram || item.customRate || item.rate || (cust.latestInvoice as any)?.applied_rate_per_gram || 0);
 
                                     return (
                                       <div key={i} style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
@@ -1358,11 +1357,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                           {itemMetal}
                                         </span>
                                         <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
-                                        {itemRate > 0 && (
-                                          <span style={{ fontSize: '0.66rem', color: '#0284c7', fontWeight: 700 }}>
-                                            (@ ₹{itemRate.toLocaleString('en-IN')}/g)
-                                          </span>
-                                        )}
+
+
+
                                         {mode === 'EXCHANGE' && (
                                           <span
                                             style={{
