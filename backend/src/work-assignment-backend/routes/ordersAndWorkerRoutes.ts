@@ -1479,16 +1479,21 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
   }
 });
 
-// PUT /api/worker-transactions/:id (Edit message notes & track edit timestamps array)
+// PUT /api/worker-transactions/:id (Full edit: weights, touch, cash, items & notes)
 router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { notes } = req.body;
+    const {
+      notes,
+      category,
+      itemName,
+      weightGrams,
+      touchPercentage,
+      amountCash,
+      cashMetalLink,
+      appliedRatePerGram,
+    } = req.body;
     const editTimestamp = new Date().toISOString();
-
-    if (notes === undefined) {
-      return res.status(400).json({ success: false, message: 'Notes field is required for editing' });
-    }
 
     // 1. Fetch transaction directly from Supabase
     const { data: targetTx, error: fetchErr } = await supabase
@@ -1518,11 +1523,35 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
       currentHistory = [editTimestamp];
     }
 
+    // Build updated fields
+    const updatedFields: any = {
+      edited_at_history: currentHistory,
+    };
+
+    if (notes !== undefined) updatedFields.notes = notes;
+    if (category !== undefined) updatedFields.category = category;
+    if (itemName !== undefined) updatedFields.item_name = itemName;
+
+    const finalCategory = category || targetTx?.category;
+    if (finalCategory === 'GOLD' || finalCategory === 'SILVER') {
+      const wt = weightGrams !== undefined ? parseFloat(weightGrams) || 0 : targetTx?.weight_grams || 0;
+      const touch = touchPercentage !== undefined ? parseFloat(touchPercentage) || 100 : targetTx?.touch_percentage || 100;
+      const fine = (wt * touch) / 100;
+
+      updatedFields.weight_grams = wt;
+      updatedFields.touch_percentage = touch;
+      updatedFields.fine_weight_grams = fine;
+    } else if (finalCategory === 'CASH') {
+      if (amountCash !== undefined) updatedFields.amount_cash = parseFloat(amountCash) || 0;
+      if (cashMetalLink !== undefined) updatedFields.cash_metal_link = cashMetalLink;
+      if (appliedRatePerGram !== undefined) updatedFields.applied_rate_per_gram = parseFloat(appliedRatePerGram) || 0;
+    }
+
     // 2. Update in Supabase
     try {
       await supabase
         .from('worker_transactions')
-        .update({ notes, edited_at_history: currentHistory })
+        .update(updatedFields)
         .eq('id', id);
     } catch (dbErr) {
       console.warn('Supabase update worker_transactions warning:', dbErr);
@@ -1531,26 +1560,26 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
     // Also update in-memory mock if present
     const mockIdx = mockTransactions.findIndex((t: any) => t.id === id);
     if (mockIdx !== -1) {
-      mockTransactions[mockIdx].notes = notes;
-      mockTransactions[mockIdx].edited_at_history = currentHistory;
+      Object.assign(mockTransactions[mockIdx], updatedFields);
       if (!targetWorkerId) targetWorkerId = mockTransactions[mockIdx].worker_id;
     }
 
     // 3. Broadcast SSE live stream event for instant edit (< 10ms)
+    const broadcastPayload = {
+      id,
+      worker_id: String(targetWorkerId || ''),
+      ...updatedFields,
+    };
+
     if (targetWorkerId) {
-      broadcastToWorker(String(targetWorkerId), 'MESSAGE_EDITED', {
-        id,
-        worker_id: String(targetWorkerId),
-        notes,
-        edited_at_history: currentHistory,
-      });
+      broadcastToWorker(String(targetWorkerId), 'MESSAGE_EDITED', broadcastPayload);
     }
 
     res.json({
       success: true,
-      message: 'Message edited successfully',
+      message: 'Transaction edited successfully',
       transaction_id: id,
-      notes,
+      updated_fields: updatedFields,
       edited_at_history: currentHistory,
     });
   } catch (err: any) {

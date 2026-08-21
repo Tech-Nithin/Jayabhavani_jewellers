@@ -176,8 +176,11 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         const imageUrl = it.image_url || input.image_url || receiptData.image_url || null;
         const itemNotes = it.notes || it.item_notes || input.notes || receiptData.notes || null;
 
+        const resolvedBillingMode = cleanBillType === 'EXCHANGE' ? 'TRADE_IN' : cleanBillType;
+
         lineRecordsToInsert.push({
           customer_billing_uuid: customerBillingUuid,
+          billing_mode: resolvedBillingMode,
           transaction_type: itemType,
           metal_type: metalType,
           metal_rate: metalRate,
@@ -213,9 +216,11 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       const fallbackMaking = Number(input.making_charges ?? receiptData.making_charges ?? receiptData.making_charges_per_gram ?? 0);
       const fallbackAddCharges = input.additional_charges || receiptData.additional_charges || receiptData.additional_charges_name || receiptData.additional_charge_name || null;
       const fallbackAddCost = Number(input.additional_cost ?? receiptData.additional_cost ?? receiptData.additional_charges_amount ?? receiptData.additional_charge_value ?? 0);
+      const resolvedBillingMode = cleanBillType === 'EXCHANGE' ? 'TRADE_IN' : cleanBillType;
 
       lineRecordsToInsert.push({
         customer_billing_uuid: customerBillingUuid,
+        billing_mode: resolvedBillingMode,
         transaction_type: singleType,
         metal_type: singleMetal,
         metal_rate: Number(input.metal_rate || receiptData.applied_rate_per_gram || 0),

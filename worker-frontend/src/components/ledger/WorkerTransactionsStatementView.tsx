@@ -224,7 +224,7 @@ export const WorkerTransactionsStatementView: React.FC<Props> = ({
                 whiteSpace: 'nowrap',
               }}
             >
-              {dir === 'ALL' ? 'All' : dir === 'OUTGOING' ? '↓ Given' : '↑ Returned'}
+              {dir === 'ALL' ? 'All' : dir === 'OUTGOING' ? '↑ Given' : '↓ Returned'}
             </button>
           ))}
         </div>
@@ -303,7 +303,7 @@ export const WorkerTransactionsStatementView: React.FC<Props> = ({
                                 border: isOut ? '1px solid #fde68a' : '1px solid #bbf7d0',
                               }}
                             >
-                              {isOut ? '↓ Given' : '↑ Returned'}
+                              {isOut ? '↑ Given' : '↓ Returned'}
                             </span>
                             <strong style={{ color: isGold ? '#b45309' : isSilver ? '#475569' : '#15803d' }}>
                               {isGold ? 'Gold' : isSilver ? 'Silver' : 'Cash'}
@@ -314,7 +314,15 @@ export const WorkerTransactionsStatementView: React.FC<Props> = ({
                         {/* 3. Purpose */}
                         <td style={{ padding: '6px 8px' }}>
                           <div style={{ fontWeight: 700, color: '#0f172a', maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {t.item_name ? (t.item_name.toLowerCase().startsWith('for ') ? t.item_name : `For ${t.item_name}`) : '-'}
+                            {t.item_name
+                              ? isOut
+                                ? t.item_name.toLowerCase().startsWith('for ')
+                                  ? t.item_name
+                                  : `For ${t.item_name}`
+                                : t.item_name.toLowerCase().startsWith('for ')
+                                ? t.item_name.slice(4)
+                                : t.item_name
+                              : '-'}
                           </div>
                           {isCash && t.cash_metal_link && (
                             <div style={{ fontSize: '0.56rem', color: '#166534', fontWeight: 600 }}>

@@ -44,6 +44,7 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
     : '';
 
   const isDeleted = Boolean(transaction.is_deleted);
+  const isOutgoing = transaction.direction === 'OUTGOING';
   const editHistory = Array.isArray(transaction.edited_at_history) ? transaction.edited_at_history : [];
   const isEdited = editHistory.length > 0;
   const isWithin30Mins = transaction.created_at
@@ -195,15 +196,15 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
                           transaction.category === 'GOLD'
                             ? '#fffbe8'
                             : transaction.category === 'SILVER'
-                            ? '#f8fafc'
-                            : '#f0fdf4',
+                              ? '#f8fafc'
+                              : '#f0fdf4',
                         borderRadius: '10px',
                         border:
                           transaction.category === 'GOLD'
                             ? '1px solid #fde68a'
                             : transaction.category === 'SILVER'
-                            ? '1px solid #cbd5e1'
-                            : '1px solid #bbf7d0',
+                              ? '1px solid #cbd5e1'
+                              : '1px solid #bbf7d0',
                       }}
                     >
                       {/* Header & For Which Item */}
@@ -222,7 +223,7 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
                           </div>
                           {transaction.item_name && (
                             <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, marginTop: '2px' }}>
-                              For {toSentenceCase(transaction.item_name)}
+                              {isOutgoing ? `For ${toSentenceCase(transaction.item_name)}` : toSentenceCase(transaction.item_name)}
                             </div>
                           )}
                           {transaction.applied_rate_per_gram && transaction.applied_rate_per_gram > 0 ? (
@@ -238,11 +239,11 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
                         <div>
                           <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span>{transaction.category === 'GOLD' ? '🥇 Raw Gold' : '🥈 Raw Silver'}</span>
+                              <span>{transaction.category === 'GOLD' ? '🥇 Gold' : '🥈 Silver'}</span>
                             </div>
                             {transaction.item_name && (
                               <div style={{ fontSize: '0.72rem', color: transaction.category === 'GOLD' ? '#b45309' : '#0369a1', fontWeight: 700, marginTop: '1px' }}>
-                                For {toSentenceCase(transaction.item_name)}
+                                {isOutgoing ? `For ${toSentenceCase(transaction.item_name)}` : toSentenceCase(transaction.item_name)}
                               </div>
                             )}
                           </div>
@@ -287,7 +288,7 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
                                   {Number(
                                     (Number(transaction.weight_grams) *
                                       (Number(transaction.touch_percentage) || 100.0)) /
-                                      100
+                                    100
                                   ).toFixed(3)} g
                                 </strong>
                               </div>

@@ -158,7 +158,7 @@ export const CashHistoryTableView: React.FC<CashHistoryTableViewProps> = ({
 
         <div style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '16px', border: '1.5px solid #bfdbfe', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            📥 Today's Loaded Cash
+            ↓ Today's Loaded Cash
           </div>
           <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#1d4ed8', marginTop: '4px' }}>
             +₹{todayLoadedCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

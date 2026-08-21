@@ -99,14 +99,17 @@ export async function sendWorkerTransaction(
   return res.json();
 }
 
-export async function updateWorkerTransactionNotes(transactionId: string, notes: string) {
+export async function updateWorkerTransaction(transactionId: string, editData: any) {
   const res = await fetch(`${API_BASE}/work-assignment/worker-transactions/${transactionId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ notes }),
+    body: JSON.stringify(editData),
   });
   return res.json();
 }
+
+// Backward compatible alias
+export const updateWorkerTransactionNotes = updateWorkerTransaction;
 
 export async function deleteWorkerTransaction(transactionId: string) {
   const res = await fetch(`${API_BASE}/work-assignment/worker-transactions/${transactionId}`, {

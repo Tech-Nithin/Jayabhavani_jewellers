@@ -6,6 +6,7 @@ import { WorkerProfile, WorkerTransaction, ReplyMessageData, TransactionCategory
 import {
   fetchWorkerTransactions,
   sendWorkerTransaction,
+  updateWorkerTransaction,
   updateWorkerTransactionNotes,
   deleteWorkerTransaction,
   fetchWorkerAssignedOrders,
@@ -495,10 +496,10 @@ export default function WorkerApp() {
     }
   };
 
-  // Edit message
-  const handleSaveEdit = async (txId: string, newNotes: string) => {
+  // Edit message / transaction
+  const handleSaveEdit = async (txId: string, editPayload: any) => {
     try {
-      const res = await updateWorkerTransactionNotes(txId, newNotes);
+      const res = await updateWorkerTransaction(txId, typeof editPayload === 'string' ? { notes: editPayload } : editPayload);
       if (res.success) {
         await loadTransactions(loadedDays, searchQuery, false);
       } else {

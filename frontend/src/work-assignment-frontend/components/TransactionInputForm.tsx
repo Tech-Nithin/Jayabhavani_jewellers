@@ -381,7 +381,7 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                   ) : Number(weightGrams) > 0 ? (
                     <div style={{ margin: '2px 0', padding: '4px 8px', background: category === 'GOLD' ? '#fffbe8' : category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '6px', border: category === 'GOLD' ? '1px solid #fde68a' : category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
                       <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '2px' }}>
-                        <div>{category === 'GOLD' ? '🥇 Raw Gold' : category === 'SILVER' ? '🥈 Raw Silver' : '👑 Ornament'}</div>
+                        <div>{category === 'GOLD' ? '🥇 Gold' : category === 'SILVER' ? '🥈 Silver' : '👑 Ornament'}</div>
                         {itemName && itemName.trim() && (
                           <div style={{ fontSize: '0.70rem', color: category === 'GOLD' ? '#b45309' : '#0369a1', fontWeight: 700 }}>
                             For {toSentenceCase(itemName.trim())}
@@ -466,14 +466,14 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                 onClick={() => setDirection('OUTGOING')}
                 style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', background: direction === 'OUTGOING' ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' : 'transparent', color: direction === 'OUTGOING' ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.70rem', cursor: 'pointer' }}
               >
-                📤 Outgoing (Send)
+                ↑ Outgoing (Send)
               </button>
               <button
                 type="button"
                 onClick={() => setDirection('INCOMING')}
                 style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', background: direction === 'INCOMING' ? '#0284c7' : 'transparent', color: direction === 'INCOMING' ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.70rem', cursor: 'pointer' }}
               >
-                📥 Incoming (Receive)
+                ↓ Incoming (Receive)
               </button>
             </div>
 
@@ -577,7 +577,32 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
           {/* Dynamic Parameter Inputs (Responsive Layout Grid) */}
           <div className="tx-input-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem', alignItems: 'flex-end', width: '100%' }}>
 
-            {category === 'CHAT' ? null : category === 'CASH' ? (
+            {category === 'CHAT' ? (
+              <div style={{ flex: '1 1 320px', minWidth: '220px' }}>
+                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                  💬 Text Message <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Type a message to worker..."
+                  value={notes}
+                  autoCapitalize="sentences"
+                  onChange={(e) => setNotes(toSentenceCase(e.target.value))}
+                  required
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.75rem',
+                    borderRadius: '8px',
+                    border: '1.5px solid #0284c7',
+                    fontSize: '0.82rem',
+                    outline: 'none',
+                    background: '#ffffff',
+                    boxShadow: '0 1px 3px rgba(2,132,199,0.08)',
+                  }}
+                />
+              </div>
+            ) : category === 'CASH' ? (
               <>
                 <div style={{ flex: '1 1 120px', minWidth: '110px' }}>
                   <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>

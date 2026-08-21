@@ -596,7 +596,7 @@ router.post('/create', async (req: Request, res: Response) => {
   let making_charges = transaction_type === 'SELL' ? Number(mcPerGram.toFixed(2)) : 0;
   const subtotal = metal_value + making_charges;
   let gst_amount = transaction_type === 'SELL' ? Number((subtotal * (gstRate / 100)).toFixed(2)) : 0;
-  
+
   let final_weight = weight;
   let final_product_name = product_name;
   let final_amount_val = Number((subtotal + gst_amount).toFixed(2));
@@ -731,8 +731,8 @@ router.post('/create', async (req: Request, res: Response) => {
   invoicesList.unshift(createdInvoice);
 
   // Trigger automatic stock deduction & cash tracking
-  deductInventoryStockOnSale(createdInvoice).catch(() => {});
-  recordInvoiceCashTransaction(createdInvoice).catch(() => {});
+  deductInventoryStockOnSale(createdInvoice).catch(() => { });
+  recordInvoiceCashTransaction(createdInvoice).catch(() => { });
 
   // Trigger 3-table billing storage (customer_billing, billing_sell_buy_records, billing_payment_history)
   try {
@@ -913,6 +913,15 @@ router.get('/kpi-summary', async (req: Request, res: Response) => {
         const metal = (r.metal_type || '').toUpperCase();
         const itemType = (r.transaction_type || '').toUpperCase();
 
+        const billingMode = (r.billing_mode || '').toUpperCase();
+        if (billingMode === 'ORDER') acc.orderCount++;
+        else if (billingMode === 'SELL') acc.sellCount++;
+        else if (billingMode === 'TRADE_IN' || billingMode === 'EXCHANGE') acc.exchangeCount++;
+
+        if (itemType === 'BUY' || billingMode === 'BUY') {
+          acc.buyCount++;
+        }
+
         if (metal === 'GOLD' && itemType === 'SELL') {
           acc.goldSoldWeight += w;
           acc.goldSoldAmount += amt;
@@ -931,6 +940,10 @@ router.get('/kpi-summary', async (req: Request, res: Response) => {
         return acc;
       },
       {
+        orderCount: 0,
+        sellCount: 0,
+        buyCount: 0,
+        exchangeCount: 0,
         goldSoldWeight: 0,
         goldSoldAmount: 0,
         goldBoughtWeight: 0,
@@ -944,7 +957,16 @@ router.get('/kpi-summary', async (req: Request, res: Response) => {
       }
     );
 
-    res.json({ success: true, summary });
+    res.json({
+      success: true,
+      summary,
+      activityCounts: {
+        orderCount: summary.orderCount,
+        sellCount: summary.sellCount,
+        buyCount: summary.buyCount,
+        exchangeCount: summary.exchangeCount,
+      }
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1083,37 +1105,37 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     final_amount_val = Number((subtotal + gst_amount).toFixed(2));
   }
 
-    const nowIso = new Date().toISOString();
-    const existingHistory = Array.isArray(receipt_json_data?.update_history) ? receipt_json_data.update_history : [];
-    const updateHistoryList = [...existingHistory, nowIso];
+  const nowIso = new Date().toISOString();
+  const existingHistory = Array.isArray(receipt_json_data?.update_history) ? receipt_json_data.update_history : [];
+  const updateHistoryList = [...existingHistory, nowIso];
 
-    receipt_json_data.updated_at = nowIso;
-    receipt_json_data.update_history = updateHistoryList;
+  receipt_json_data.updated_at = nowIso;
+  receipt_json_data.update_history = updateHistoryList;
 
-    const updatedInvoice = {
-      id,
-      customer_name,
-      customer_phone,
-      customer_address,
-      transaction_type: transaction_type || 'SELL',
-      metal_type: resolvedUpdateMetalType,
-      product_name: final_product_name,
-      weight_grams: final_weight,
-      purity_percentage: Number(purity_percentage) || 100,
-      applied_rate_per_gram: activeMetalValues.gold_sell_value,
-      pure_metal_weight,
-      metal_value,
-      making_charges,
-      gst_amount,
-      final_amount: final_amount_val,
-      gold_buy_rate_snapshot: activeMetalValues.gold_buy_value,
-      gold_sell_rate_snapshot: activeMetalValues.gold_sell_value,
-      silver_buy_rate_snapshot: activeMetalValues.silver_buy_value,
-      silver_sell_rate_snapshot: activeMetalValues.silver_sell_value,
-      receipt_json_data,
-      created_at: createdAt,
-      updated_at: nowIso,
-    };
+  const updatedInvoice = {
+    id,
+    customer_name,
+    customer_phone,
+    customer_address,
+    transaction_type: transaction_type || 'SELL',
+    metal_type: resolvedUpdateMetalType,
+    product_name: final_product_name,
+    weight_grams: final_weight,
+    purity_percentage: Number(purity_percentage) || 100,
+    applied_rate_per_gram: activeMetalValues.gold_sell_value,
+    pure_metal_weight,
+    metal_value,
+    making_charges,
+    gst_amount,
+    final_amount: final_amount_val,
+    gold_buy_rate_snapshot: activeMetalValues.gold_buy_value,
+    gold_sell_rate_snapshot: activeMetalValues.gold_sell_value,
+    silver_buy_rate_snapshot: activeMetalValues.silver_buy_value,
+    silver_sell_rate_snapshot: activeMetalValues.silver_sell_value,
+    receipt_json_data,
+    created_at: createdAt,
+    updated_at: nowIso,
+  };
 
   // Overwrite in memory list
   const index = invoicesList.findIndex((i) => String(i.id) === String(id));
@@ -1363,6 +1385,167 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
 
     const loansToday = (dbLoans || []).filter((fl) => matchesDateFilterIST(fl.created_at || fl.loan_date, targetDate, startDate, endDate));
 
+    // 6. Fetch customer_billing & billing_sell_buy_records for fast Transaction Activity calculation
+    const [{ data: dbCustomerBills }, { data: dbBillingRecords }] = await Promise.all([
+      supabase.from('customer_billing').select('*').order('created_at', { ascending: true }),
+      supabase.from('billing_sell_buy_records').select('*').order('created_at', { ascending: true }),
+    ]);
+
+    const matchedCustomerBills = (dbCustomerBills || []).filter((b) => matchesDateFilterIST(b.created_at, targetDate, startDate, endDate));
+    const matchedBillingRecords = (dbBillingRecords || []).filter((r) => matchesDateFilterIST(r.created_at, targetDate, startDate, endDate));
+
+    const billTypeMap = new Map<string, string>();
+    let customerBillsOrderCount = 0;
+    let customerBillsSellCount = 0;
+    let customerBillsBuyCount = 0;
+    let customerBillsTradeInCount = 0;
+
+    matchedCustomerBills.forEach((b: any) => {
+      const type = (b.bill_type || '').toUpperCase();
+      const uuid = String(b.customer_billing_uuid || b.billing_id || '');
+      if (uuid) billTypeMap.set(uuid, type);
+
+      if (type === 'ORDER') customerBillsOrderCount++;
+      else if (type === 'SELL') customerBillsSellCount++;
+      else if (type === 'BUY') customerBillsBuyCount++;
+      else if (type === 'EXCHANGE' || type === 'TRADE_IN') customerBillsTradeInCount++;
+    });
+
+    // 1. Group records strictly by customer_billing_uuid
+    const billMap = new Map<string, { mode: string; items: any[] }>();
+
+    matchedBillingRecords.forEach((r: any) => {
+      const uuid = String(r.customer_billing_uuid || r.billing_id || r.id || '');
+      if (!uuid) return;
+      let mode = (r.billing_mode || (r.customer_billing_uuid ? billTypeMap.get(r.customer_billing_uuid) : '') || 'SELL').toUpperCase();
+      if (mode === 'EXCHANGE') mode = 'TRADE_IN';
+
+      if (!billMap.has(uuid)) {
+        billMap.set(uuid, { mode, items: [] });
+      }
+      billMap.get(uuid)!.items.push(r);
+    });
+
+    // Include any customer_billing bills without line items
+    matchedCustomerBills.forEach((b: any) => {
+      const uuid = String(b.customer_billing_uuid || b.billing_id || '');
+      if (!uuid) return;
+      let mode = (b.bill_type || 'SELL').toUpperCase();
+      if (mode === 'EXCHANGE') mode = 'TRADE_IN';
+
+      if (!billMap.has(uuid)) {
+        billMap.set(uuid, { mode, items: [] });
+      }
+    });
+
+    const createDetailedWeightTracker = () => ({
+      goldSoldGross: 0,
+      goldSoldNet: 0,
+      goldSoldPure: 0,
+      goldBoughtGross: 0,
+      goldBoughtNet: 0,
+      goldBoughtPure: 0,
+      silverSoldGross: 0,
+      silverSoldNet: 0,
+      silverSoldPure: 0,
+      silverBoughtGross: 0,
+      silverBoughtNet: 0,
+      silverBoughtPure: 0,
+      sellsCount: 0,
+      buysCount: 0,
+    });
+
+    const orderTracker = createDetailedWeightTracker();
+    const sellTracker = createDetailedWeightTracker();
+    const buyTracker = createDetailedWeightTracker();
+    const tradeInTracker = createDetailedWeightTracker();
+
+    const recordItemToTracker = (r: any, tracker: any) => {
+      const txType = (r.transaction_type || '').toUpperCase();
+      const metal = (r.metal_type || 'GOLD').toUpperCase();
+      const gross = Number(r.item_weight) || 0;
+      const net = Number(r.only_metal_weight ?? Math.max(0, gross - (Number(r.deduction_weight) || 0)));
+      const pure = Number(r.pure_metal_weight) || net;
+
+      if (txType === 'SELL') {
+        tracker.sellsCount++;
+        if (metal.includes('SILVER')) {
+          tracker.silverSoldGross += gross;
+          tracker.silverSoldNet += net;
+          tracker.silverSoldPure += pure;
+        } else {
+          tracker.goldSoldGross += gross;
+          tracker.goldSoldNet += net;
+          tracker.goldSoldPure += pure;
+        }
+      } else {
+        tracker.buysCount++;
+        if (metal.includes('SILVER')) {
+          tracker.silverBoughtGross += gross;
+          tracker.silverBoughtNet += net;
+          tracker.silverBoughtPure += pure;
+        } else {
+          tracker.goldBoughtGross += gross;
+          tracker.goldBoughtNet += net;
+          tracker.goldBoughtPure += pure;
+        }
+      }
+    };
+
+    let finalOrderCount = 0;
+    let finalSellCount = 0;
+    let finalBuyCount = 0;
+    let finalTradeInCount = 0;
+
+    billMap.forEach(({ mode, items }) => {
+      if (mode === 'ORDER') {
+        finalOrderCount++;
+        items.forEach((it) => recordItemToTracker(it, orderTracker));
+      } else if (mode === 'SELL') {
+        finalSellCount++;
+        items.forEach((it) => recordItemToTracker(it, sellTracker));
+      } else if (mode === 'BUY') {
+        finalBuyCount++;
+        items.forEach((it) => recordItemToTracker(it, buyTracker));
+      } else if (mode === 'TRADE_IN') {
+        finalTradeInCount++;
+        items.forEach((it) => recordItemToTracker(it, tradeInTracker));
+      }
+    });
+
+    const totalTransactionsCount = finalOrderCount + finalSellCount + finalBuyCount + finalTradeInCount;
+
+    const roundDetailedTracker = (t: any) => ({
+      sellsCount: t.sellsCount,
+      buysCount: t.buysCount,
+      goldSoldGross: round3Decimals(t.goldSoldGross),
+      goldSoldNet: round3Decimals(t.goldSoldNet),
+      goldSoldPure: round3Decimals(t.goldSoldPure),
+      goldBoughtGross: round3Decimals(t.goldBoughtGross),
+      goldBoughtNet: round3Decimals(t.goldBoughtNet),
+      goldBoughtPure: round3Decimals(t.goldBoughtPure),
+      silverSoldGross: round3Decimals(t.silverSoldGross),
+      silverSoldNet: round3Decimals(t.silverSoldNet),
+      silverSoldPure: round3Decimals(t.silverSoldPure),
+      silverBoughtGross: round3Decimals(t.silverBoughtGross),
+      silverBoughtNet: round3Decimals(t.silverBoughtNet),
+      silverBoughtPure: round3Decimals(t.silverBoughtPure),
+    });
+
+    const billingActivitySummary = {
+      totalTransactionsCount,
+      orderMode: { count: finalOrderCount, ...roundDetailedTracker(orderTracker) },
+      sellMode: { count: finalSellCount, ...roundDetailedTracker(sellTracker) },
+      buyMode: { count: finalBuyCount, ...roundDetailedTracker(buyTracker) },
+      tradeInMode: { count: finalTradeInCount, ...roundDetailedTracker(tradeInTracker) },
+      activityCounts: {
+        orderCount: finalOrderCount,
+        sellCount: finalSellCount,
+        buyCount: finalBuyCount,
+        exchangeCount: finalTradeInCount,
+      }
+    };
+
     // --- Chronological Log Book Timeline ---
     const logBookTimeline: any[] = [];
 
@@ -1443,21 +1626,22 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       const directionStr = String(tx.direction || tx.transfer_direction || tx.type || '').toUpperCase();
       const isAdminToWorker = directionStr.includes('OUTGOING') || directionStr.includes('ADMIN') || directionStr.includes('SEND') || directionStr.includes('ISSUE');
       const itemMode = (tx.category || tx.item_type || tx.metal_type || tx.transfer_mode || 'GOLD').toUpperCase();
+      const isWorkAssign = Boolean(tx.order_id) || itemMode === 'ORDER' || (tx.notes && tx.notes.includes('Order #'));
 
       const directionTitle = isAdminToWorker
         ? `Admin → Worker (${resolvedWorkerName})`
         : `Worker (${resolvedWorkerName}) → Admin`;
 
-      const directionIcon = isAdminToWorker ? '📤 Sent' : '📥 Received';
+      const directionIcon = isAdminToWorker ? '↑ Given' : '↓ Returned';
       const rawNotes = (tx.notes || tx.item_name || tx.description || tx.item_description || '').replace(/\n/g, ' · ');
       const itemDesc = rawNotes || `${itemMode} Transfer`;
-      const details = `${directionIcon} ${itemDesc} ${wt > 0 ? `(${wt}g)` : ''} ${amt > 0 ? `· ₹${amt.toLocaleString('en-IN')}` : ''} ${tx.order_id ? `· Order #${tx.order_id}` : ''}`;
+      const details = `${directionIcon} : ${itemDesc} ${wt > 0 ? `(${wt}g)` : ''} ${amt > 0 ? `· ₹${amt.toLocaleString('en-IN')}` : ''} ${tx.order_id ? `· Order #${tx.order_id}` : ''}`;
 
       logBookTimeline.push({
         id: `log-worker-${tx.id || Math.random()}`,
         time: formattedTime,
         created_at: tx.created_at || new Date().toISOString(),
-        type: 'KARIGAR',
+        type: isWorkAssign ? 'WORK ASSIGN' : 'WORKER TX',
         title: directionTitle,
         details: details,
         category: itemMode,
@@ -1544,7 +1728,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       // Build complete receipt_json_data for order if not already stored in DB
       let ordReceiptJson = ord.receipt_json_data;
       if (typeof ordReceiptJson === 'string') {
-        try { ordReceiptJson = JSON.parse(ordReceiptJson); } catch (e) {}
+        try { ordReceiptJson = JSON.parse(ordReceiptJson); } catch (e) { }
       }
 
       if (!ordReceiptJson) {
@@ -1654,7 +1838,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
     invoices.forEach((inv: any) => {
       let rData: any = inv.receipt_json_data;
       if (typeof rData === 'string') {
-        try { rData = JSON.parse(rData); } catch (e) {}
+        try { rData = JSON.parse(rData); } catch (e) { }
       }
 
       if (rData && Array.isArray(rData.items)) {
@@ -1715,6 +1899,8 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       oldMetalVaultItems,
       udhaariSummary,
       profitSummary,
+      billingActivitySummary,
+      activityCounts: billingActivitySummary.activityCounts,
     });
   } catch (err: any) {
     console.error('Error fetching day book accounts:', err);

@@ -50,6 +50,7 @@ interface MessageBubbleProps {
   setReplyTo: (v: ReplyMessageData | null) => void;
   setEditingTxId: (id: string | null) => void;
   setEditText: (v: string) => void;
+  onStartEdit?: (tx: WorkerTransactionItem) => void;
   setHistoryTx: (tx: WorkerTransactionItem | null) => void;
   setPreviewImageData: (d: { url: string; title: string } | null) => void;
   onDeleteMessage: (id: string) => void;
@@ -69,6 +70,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   setReplyTo,
   setEditingTxId,
   setEditText,
+  onStartEdit,
   setHistoryTx,
   setPreviewImageData,
   onDeleteMessage,
@@ -196,8 +198,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     className="wa-dropdown-item"
                     onClick={() => {
                       setActiveMenuTxId(null);
-                      setEditingTxId(t.id);
-                      setEditText(t.notes || '');
+                      if (onStartEdit) {
+                        onStartEdit(t);
+                      } else {
+                        setEditingTxId(t.id);
+                        setEditText(t.notes || '');
+                      }
                     }}
                   >
                     <i className="fa-solid fa-pen-to-square" /> Edit Message
@@ -281,7 +287,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <span>💵 CASH {t.cash_metal_link === 'FOR_GOLD' ? 'FOR GOLD' : t.cash_metal_link === 'FOR_SILVER' ? 'FOR SILVER' : 'PAYMENT'}</span>
                   {t.cash_metal_link && (
                     <span style={{ fontSize: '0.58rem', background: '#dcfce7', padding: '1px 5px', borderRadius: '4px', color: '#15803d' }}>
-                      {t.cash_metal_link === 'FOR_GOLD' ? '🥇 Raw Gold' : t.cash_metal_link === 'FOR_SILVER' ? '🥈 Raw Silver' : '💵 General'}
+                      {t.cash_metal_link === 'FOR_GOLD' ? '🥇 Gold' : t.cash_metal_link === 'FOR_SILVER' ? '🥈 Silver' : '💵 General'}
                     </span>
                   )}
                 </div>
@@ -290,7 +296,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 </div>
                 {t.item_name && (
                   <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, marginTop: '2px' }}>
-                    For {toSentenceCase(t.item_name)}
+                    {isOutgoing ? `For ${toSentenceCase(t.item_name)}` : toSentenceCase(t.item_name)}
                   </div>
                 )}
                 {t.applied_rate_per_gram && t.applied_rate_per_gram > 0 ? (
@@ -306,11 +312,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               <div style={{ margin: '4px 0', padding: '5px 8px', background: t.category === 'GOLD' ? '#fffbe8' : t.category === 'SILVER' ? '#f8fafc' : '#f0f9ff', borderRadius: '8px', border: t.category === 'GOLD' ? '1px solid #fde68a' : t.category === 'SILVER' ? '1px solid #cbd5e1' : '1px solid #bae6fd' }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span>{t.category === 'GOLD' ? '🥇 Raw Gold' : t.category === 'SILVER' ? '🥈 Raw Silver' : '👑 Ornament'}</span>
+                    <span>{t.category === 'GOLD' ? '🥇 Gold' : t.category === 'SILVER' ? '🥈 Silver' : '👑 Ornament'}</span>
                   </div>
                   {t.item_name && (
                     <div style={{ fontSize: '0.72rem', color: t.category === 'GOLD' ? '#b45309' : '#0369a1', fontWeight: 700, marginTop: '1px' }}>
-                      For {toSentenceCase(t.item_name)}
+                      {isOutgoing ? `For ${toSentenceCase(t.item_name)}` : toSentenceCase(t.item_name)}
                     </div>
                   )}
                 </div>

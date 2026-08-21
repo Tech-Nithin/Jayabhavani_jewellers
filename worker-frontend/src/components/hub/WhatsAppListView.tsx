@@ -32,10 +32,10 @@ export const WhatsAppListView: React.FC<Props> = ({
       return `💵 Cash: ₹${lastTx.amount_cash?.toLocaleString('en-IN') || 0} ${lastTx.item_name ? `· For ${lastTx.item_name}` : ''}`;
     }
     if (lastTx.category === 'GOLD') {
-      return `🥇 Raw Gold: ${lastTx.weight_grams || 0}g ${lastTx.item_name ? `· For ${lastTx.item_name}` : ''}`;
+      return `🥇 Gold: ${lastTx.weight_grams || 0}g ${lastTx.item_name ? `· For ${lastTx.item_name}` : ''}`;
     }
     if (lastTx.category === 'SILVER') {
-      return `🥈 Raw Silver: ${lastTx.weight_grams || 0}g ${lastTx.item_name ? `· For ${lastTx.item_name}` : ''}`;
+      return `🥈 Silver: ${lastTx.weight_grams || 0}g ${lastTx.item_name ? `· For ${lastTx.item_name}` : ''}`;
     }
     return lastTx.notes || 'Transaction entry';
   };

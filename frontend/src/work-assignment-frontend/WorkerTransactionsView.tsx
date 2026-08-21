@@ -220,10 +220,29 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   };
 
   // Edit Message & Edit History Modal State
-  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [editingTx, setEditingTx] = useState<WorkerTransactionItem | null>(null);
+  const [editCategory, setEditCategory] = useState<'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT'>('GOLD');
+  const [editItemName, setEditItemName] = useState<string>('');
+  const [editWeightGrams, setEditWeightGrams] = useState<string>('');
+  const [editTouchPercentage, setEditTouchPercentage] = useState<string>('100');
+  const [editAmountCash, setEditAmountCash] = useState<string>('');
+  const [editCashMetalLink, setEditCashMetalLink] = useState<'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH'>('GENERAL_CASH');
+  const [editAppliedRate, setEditAppliedRate] = useState<string>('');
   const [editText, setEditText] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
   const [historyTx, setHistoryTx] = useState<WorkerTransactionItem | null>(null);
+
+  const handleStartEdit = (tx: WorkerTransactionItem) => {
+    setEditingTx(tx);
+    setEditCategory((tx.category as any) || 'GOLD');
+    setEditItemName(tx.item_name || '');
+    setEditWeightGrams(tx.weight_grams ? String(tx.weight_grams) : '');
+    setEditTouchPercentage(tx.touch_percentage ? String(tx.touch_percentage) : '100');
+    setEditAmountCash(tx.amount_cash ? String(tx.amount_cash) : '');
+    setEditCashMetalLink((tx.cash_metal_link as any) || 'GENERAL_CASH');
+    setEditAppliedRate(tx.applied_rate_per_gram ? String(tx.applied_rate_per_gram) : '');
+    setEditText(tx.notes || '');
+  };
 
   const isSendingRef = useRef(isSending);
   const searchQueryRef = useRef(searchQuery);
@@ -891,31 +910,63 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   };
 
   const handleSaveEditMessage = async () => {
-    if (!editingTxId) return;
+    if (!editingTx) return;
     try {
       setIsSavingEdit(true);
-      const res = await fetch(`${API_BASE}/work-assignment/worker-transactions/${editingTxId}`, {
+      const payload: any = {
+        category: editCategory,
+        itemName: toSentenceCase(editItemName.trim()) || undefined,
+        notes: toSentenceCase(editText.trim()),
+      };
+
+      if (editCategory === 'GOLD' || editCategory === 'SILVER') {
+        payload.weightGrams = editWeightGrams ? parseFloat(editWeightGrams) : undefined;
+        payload.touchPercentage = editTouchPercentage ? parseFloat(editTouchPercentage) : undefined;
+      } else if (editCategory === 'CASH') {
+        payload.amountCash = editAmountCash ? parseFloat(editAmountCash) : undefined;
+        payload.cashMetalLink = editCashMetalLink;
+        payload.appliedRatePerGram = editAppliedRate ? parseFloat(editAppliedRate) : undefined;
+      }
+
+      const res = await fetch(`${API_BASE}/work-assignment/worker-transactions/${editingTx.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: editText }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
-        setTransactions((prev) =>
-          prev.map((t) =>
-            t.id === editingTxId
-              ? { ...t, notes: editText, edited_at_history: data.edited_at_history || t.edited_at_history }
+        setTransactions((prev) => {
+          const updated = prev.map((t) =>
+            t.id === editingTx.id
+              ? {
+                  ...t,
+                  category: editCategory,
+                  item_name: payload.itemName,
+                  weight_grams: payload.weightGrams,
+                  touch_percentage: payload.touchPercentage,
+                  amount_cash: payload.amountCash,
+                  cash_metal_link: payload.cashMetalLink,
+                  applied_rate_per_gram: payload.appliedRatePerGram,
+                  notes: payload.notes,
+                  fine_weight_grams:
+                    (editCategory === 'GOLD' || editCategory === 'SILVER') && payload.weightGrams
+                      ? (payload.weightGrams * (payload.touchPercentage || 100)) / 100
+                      : t.fine_weight_grams,
+                  edited_at_history: data.edited_at_history || t.edited_at_history,
+                }
               : t
-          )
-        );
-        setEditingTxId(null);
+          );
+          if (worker?.id) saveCachedTransactions(worker.id, updated);
+          return updated;
+        });
+        setEditingTx(null);
         setEditText('');
       } else {
-        alert(`❌ Failed to edit message: ${data.message || 'Unknown error'}`);
+        alert(`❌ Failed to edit transaction: ${data.message || 'Unknown error'}`);
       }
     } catch (err: any) {
-      console.error('Error editing message:', err);
-      alert(`❌ Error editing message: ${err.message || 'Server did not respond'}`);
+      console.error('Error editing transaction:', err);
+      alert(`❌ Error editing transaction: ${err.message || 'Server did not respond'}`);
     } finally {
       setIsSavingEdit(false);
     }
@@ -1214,8 +1265,11 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         setActiveMenuTxId={setActiveMenuTxId}
                         setMenuPosition={setMenuPosition}
                         setReplyTo={setReplyTo}
-                        setEditingTxId={setEditingTxId}
+                        setEditingTxId={(id) => {
+                          if (!id) setEditingTx(null);
+                        }}
                         setEditText={setEditText}
+                        onStartEdit={handleStartEdit}
                         setHistoryTx={setHistoryTx}
                         setPreviewImageData={setPreviewImageData}
                         onDeleteMessage={handleDeleteMessage}
@@ -1294,42 +1348,193 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
         />
       )}
 
-      {/* ── EDIT MESSAGE MODAL ── */}
-      {editingTxId && (
+      {/* ── EDIT TRANSACTION MODAL ── */}
+      {editingTx && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#ffffff', borderRadius: '16px', maxWidth: '440px', width: '100%', padding: '1.25rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #cbd5e1' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <i className="fa-solid fa-pen-to-square" style={{ color: '#0284c7' }} /> Edit Message
+          <div style={{ background: '#ffffff', borderRadius: '16px', maxWidth: '460px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '1.25rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #cbd5e1' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <i className="fa-solid fa-pen-to-square" style={{ color: '#0284c7' }} /> Edit Transaction
               </h4>
-              <button type="button" onClick={() => setEditingTxId(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.1rem' }}>
+              <button type="button" onClick={() => setEditingTx(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.1rem' }}>
                 <i className="fa-solid fa-xmark" />
               </button>
             </div>
-            <textarea
-              rows={3}
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              placeholder="Edit message notes..."
-              style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', outline: 'none', resize: 'vertical', marginBottom: '1rem' }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => setEditingTxId(null)}
-                style={{ padding: '0.55rem 1rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isSavingEdit || !editText.trim()}
-                onClick={handleSaveEditMessage}
-                style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', border: 'none', background: '#0284c7', color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.8rem', opacity: isSavingEdit || !editText.trim() ? 0.6 : 1 }}
-              >
-                {isSavingEdit ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveEditMessage();
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}
+            >
+              {/* Category */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                  Category
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                  {[
+                    { key: 'GOLD', label: '🥇 Gold', color: '#b45309', bg: '#fef3c7' },
+                    { key: 'SILVER', label: '🥈 Silver', color: '#475569', bg: '#f1f5f9' },
+                    { key: 'CASH', label: '💵 Cash', color: '#0369a1', bg: '#e0f2fe' },
+                  ].map((c) => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      onClick={() => setEditCategory(c.key as any)}
+                      style={{
+                        padding: '6px 4px',
+                        borderRadius: '6px',
+                        border: editCategory === c.key ? `2px solid ${c.color}` : '1px solid #cbd5e1',
+                        background: editCategory === c.key ? c.bg : '#ffffff',
+                        color: c.color,
+                        fontWeight: 800,
+                        fontSize: '0.75rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Metal Inputs */}
+              {(editCategory === 'GOLD' || editCategory === 'SILVER') && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Weight (g) <span style={{ color: '#dc2626' }}>*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        required
+                        value={editWeightGrams}
+                        onChange={(e) => setEditWeightGrams(e.target.value)}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem', fontWeight: 700 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Touch (%) <span style={{ color: '#dc2626' }}>*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        required
+                        min="1"
+                        max="100"
+                        value={editTouchPercentage}
+                        onChange={(e) => setEditTouchPercentage(e.target.value)}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem', fontWeight: 700 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ background: '#f8fafc', padding: '6px 10px', borderRadius: '6px', border: '1px dashed #cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.70rem' }}>
+                    <span style={{ color: '#64748b', fontWeight: 600 }}>Pure Calculated:</span>
+                    <strong style={{ color: '#15803d', fontWeight: 800 }}>
+                      {((parseFloat(editWeightGrams || '0') * parseFloat(editTouchPercentage || '100')) / 100).toFixed(3)} g
+                    </strong>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                      For Which Item / Purpose
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Drops, Ring, Raw Gold..."
+                      value={editItemName}
+                      onChange={(e) => setEditItemName(toSentenceCase(e.target.value))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Cash Inputs */}
+              {editCategory === 'CASH' && (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                      Cash Amount (₹) <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={editAmountCash}
+                      onChange={(e) => setEditAmountCash(e.target.value)}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem', fontWeight: 700 }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Cash Link
+                      </label>
+                      <select
+                        value={editCashMetalLink}
+                        onChange={(e) => setEditCashMetalLink(e.target.value as any)}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem' }}
+                      >
+                        <option value="GENERAL_CASH">General Cash</option>
+                        <option value="FOR_GOLD">For Gold</option>
+                        <option value="FOR_SILVER">For Silver</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                        Applied Rate
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 14500"
+                        value={editAppliedRate}
+                        onChange={(e) => setEditAppliedRate(e.target.value)}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem' }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Notes */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                  Notes / Message Text
+                </label>
+                <textarea
+                  rows={2}
+                  value={editText}
+                  onChange={(e) => setEditText(toSentenceCase(e.target.value))}
+                  placeholder="Notes..."
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem', outline: 'none', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingTx(null)}
+                  style={{ padding: '0.50rem 0.90rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  style={{ padding: '0.50rem 1.15rem', borderRadius: '8px', border: 'none', background: '#0284c7', color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem', opacity: isSavingEdit ? 0.6 : 1 }}
+                >
+                  {isSavingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
