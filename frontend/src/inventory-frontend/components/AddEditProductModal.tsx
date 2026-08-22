@@ -92,7 +92,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setItemType(editingProduct.item_type || 'GOLD');
       setWeightFrom(editingProduct.weight_from_grams?.toString() || '');
       setWeightTo(editingProduct.weight_to_grams?.toString() || '');
-      setTotalWeightGrams(editingProduct.weight_grams?.toString() || editingProduct.weight_from_grams?.toString() || '');
+      setTotalWeightGrams(editingProduct.current_stock_weight?.toString() || editingProduct.weight_grams?.toString() || editingProduct.weight_from_grams?.toString() || '');
       setStockQuantity((editingProduct as any)?.stock_quantity?.toString() || '');
       setImagePreview(editingProduct.img || '');
     } else {
@@ -112,6 +112,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (existingDuplicateProduct) {
+      alert(`Item "${existingDuplicateProduct.name}" is already present in stock (${existingDuplicateProduct.item_type}). Please use "Load Stock" to add more weight.`);
+      return;
+    }
+
     const finalCategory = toStartCase(categoryType.trim());
     const finalProductName = toStartCase(productName.trim()) || `${finalCategory} Item`;
 
@@ -126,7 +131,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
     const minVal = Number(weightFrom) || 0;
     const maxVal = Number(weightTo) || minVal;
-    const totalNetVal = Number(totalWeightGrams) || minVal;
+    const totalNetVal = totalWeightGrams !== '' ? Number(totalWeightGrams) : minVal;
 
     setIsSubmitting(true);
     try {
@@ -682,27 +687,38 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || Boolean(existingDuplicateProduct)}
             style={{
               minWidth: '220px',
               padding: '12px 24px',
               borderRadius: '12px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
-              color: '#ffffff',
+              border: existingDuplicateProduct ? '1.5px solid #f59e0b' : 'none',
+              background: isSubmitting || Boolean(existingDuplicateProduct)
+                ? '#fef3c7'
+                : 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)',
+              color: isSubmitting || Boolean(existingDuplicateProduct)
+                ? '#b45309'
+                : '#ffffff',
               fontWeight: 800,
               fontSize: '0.95rem',
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(180, 83, 9, 0.3)',
+              cursor: isSubmitting || Boolean(existingDuplicateProduct) ? 'not-allowed' : 'pointer',
+              boxShadow: isSubmitting || Boolean(existingDuplicateProduct)
+                ? 'none'
+                : '0 4px 14px rgba(180, 83, 9, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
+              opacity: isSubmitting ? 0.7 : 1,
             }}
           >
             {isSubmitting ? (
               <>
                 <i className="fa-solid fa-spinner fa-spin"></i> {t.savingItemBtn}
+              </>
+            ) : existingDuplicateProduct ? (
+              <>
+                <i className="fa-solid fa-ban" style={{ color: '#d97706' }}></i> Item Already In Stock
               </>
             ) : (
               <>

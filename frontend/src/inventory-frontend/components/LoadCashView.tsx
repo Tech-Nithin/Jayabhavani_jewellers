@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Language } from '../../utils/translations';
 import { translations } from '../../utils/translations';
+import { API_BASE } from '../../config/apiConfig';
 
 interface LoadCashViewProps {
   onClose: () => void;
@@ -20,8 +21,6 @@ export const LoadCashView: React.FC<LoadCashViewProps> = ({
   const [loadAmount, setLoadAmount] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const API_BASE = (window as any).__JBJ_API_BASE__ || '/api';
 
   const fetchCashStatus = async () => {
     try {

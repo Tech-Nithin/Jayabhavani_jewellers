@@ -4,13 +4,14 @@ import { HeaderRefreshButton } from '../components/HeaderRefreshButton';
 import type { Language } from '../utils/translations';
 import { InvoiceDetailsView } from '../billing-frontend/components/InvoiceDetailsView';
 import { useMetalRates } from '../utils/metalRatesStore';
+import { DailySnapshotView, SnapshotDetailView } from './components/DailySnapshotView';
 
 interface AccountsModuleProps {
   lang?: Language;
   onNavigateToBilling?: (item?: any) => void;
 }
 
-type AccountTab = 'logbook' | 'stock' | 'cash' | 'scrap' | 'udhaari' | 'profit';
+type AccountTab = 'logbook' | 'stock' | 'cash' | 'scrap' | 'udhaari' | 'profit' | 'snapshot';
 
 const getTodayIST = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
@@ -23,6 +24,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
   const [activeSubTab, setActiveSubTab] = useState<AccountTab>('logbook');
   const [loading, setLoading] = useState(false);
   const [selectedBillModalItem, setSelectedBillModalItem] = useState<any | null>(null);
+  const [selectedSnapshotRecord, setSelectedSnapshotRecord] = useState<{ date: string; data: any } | null>(null);
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [logBookViewMode, setLogBookViewMode] = useState<'TABLE' | 'CARD'>('TABLE');
   const [kpiDrillFilter, setKpiDrillFilter] = useState<null | 'ORDER' | 'SELL' | 'BUY' | 'EXCHANGE'>(null);
@@ -36,11 +38,20 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
 
   // Day Book Data State
   const [logBookTimeline, setLogBookTimeline] = useState<any[]>([]);
+  const [dayBookStockSummary, setDayBookStockSummary] = useState<any[]>([]);
   const [cashSummary, setCashSummary] = useState<any>(null);
   const [scrapSummary, setScrapSummary] = useState<any>(null);
   const [udhaariSummary, setUdhaariSummary] = useState<any>(null);
   const [profitSummary, setProfitSummary] = useState<any>(null);
   const [serverBillingActivity, setServerBillingActivity] = useState<any>(null);
+
+  // Closing Record State
+  const [showClosingModal, setShowClosingModal] = useState(false);
+  const [closingRecord, setClosingRecord] = useState<any>(null);
+  const [closingLoading, setClosingLoading] = useState(false);
+  const [closingHistory, setClosingHistory] = useState<any[]>([]);
+  const [closingHistoryView, setClosingHistoryView] = useState<'generate' | 'history'>('generate');
+  const [closingHistorySelected, setClosingHistorySelected] = useState<any>(null);
 
   const sortedTimeline = [...logBookTimeline].sort((a, b) => {
     const timeA = new Date(a.created_at || 0).getTime();
@@ -57,12 +68,22 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
     let silverWtAdded = 0;
     let goldPcsAdded = 0;
     let silverPcsAdded = 0;
+    let todayCashGotFromCustomer = 0;
+    let todayCashGivenToCustomer = 0;
     let totalCashCollected = 0;
     let totalFinanceIssued = 0;
 
+    let goldWorkerGiven = 0;
+    let goldWorkerTaken = 0;
+    let silverWorkerGiven = 0;
+    let silverWorkerTaken = 0;
+    let cashWorkerGiven = 0;
+    let cashWorkerTaken = 0;
+
     logBookTimeline.forEach((item: any) => {
       const type = (item.type || '').toUpperCase();
-      const hasScrapBought = (item.details || '').includes('Bought:') || type === 'BUY';
+      const hasScrapBought = (item.raw_invoice && item.raw_invoice.buy_records && item.raw_invoice.buy_records.length > 0) || Boolean(item.scrap_details) || (item.details || '').includes('Bought:');
+      const paid = Number(item.paid_amount || item.amount || 0);
 
       if (type === 'ORDER') localOrderCount++;
       if (type === 'SELL') localSellCount++;
@@ -85,24 +106,49 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
       if (type === 'KARIGAR' || type === 'WORK ASSIGN' || type === 'WORKER TX') {
         const isAdminToWorker = (item.direction || '').toUpperCase().includes('ADMIN_TO_WORKER') || (item.title || '').startsWith('Admin');
         const metalType = (item.transfer_item_mode || item.category || 'GOLD').toUpperCase();
-        const wt = Number(item.weight_grams || 0);
-        const amt = Number(item.amount || 0);
+        const wt = Number(item.weight_grams || item.net_weight || item.fine_weight_grams || 0);
+        const amt = Number(item.amount || item.paid_amount || 0);
 
         if (isAdminToWorker) {
-          // Admin sent to worker -> Deduct from shop stock & cash
-          if (metalType.includes('GOLD')) goldWtAdded -= wt;
-          else if (metalType.includes('SILVER')) silverWtAdded -= wt;
-          if (metalType.includes('CASH') || amt > 0) totalCashCollected -= amt;
+          if (metalType.includes('GOLD')) {
+            goldWtAdded -= wt;
+            goldWorkerGiven += wt;
+          } else if (metalType.includes('SILVER')) {
+            silverWtAdded -= wt;
+            silverWorkerGiven += wt;
+          }
+          if (metalType.includes('CASH') || amt > 0) {
+            totalCashCollected -= amt;
+            cashWorkerGiven += amt;
+          }
         } else {
-          // Worker delivered to admin -> Add to shop stock & cash
-          if (metalType.includes('GOLD')) goldWtAdded += wt;
-          else if (metalType.includes('SILVER')) silverWtAdded += wt;
-          if (metalType.includes('CASH') || amt > 0) totalCashCollected += amt;
+          if (metalType.includes('GOLD')) {
+            goldWtAdded += wt;
+            goldWorkerTaken += wt;
+          } else if (metalType.includes('SILVER')) {
+            silverWtAdded += wt;
+            silverWorkerTaken += wt;
+          }
+          if (metalType.includes('CASH') || amt > 0) {
+            totalCashCollected += amt;
+            cashWorkerTaken += amt;
+          }
         }
       }
 
-      if (item.paid_amount > 0 && type !== 'FINANCE' && type !== 'BUY' && type !== 'INVENTORY' && type !== 'KARIGAR' && type !== 'WORK ASSIGN' && type !== 'WORKER TX') {
-        totalCashCollected += Number(item.paid_amount || 0);
+      if (type === 'BUY') {
+        // Admin bought scrap/items from customer -> Cash paid out to customer (DEBIT from cash flow)
+        todayCashGivenToCustomer += paid;
+        totalCashCollected -= paid;
+      } else if (type === 'FINANCE') {
+        todayCashGivenToCustomer += Number(item.amount || 0);
+        totalFinanceIssued += Number(item.amount || 0);
+      } else if (paid > 0 && type !== 'INVENTORY' && type !== 'CASH_REGISTER' && type !== 'KARIGAR' && type !== 'WORK ASSIGN' && type !== 'WORKER TX') {
+        // Cash received directly from customer (Sells, Orders, Exchanges, Debt Repayments) - EXCLUDING inventory & drawer loads
+        todayCashGotFromCustomer += paid;
+        totalCashCollected += paid;
+      } else if (type === 'CASH_REGISTER' && (item.payment_mode === 'CASH_IN' || (item.raw_cash_ledger && item.raw_cash_ledger.flow_type === 'IN'))) {
+        totalCashCollected += paid;
       }
     });
 
@@ -111,6 +157,13 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
     const buyCount = serverBillingActivity?.buyMode?.count ?? localBuyCount;
     const exchangeCount = serverBillingActivity?.tradeInMode?.count ?? localExchangeCount;
     const totalTransactions = serverBillingActivity?.totalTransactionsCount ?? (orderCount + sellCount + buyCount + exchangeCount);
+
+    const totalGoldSoldGross = serverBillingActivity?.overallMetalPuritySummary?.gold?.soldGross ?? 0;
+    const totalSilverSoldGross = serverBillingActivity?.overallMetalPuritySummary?.silver?.soldGross ?? 0;
+
+    // Gold & Silver Flow: Loaded Stock Weight minus Sold Weight (Direct Sells, Orders, Trade-ins)
+    const netGoldFlow = Number((goldWtAdded - totalGoldSoldGross).toFixed(3));
+    const netSilverFlow = Number((silverWtAdded - totalSilverSoldGross).toFixed(3));
 
     return {
       orderCount,
@@ -122,16 +175,25 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
       sellMode: serverBillingActivity?.sellMode || null,
       buyMode: serverBillingActivity?.buyMode || null,
       tradeInMode: serverBillingActivity?.tradeInMode || null,
+      overallMetalPuritySummary: serverBillingActivity?.overallMetalPuritySummary || null,
       orderBreakdown: serverBillingActivity?.orderMode || null,
       sellBreakdown: serverBillingActivity?.sellMode || null,
       buyBreakdown: serverBillingActivity?.buyMode || null,
       tradeInBreakdown: serverBillingActivity?.tradeInMode || null,
-      goldWtAdded: Number(goldWtAdded.toFixed(3)),
-      silverWtAdded: Number(silverWtAdded.toFixed(3)),
+      goldWtAdded: netGoldFlow,
+      silverWtAdded: netSilverFlow,
       goldPcsAdded,
       silverPcsAdded,
       totalCashCollected,
       totalFinanceIssued,
+      todayCashGotFromCustomer,
+      todayCashGivenToCustomer,
+      goldWorkerGiven: Number(goldWorkerGiven.toFixed(3)),
+      goldWorkerTaken: Number(goldWorkerTaken.toFixed(3)),
+      silverWorkerGiven: Number(silverWorkerGiven.toFixed(3)),
+      silverWorkerTaken: Number(silverWorkerTaken.toFixed(3)),
+      cashWorkerGiven,
+      cashWorkerTaken,
     };
   }, [logBookTimeline, serverBillingActivity]);
 
@@ -142,8 +204,8 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
       const type = (item.type || '').toUpperCase();
       const details = (item.details || '');
       if (kpiDrillFilter === 'ORDER') return type === 'ORDER';
-      if (kpiDrillFilter === 'SELL') return type === 'SELL' || type === 'EXCHANGE';
-      if (kpiDrillFilter === 'BUY') return type === 'BUY' || details.includes('Bought:') || type === 'EXCHANGE';
+      if (kpiDrillFilter === 'SELL') return type === 'SELL' || type === 'EXCHANGE' || type === 'ORDER';
+      if (kpiDrillFilter === 'BUY') return type === 'BUY' || details.includes('Bought:') || details.includes('Scrap') || type === 'EXCHANGE' || type === 'ORDER';
       if (kpiDrillFilter === 'EXCHANGE') return type === 'EXCHANGE';
       return false;
     });
@@ -186,9 +248,16 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
         queryUrl += `&date=${selectedDate}`;
       }
 
+      let prodUrl = `${API_BASE}/inventory/products`;
+      if ((dateFilterMode === 'DATE' || dateFilterMode === 'TODAY') && selectedDate) {
+        prodUrl = `${API_BASE}/inventory/historical-stock?date=${selectedDate}`;
+      } else if (dateFilterMode === 'CUSTOM' && endDate) {
+        prodUrl = `${API_BASE}/inventory/historical-stock?date=${endDate}`;
+      }
+
       const [resBook, resProd] = await Promise.all([
         fetch(queryUrl),
-        fetch(`${API_BASE}/inventory/products`),
+        fetch(prodUrl),
       ]);
 
       const dataBook = await resBook.json();
@@ -196,6 +265,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
 
       if (dataBook.success) {
         setLogBookTimeline(dataBook.logBookTimeline || []);
+        setDayBookStockSummary(dataBook.stockSummary || []);
         setCashSummary(dataBook.cashSummary || null);
         setScrapSummary(dataBook.scrapSummary || null);
         setOldMetalVaultItems(dataBook.oldMetalVaultItems || []);
@@ -235,7 +305,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
     list.forEach((prod) => {
       const catName = prod.category || prod.name || 'General Ornaments';
       const key = `${prod.item_type || 'GOLD'}_${catName}`.toUpperCase();
-      const weight = Number(prod.weight_from_grams || prod.weight_grams || 0);
+      const weight = Number(prod.current_stock_weight ?? prod.weight_grams ?? prod.weight_from_grams ?? 0);
       const stockQty = Number(prod.stock_quantity || prod.initial_quantity || 0);
       const createdDate = prod.created_at ? prod.created_at.split('T')[0] : selectedDate;
 
@@ -289,8 +359,8 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
   }, [logBookTimeline]);
 
   useEffect(() => {
-    fetchDayBookData();
-  }, [selectedDate]);
+    fetchDayBookData(true);
+  }, [selectedDate, dateFilterMode, startDate, endDate]);
 
   const handleTabChange = (tab: AccountTab) => {
     setActiveSubTab(tab);
@@ -348,6 +418,21 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
     );
   }
 
+  // Full-Page Closing Snapshot View (Separate screen takeover)
+  if (selectedSnapshotRecord) {
+    return (
+      <div className="accounts-module" style={{ padding: '0.5rem', background: '#f8fafc', minHeight: '100vh' }}>
+        <SnapshotDetailView
+          data={selectedSnapshotRecord.data}
+          date={selectedSnapshotRecord.date}
+          onBack={() => setSelectedSnapshotRecord(null)}
+        />
+      </div>
+    );
+  }
+
+  void setClosingLoading;
+
   return (
     <div style={{ fontFamily: "'Inter', 'DM Sans', sans-serif", color: '#181310' }}>
       {/* Top Controls & Header Bar */}
@@ -362,6 +447,25 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
             {lang === 'TE' ? 'రోజువారీ నగదు రసీదులు, అమ్మకాలు, కొనుగోళ్లు మరియు ప్రాఫిట్ లెడ్జర్' : 'Daily sales, cash counter, scrap purchases, worker fine accounts & net profit'}
           </p>
         </div>
+
+        {/* Closing Record Button */}
+        <button
+          id="btn-closing-record"
+          type="button"
+          onClick={async () => {
+            try {
+              const res = await fetch(`${API_BASE}/inventory/closing-record`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+              const data = await res.json();
+              if (data.success && data.closing_record) {
+                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                setSelectedSnapshotRecord({ date: todayStr, data: data.closing_record });
+              }
+            } catch (e) { console.error(e); }
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', boxShadow: '0 2px 8px rgba(124,58,237,0.25)', letterSpacing: '0.01em' }}
+        >
+          📊 Closing Record
+        </button>
 
         {/* Date Selector Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -476,8 +580,10 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
           { id: 'scrap', label: '⚖️ Old Metal Vault', desc: 'Scrap Gold & Silver Purchases' },
           { id: 'udhaari', label: '🤝 Udhaari & Karigar', desc: 'Credit Dues & Goldsmith Fine' },
           { id: 'profit', label: '📈 Daily Profit Engine', desc: 'Gross & Net Profit Breakdown' },
+          { id: 'snapshot', label: '📸 Daily Snapshot', desc: 'Full EOD Closing Snapshot History' },
         ].map((tab) => {
           const active = activeSubTab === tab.id;
+          const isSnapshot = tab.id === 'snapshot';
           return (
             <button
               key={tab.id}
@@ -486,14 +592,20 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
-                border: active ? '1.5px solid #d97706' : '1px solid #e2e8f0',
-                background: active ? 'linear-gradient(135deg, #2b2019 0%, #181310 100%)' : '#ffffff',
-                color: active ? '#fbbf24' : '#475569',
+                border: active
+                  ? (isSnapshot ? '1.5px solid #7c3aed' : '1.5px solid #d97706')
+                  : '1px solid #e2e8f0',
+                background: active
+                  ? (isSnapshot ? 'linear-gradient(135deg, #4c1d95 0%, #3730a3 100%)' : 'linear-gradient(135deg, #2b2019 0%, #181310 100%)')
+                  : '#ffffff',
+                color: active ? '#ffffff' : '#475569',
                 fontWeight: 700,
                 fontSize: '0.68rem',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                boxShadow: active ? '0 4px 12px rgba(43, 32, 25, 0.25)' : 'none',
+                boxShadow: active
+                  ? (isSnapshot ? '0 4px 12px rgba(124,58,237,0.3)' : '0 4px 12px rgba(43,32,25,0.25)')
+                  : 'none',
                 transition: 'all 0.15s ease',
               }}
             >
@@ -511,7 +623,12 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
         </div>
       )}
 
-      {!loading && (
+      {/* SUB-SCREEN: 📸 Daily Snapshot (Full EOD Snapshot History + Detail) */}
+      {activeSubTab === 'snapshot' && (
+        <DailySnapshotView lang={lang} onSelectSnapshot={(rec) => setSelectedSnapshotRecord(rec)} />
+      )}
+
+      {!loading && activeSubTab !== 'snapshot' && (
         <>
           {/* SUB-SCREEN 1: 📖 Daily Entry Log Book (Chronological Timeline) */}
           {activeSubTab === 'logbook' && (
@@ -548,7 +665,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                         <div style={{ background: 'rgba(255,255,255,0.85)', padding: '4px 6px', borderRadius: '6px', border: '1px solid #fde68a', fontSize: '0.56rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           {(m?.goldSoldGross > 0 || m?.goldBoughtGross > 0) && (
                             <div style={{ color: '#92400e' }}>
-                              {m?.goldSoldGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥇 Gold Sold:</span><strong>{m.goldSoldGross}g → {m.goldSoldPure}g Pure</strong></div>}
+                              {m?.goldSoldGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥇 Gold Sold:</span><strong>{m.goldSoldGross}g sold</strong></div>}
                               {m?.goldBoughtGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥇 Gold Scrap:</span><strong>{m.goldBoughtGross}g → {m.goldBoughtPure}g Pure</strong></div>}
                             </div>
                           )}
@@ -586,7 +703,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                           {m?.goldSoldGross > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#166534' }}>
                               <span>🥇 Gold Sold:</span>
-                              <strong>{m.goldSoldGross}g → {m.goldSoldPure}g Pure</strong>
+                              <strong>{m.goldSoldGross}g sold</strong>
                             </div>
                           )}
                           {m?.silverSoldGross > 0 && (
@@ -659,13 +776,13 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                         <div style={{ background: 'rgba(255,255,255,0.85)', padding: '4px 6px', borderRadius: '6px', border: '1px solid #e9d5ff', fontSize: '0.56rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           {(m?.goldSoldGross > 0 || m?.goldBoughtGross > 0) && (
                             <div style={{ color: '#6b21a8' }}>
-                              {m?.goldSoldGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥇 Gold Sold:</span><strong>{m.goldSoldGross}g → {m.goldSoldPure}g Pure</strong></div>}
+                              {m?.goldSoldGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥇 Gold Sold:</span><strong>{m.goldSoldGross}g sold</strong></div>}
                               {m?.goldBoughtGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥇 Gold Scrap:</span><strong>{m.goldBoughtGross}g → {m.goldBoughtPure}g Pure</strong></div>}
                             </div>
                           )}
                           {(m?.silverSoldGross > 0 || m?.silverBoughtGross > 0) && (
                             <div style={{ color: '#475569', borderTop: (m?.goldSoldGross > 0 || m?.goldBoughtGross > 0) ? '1px dashed #e9d5ff' : 'none', paddingTop: '2px' }}>
-                              {m?.silverSoldGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥈 Silver Sold:</span><strong>{m.silverSoldGross}g → {m.silverSoldPure}g Pure</strong></div>}
+                              {m?.silverSoldGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥈 Silver Sold:</span><strong>{m.silverSoldGross}g sold</strong></div>}
                               {m?.silverBoughtGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥈 Silver Scrap:</span><strong>{m.silverBoughtGross}g → {m.silverBoughtPure}g Pure</strong></div>}
                             </div>
                           )}
@@ -679,71 +796,189 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                 </div>
               </div>
 
-              {/* ── 2. BELOW 2-COLUMN BALANCED ROW: CURRENT STOCK & PERIOD FLOW ── */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
+              {/* ── 2. BELOW 3-COLUMN BALANCED ROW: METAL PURITY (4 ROWS), STORE STOCK & PERIOD FLOW ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
 
-                {/* ── KPI CARD 2: Cumulative Stock Balance (from Inventory) ── */}
-                <div style={{ background: 'linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%)', borderRadius: '14px', border: '1px solid #fed7aa', padding: '0.85rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#7c2d12', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <i className="fa-solid fa-warehouse" style={{ color: '#ea580c', fontSize: '0.75rem' }} />
-                    Current Store Stock & Vault
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
-                    {/* Gold Stock */}
-                    <div onClick={() => setKpiDrillFilter2(kpiDrillFilter2 === 'GOLD_STOCK' ? null : 'GOLD_STOCK')} style={{ background: kpiDrillFilter2 === 'GOLD_STOCK' ? '#fef3c7' : '#fffbe6', border: `1.5px solid ${kpiDrillFilter2 === 'GOLD_STOCK' ? '#f59e0b' : '#fde68a'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter2 === 'GOLD_STOCK' ? '0 0 0 2px rgba(245,158,11,0.2)' : 'none', transition: 'all 0.15s ease' }}>
-                      <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#b45309', display: 'flex', justifyContent: 'space-between' }}>🥇 Gold Stock {kpiDrillFilter2 === 'GOLD_STOCK' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
-                      <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#92400e', marginTop: '2px' }}>{stockBalance.goldGrams}g</div>
-                      <div style={{ fontSize: '0.58rem', color: '#b45309', fontWeight: 600 }}>{stockBalance.goldPcs} pcs in inventory</div>
-                    </div>
-                    {/* Silver Stock */}
-                    <div onClick={() => setKpiDrillFilter2(kpiDrillFilter2 === 'SILVER_STOCK' ? null : 'SILVER_STOCK')} style={{ background: kpiDrillFilter2 === 'SILVER_STOCK' ? '#e0f2fe' : '#f0f9ff', border: `1.5px solid ${kpiDrillFilter2 === 'SILVER_STOCK' ? '#0284c7' : '#bae6fd'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter2 === 'SILVER_STOCK' ? '0 0 0 2px rgba(2,132,199,0.2)' : 'none', transition: 'all 0.15s ease' }}>
-                      <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#0369a1', display: 'flex', justifyContent: 'space-between' }}>🥈 Silver Stock {kpiDrillFilter2 === 'SILVER_STOCK' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
-                      <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#075985', marginTop: '2px' }}>{stockBalance.silverGrams}g</div>
-                      <div style={{ fontSize: '0.58rem', color: '#0369a1', fontWeight: 600 }}>{stockBalance.silverPcs} pcs in inventory</div>
-                    </div>
-                    {/* Cash Balance — spans full width */}
-                    <div onClick={() => setKpiDrillFilter2(kpiDrillFilter2 === 'CASH_BALANCE' ? null : 'CASH_BALANCE')} style={{ gridColumn: '1 / -1', background: kpiDrillFilter2 === 'CASH_BALANCE' ? '#d1fae5' : '#ecfdf5', border: `1.5px solid ${kpiDrillFilter2 === 'CASH_BALANCE' ? '#10b981' : '#a7f3d0'}`, borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', boxShadow: kpiDrillFilter2 === 'CASH_BALANCE' ? '0 0 0 2px rgba(16,185,129,0.2)' : 'none', transition: 'all 0.15s ease', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#047857' }}>💵 Cash in Drawer (Closing Balance)</div>
-                        <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#065f46', marginTop: '2px' }}>₹{(cashSummary?.expectedClosingCash || 0).toLocaleString('en-IN')}</div>
-                        <div style={{ fontSize: '0.58rem', color: '#047857', fontWeight: 600 }}>As of selected date · Click for breakdown</div>
+                {/* ── SECTION 1: METAL TURNOVER & PURITY FLOW (4 ROWS) ── */}
+                <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #fefce8 100%)', borderRadius: '14px', border: '1px solid #fde68a', padding: '0.85rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="fa-solid fa-scale-balanced" style={{ color: '#d97706', fontSize: '0.75rem' }} />
+                        Metal Turnover & Purity
                       </div>
-                      {kpiDrillFilter2 === 'CASH_BALANCE' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.65rem', color: '#047857' }} />}
+                      {/* {(() => {
+                        const p = kpiMetrics.overallMetalPuritySummary;
+                        if (!p) return null;
+                        return (
+                          <span style={{ fontSize: '0.56rem', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: p.gold.netPureFlow >= 0 ? '#dcfce7' : '#fee2e2', color: p.gold.netPureFlow >= 0 ? '#15803d' : '#b91c1c' }}>
+                            Net: {p.gold.netPureFlow >= 0 ? '+' : ''}{p.gold.netPureFlow}g Pure
+                          </span>
+                        );
+                      })()} */}
+                    </div>
+
+                    {/* 4 Rows of Metal Buy & Sell */}
+                    {(() => {
+                      const p = kpiMetrics.overallMetalPuritySummary;
+                      const goldSoldGross = p?.gold?.soldGross ?? 0;
+                      const goldBoughtGross = p?.gold?.boughtGross ?? 0;
+                      const goldBoughtNet = p?.gold?.boughtNet ?? goldBoughtGross;
+                      const goldBoughtPure = p?.gold?.boughtPure ?? 0;
+
+                      const silverSoldGross = p?.silver?.soldGross ?? 0;
+                      const silverBoughtGross = p?.silver?.boughtGross ?? 0;
+                      const silverBoughtNet = p?.silver?.boughtNet ?? silverBoughtGross;
+                      const silverBoughtPure = p?.silver?.boughtPure ?? 0;
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          {/* Row 1: Gold Sold */}
+                          <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '0.64rem' }}>🥇</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#b45309' }}>Gold Sold:</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#78350f' }}>{goldSoldGross}g (Item Wt)</span>
+                            </div>
+                            <span style={{ fontSize: '0.60rem', fontWeight: 800, color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
+                              ➔ {goldSoldGross}g sold
+                            </span>
+                          </div>
+
+                          {/* Row 2: Gold Scrap In */}
+                          <div style={{ background: '#fefce8', border: '1px solid #fef08a', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '0.64rem' }}>⚖️</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#854d0e' }}>Gold Scrap In:</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#713f12' }}>{goldBoughtGross}g (Item Wt)</span>
+                            </div>
+                            <span style={{ fontSize: '0.60rem', fontWeight: 800, color: '#047857', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px' }}>
+                              ➔ {goldBoughtNet}g Net ➔ {goldBoughtPure}g Pure
+                            </span>
+                          </div>
+
+                          {/* Row 3: Silver Sold */}
+                          <div style={{ background: '#f0f9ff', border: '1px solid #e0f2fe', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '0.64rem' }}>🥈</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#0369a1' }}>Silver Sold:</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#0c4a6e' }}>{silverSoldGross}g (Item Wt)</span>
+                            </div>
+                            <span style={{ fontSize: '0.60rem', fontWeight: 800, color: '#0284c7', background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px' }}>
+                              ➔ {silverSoldGross}g sold
+                            </span>
+                          </div>
+
+                          {/* Row 4: Silver Scrap In */}
+                          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '0.64rem' }}>🥈</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#475569' }}>Silver Scrap In:</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#334155' }}>{silverBoughtGross}g (Item Wt)</span>
+                            </div>
+                            <span style={{ fontSize: '0.60rem', fontWeight: 800, color: '#047857', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px' }}>
+                              ➔ {silverBoughtNet}g Net ➔ {silverBoughtPure}g Pure
+                            </span>
+                          </div>
+
+                          {/* Row 5: Cash Got From Customer */}
+                          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '0.64rem' }}>💵</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#15803d' }}>Cash Got From Customer and Workers:</span>
+                              {/* <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#166534' }}>JBJ Selling / Order/ Trade-in and Debt</span> */}
+                            </div>
+                            <span style={{ fontSize: '0.60rem', fontWeight: 900, color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px' }}>
+                              +₹{kpiMetrics.todayCashGotFromCustomer.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+
+                          {/* Row 6: Cash Given To Customer */}
+                          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '0.64rem' }}>💸</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#b91c1c' }}>Cash Given To Customer and Workers:</span>
+                              {/* <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#991b1b' }}>JBJ Buys/ Orders/ Trade-in / Loans</span> */}
+                            </div>
+                            <span style={{ fontSize: '0.60rem', fontWeight: 900, color: '#b91c1c', background: '#fee2e2', padding: '1px 6px', borderRadius: '4px' }}>
+                              -₹{kpiMetrics.todayCashGivenToCustomer.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* ── SECTION 2: WORKER TRANSACTIONS ── */}
+                <div style={{ background: 'linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%)', borderRadius: '14px', border: '1px solid #fed7aa', padding: '0.85rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#7c2d12', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <i className="fa-solid fa-user-gear" style={{ color: '#ea580c', fontSize: '0.75rem' }} />
+                      Worker Transactions
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.63rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '6px', background: '#fff7ed', border: '1px solid #ffedd5', color: '#9a3412', fontWeight: 600 }}>
+                        <span>🥇 Gold Given to Worker</span>
+                        <span style={{ fontWeight: 800, color: '#c2410c' }}>{kpiMetrics.goldWorkerGiven}g</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '6px', background: '#fff7ed', border: '1px solid #ffedd5', color: '#9a3412', fontWeight: 600 }}>
+                        <span>🥇 Gold Taken from Worker</span>
+                        <span style={{ fontWeight: 800, color: '#047857' }}>{kpiMetrics.goldWorkerTaken}g</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '6px', background: '#f0f9ff', border: '1px solid #e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                        <span>🥈 Silver Given to Worker</span>
+                        <span style={{ fontWeight: 800, color: '#0284c7' }}>{kpiMetrics.silverWorkerGiven}g</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '6px', background: '#f0f9ff', border: '1px solid #e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                        <span>🥈 Silver Taken from Worker</span>
+                        <span style={{ fontWeight: 800, color: '#047857' }}>{kpiMetrics.silverWorkerTaken}g</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #dcfce7', color: '#15803d', fontWeight: 600 }}>
+                        <span>💵 Cash Given to Worker</span>
+                        <span style={{ fontWeight: 800, color: '#b91c1c' }}>₹{kpiMetrics.cashWorkerGiven.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #dcfce7', color: '#15803d', fontWeight: 600 }}>
+                        <span>💸 Cash Taken from Worker</span>
+                        <span style={{ fontWeight: 800, color: '#15803d' }}>₹{kpiMetrics.cashWorkerTaken.toLocaleString('en-IN')}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* ── KPI CARD 3: Period Flow (Today's/Range Transactions) ── */}
-                <div style={{ background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', borderRadius: '14px', border: '1px solid #bae6fd', padding: '0.85rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0c4a6e', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <i className="fa-solid fa-arrow-right-arrow-left" style={{ color: '#0284c7', fontSize: '0.75rem' }} />
-                    Period Movement & Flow
-                    <span style={{ fontSize: '0.60rem', fontWeight: 600, color: '#0369a1', marginLeft: 'auto' }}>({dateFilterMode === 'TODAY' ? 'Today' : dateFilterMode === 'ALL' ? 'All Time' : 'Range'})</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
-                    {/* Gold Flow */}
-                    <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_GOLD' ? null : 'PERIOD_GOLD')} style={{ background: kpiDrillFilter3 === 'PERIOD_GOLD' ? '#fef3c7' : '#fffbe6', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_GOLD' ? '#f59e0b' : '#fde68a'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_GOLD' ? '0 0 0 2px rgba(245,158,11,0.2)' : 'none', transition: 'all 0.15s ease' }}>
-                      <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#b45309', display: 'flex', justifyContent: 'space-between' }}>🥇 Gold Flow {kpiDrillFilter3 === 'PERIOD_GOLD' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
-                      <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#92400e', marginTop: '2px' }}>{kpiMetrics.goldWtAdded > 0 ? '+' : ''}{kpiMetrics.goldWtAdded}g</div>
-                      <div style={{ fontSize: '0.58rem', color: '#b45309', fontWeight: 600 }}>{kpiMetrics.goldPcsAdded} pcs added</div>
+                {/* ── SECTION 3: PERIOD MOVEMENT & FLOW ── */}
+                <div style={{ background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', borderRadius: '14px', border: '1px solid #bae6fd', padding: '0.85rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0c4a6e', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <i className="fa-solid fa-arrow-right-arrow-left" style={{ color: '#0284c7', fontSize: '0.75rem' }} />
+                      Period Movement & Flow
+                      <span style={{ fontSize: '0.60rem', fontWeight: 600, color: '#0369a1', marginLeft: 'auto' }}>({dateFilterMode === 'TODAY' ? 'Today' : dateFilterMode === 'ALL' ? 'All Time' : 'Range'})</span>
                     </div>
-                    {/* Silver Flow */}
-                    <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_SILVER' ? null : 'PERIOD_SILVER')} style={{ background: kpiDrillFilter3 === 'PERIOD_SILVER' ? '#e0f2fe' : '#f0f9ff', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_SILVER' ? '#0284c7' : '#bae6fd'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_SILVER' ? '0 0 0 2px rgba(2,132,199,0.2)' : 'none', transition: 'all 0.15s ease' }}>
-                      <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#0369a1', display: 'flex', justifyContent: 'space-between' }}>🥈 Silver Flow {kpiDrillFilter3 === 'PERIOD_SILVER' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
-                      <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#075985', marginTop: '2px' }}>{kpiMetrics.silverWtAdded > 0 ? '+' : ''}{kpiMetrics.silverWtAdded}g</div>
-                      <div style={{ fontSize: '0.58rem', color: '#0369a1', fontWeight: 600 }}>{kpiMetrics.silverPcsAdded} pcs added</div>
-                    </div>
-                    {/* Cash Collected */}
-                    <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_CASH' ? null : 'PERIOD_CASH')} style={{ background: kpiDrillFilter3 === 'PERIOD_CASH' ? '#d1fae5' : '#f0fdf4', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_CASH' ? '#22c55e' : '#a7f3d0'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_CASH' ? '0 0 0 2px rgba(34,197,94,0.2)' : 'none', transition: 'all 0.15s ease' }}>
-                      <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#047857', display: 'flex', justifyContent: 'space-between' }}>💵 Cash Inflow {kpiDrillFilter3 === 'PERIOD_CASH' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
-                      <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#065f46', marginTop: '2px' }}>₹{kpiMetrics.totalCashCollected.toLocaleString('en-IN')}</div>
-                      <div style={{ fontSize: '0.58rem', color: '#047857', fontWeight: 600 }}>Customer payments</div>
-                    </div>
-                    {/* Finance Loans */}
-                    <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_FINANCE' ? null : 'PERIOD_FINANCE')} style={{ background: kpiDrillFilter3 === 'PERIOD_FINANCE' ? '#ccfbf1' : '#f0fdfa', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_FINANCE' ? '#14b8a6' : '#99f6e4'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_FINANCE' ? '0 0 0 2px rgba(20,184,166,0.2)' : 'none', transition: 'all 0.15s ease' }}>
-                      <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#0f766e', display: 'flex', justifyContent: 'space-between' }}>💰 Finance Issued {kpiDrillFilter3 === 'PERIOD_FINANCE' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
-                      <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#115e59', marginTop: '2px' }}>₹{kpiMetrics.totalFinanceIssued.toLocaleString('en-IN')}</div>
-                      <div style={{ fontSize: '0.58rem', color: '#0f766e', fontWeight: 600 }}>New loans issued</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
+                      {/* Cash Collected */}
+                      <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_CASH' ? null : 'PERIOD_CASH')} style={{ background: kpiDrillFilter3 === 'PERIOD_CASH' ? '#d1fae5' : '#f0fdf4', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_CASH' ? '#22c55e' : '#a7f3d0'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_CASH' ? '0 0 0 2px rgba(34,197,94,0.2)' : 'none', transition: 'all 0.15s ease' }}>
+                        <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#047857', display: 'flex', justifyContent: 'space-between' }}>💵 Cash Inflow {kpiDrillFilter3 === 'PERIOD_CASH' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
+                        <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#065f46', marginTop: '2px' }}>₹{kpiMetrics.totalCashCollected.toLocaleString('en-IN')}</div>
+                        <div style={{ fontSize: '0.58rem', color: '#047857', fontWeight: 600 }}>Opening: ₹{(cashSummary?.openingCash ?? 0).toLocaleString('en-IN')}</div>
+                      </div>
+                      {/* Finance Loans */}
+                      <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_FINANCE' ? null : 'PERIOD_FINANCE')} style={{ background: kpiDrillFilter3 === 'PERIOD_FINANCE' ? '#ccfbf1' : '#f0fdfa', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_FINANCE' ? '#14b8a6' : '#99f6e4'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_FINANCE' ? '0 0 0 2px rgba(20,184,166,0.2)' : 'none', transition: 'all 0.15s ease' }}>
+                        <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#0f766e', display: 'flex', justifyContent: 'space-between' }}>💰 Finance Issued {kpiDrillFilter3 === 'PERIOD_FINANCE' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
+                        <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#115e59', marginTop: '2px' }}>₹{kpiMetrics.totalFinanceIssued.toLocaleString('en-IN')}</div>
+                        <div style={{ fontSize: '0.58rem', color: '#0f766e', fontWeight: 600 }}>Opening: ₹0</div>
+                      </div>
+                      {/* Gold Flow */}
+                      <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_GOLD' ? null : 'PERIOD_GOLD')} style={{ background: kpiDrillFilter3 === 'PERIOD_GOLD' ? '#fef3c7' : '#fffbe6', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_GOLD' ? '#f59e0b' : '#fde68a'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_GOLD' ? '0 0 0 2px rgba(245,158,11,0.2)' : 'none', transition: 'all 0.15s ease' }}>
+                        <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#b45309', display: 'flex', justifyContent: 'space-between' }}>🥇 Gold Flow {kpiDrillFilter3 === 'PERIOD_GOLD' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
+                        <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#92400e', marginTop: '2px' }}>{kpiMetrics.goldWtAdded > 0 ? '+' : ''}{kpiMetrics.goldWtAdded}g</div>
+                        <div style={{ fontSize: '0.58rem', color: '#b45309', fontWeight: 600 }}>Opening: {dayBookStockSummary.find((s: any) => (s.category || '').includes('Gold'))?.openingWeight ?? 0}g</div>
+                      </div>
+                      {/* Silver Flow */}
+                      <div onClick={() => setKpiDrillFilter3(kpiDrillFilter3 === 'PERIOD_SILVER' ? null : 'PERIOD_SILVER')} style={{ background: kpiDrillFilter3 === 'PERIOD_SILVER' ? '#e0f2fe' : '#f0f9ff', border: `1.5px solid ${kpiDrillFilter3 === 'PERIOD_SILVER' ? '#0284c7' : '#bae6fd'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter3 === 'PERIOD_SILVER' ? '0 0 0 2px rgba(2,132,199,0.2)' : 'none', transition: 'all 0.15s ease' }}>
+                        <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#0369a1', display: 'flex', justifyContent: 'space-between' }}>🥈 Silver Flow {kpiDrillFilter3 === 'PERIOD_SILVER' && <i className="fa-solid fa-chevron-down" style={{ fontSize: '0.55rem' }} />}</div>
+                        <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#075985', marginTop: '2px' }}>{kpiMetrics.silverWtAdded > 0 ? '+' : ''}{kpiMetrics.silverWtAdded}g</div>
+                        <div style={{ fontSize: '0.58rem', color: '#0369a1', fontWeight: 600 }}>Opening: {dayBookStockSummary.find((s: any) => (s.category || '').includes('Silver'))?.openingWeight ?? 0}g</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -807,7 +1042,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                           <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>#</th>
                             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>Time</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>Type</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>JBJ-Type</th>
                             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>Customer / Details</th>
                             <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>Weight</th>
                             <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>Amount</th>
@@ -912,7 +1147,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                               <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>#</th>
                               <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>Item Name</th>
                               <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>Type</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569' }}>Stock Qty</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569' }}>Sell Count</th>
                               <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569' }}>Net Wt (g)</th>
                               <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569' }}>Touch %</th>
                             </tr>
@@ -927,8 +1162,8 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                                     {(p.item_type || p.metal_type || '').toUpperCase()}
                                   </span>
                                 </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#334155' }}>{p.current_quantity ?? p.stock_quantity ?? p.initial_quantity ?? '—'}</td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>{p.stock_quantity ?? p.weight_grams ?? p.net_weight ?? '—'}g</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f766e' }}>{p.sell_count ?? p.sold_quantity ?? 0}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>{p.current_stock_weight ?? p.stock_quantity ?? p.weight_grams ?? '—'}g</td>
                                 <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#64748b' }}>{p.touch_percentage ?? p.touch ?? '—'}</td>
                               </tr>
                             ))}
@@ -951,9 +1186,19 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                 const headerColor = isGold ? '#b45309' : isSilver ? '#0369a1' : isCash ? '#047857' : '#0f766e';
                 const periodItems = logBookTimeline.filter((item: any) => {
                   const type = (item.type || '').toUpperCase();
-                  if (isGold) return type === 'INVENTORY' && (item.category || '').toUpperCase().includes('GOLD');
-                  if (isSilver) return type === 'INVENTORY' && (item.category || '').toUpperCase().includes('SILVER');
-                  if (isCash) return item.paid_amount > 0 && type !== 'FINANCE' && type !== 'BUY' && type !== 'INVENTORY' && type !== 'KARIGAR';
+                  if (isGold) {
+                    const cat = (item.category || item.transfer_item_mode || item.raw_invoice?.metal_type || '').toUpperCase();
+                    const details = (item.details || '').toUpperCase();
+                    const isGoldMatch = cat.includes('GOLD') || details.includes('GOLD') || (!cat.includes('SILVER') && !details.includes('SILVER') && item.weight_grams > 0);
+                    return isGoldMatch && (type === 'INVENTORY' || type === 'SELL' || type === 'ORDER' || type === 'EXCHANGE' || type === 'KARIGAR' || type === 'WORK ASSIGN' || type === 'WORKER TX' || type === 'FINANCE');
+                  }
+                  if (isSilver) {
+                    const cat = (item.category || item.transfer_item_mode || item.raw_invoice?.metal_type || '').toUpperCase();
+                    const details = (item.details || '').toUpperCase();
+                    const isSilverMatch = cat.includes('SILVER') || details.includes('SILVER');
+                    return isSilverMatch && (type === 'INVENTORY' || type === 'SELL' || type === 'ORDER' || type === 'EXCHANGE' || type === 'KARIGAR' || type === 'WORK ASSIGN' || type === 'WORKER TX' || type === 'FINANCE');
+                  }
+                  if (isCash) return type === 'CASH_REGISTER' || ((item.paid_amount > 0 || item.amount > 0) && type !== 'FINANCE' && type !== 'BUY' && type !== 'INVENTORY' && type !== 'KARIGAR');
                   if (isFinance) return type === 'FINANCE';
                   return false;
                 });
@@ -1102,7 +1347,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                         <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
                           <th style={{ padding: '8px 10px', fontWeight: 800 }}>S.No</th>
                           <th style={{ padding: '8px 10px', fontWeight: 800 }}>Time</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800 }}>Type</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 800 }}>JBJ-Type</th>
                           <th style={{ padding: '8px 10px', fontWeight: 800 }}>Customer / Details</th>
                           <th style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'right' }}>Net Weight</th>
                           <th style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'right', color: '#15803d' }}>In Hand (₹)</th>
@@ -1760,6 +2005,217 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
           )}
         </>
       )}
+
+      {/* ======================================================
+          CLOSING RECORD MODAL — EOD Snapshot with All 3 Gaps
+          ====================================================== */}
+      {showClosingModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '760px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden', marginTop: '2rem', marginBottom: '2rem' }}>
+
+            {/* Modal Header */}
+            <div style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ color: '#fff', fontWeight: 800, fontSize: '1rem' }}>📊 End-of-Day Closing Record</div>
+                <div style={{ color: '#c4b5fd', fontSize: '0.72rem', marginTop: '2px' }}>{closingRecord?.record_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  onClick={async () => {
+                    setClosingHistoryView('history');
+                    try {
+                      const res = await fetch(`${API_BASE}/inventory/closing-records`);
+                      const d = await res.json();
+                      if (d.success) setClosingHistory(d.records || []);
+                    } catch (e) { console.error(e); }
+                  }}
+                  style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '5px 12px', borderRadius: '7px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}
+                >📅 History</button>
+                <button onClick={() => { setShowClosingModal(false); setClosingRecord(null); setClosingHistorySelected(null); }} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer', fontWeight: 800, fontSize: '1rem' }}>×</button>
+              </div>
+            </div>
+
+            <div style={{ padding: '1.25rem', maxHeight: '75vh', overflowY: 'auto' }}>
+              {/* History View */}
+              {closingHistoryView === 'history' && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
+                    <button onClick={() => { setClosingHistoryView('generate'); setClosingHistorySelected(null); }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '7px', padding: '5px 12px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}>← Back</button>
+                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#374151' }}>📅 Past Closing Records</span>
+                  </div>
+                  {closingHistory.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.85rem' }}>No closing records saved yet.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {closingHistory.map((r: any) => (
+                        <div
+                          key={r.id}
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${API_BASE}/inventory/closing-record/${r.record_date}`);
+                              const d = await res.json();
+                              if (d.success) { setClosingHistorySelected(d.record.closing_data); }
+                            } catch (e) { console.error(e); }
+                          }}
+                          style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>{r.record_date}</div>
+                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>Saved: {new Date(r.updated_at || r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
+                          </div>
+                          <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 700 }}>View →</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Show selected historical record */}
+                  {closingHistorySelected && (
+                    <div style={{ marginTop: '1.5rem', borderTop: '2px solid #e2e8f0', paddingTop: '1rem' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#374151', marginBottom: '1rem' }}>📋 Viewing: {closingHistorySelected.record_date}</div>
+                      <ClosingRecordBody data={closingHistorySelected} />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Generate / Today's Closing View */}
+              {closingHistoryView === 'generate' && (
+                closingLoading ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: '#7c3aed' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Generating EOD Closing Record...</div>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>Aggregating cash, stock, vault & karigar data</div>
+                  </div>
+                ) : closingRecord ? (
+                  <ClosingRecordBody data={closingRecord} />
+                ) : (
+                  <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.85rem' }}>Failed to generate closing record. Please try again.</div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+/* ──────────────────────────────────────────────
+   Inline sub-component: renders the closing data
+   ────────────────────────────────────────────── */
+function ClosingRecordBody({ data }: { data: any }) {
+  const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+  const fmtRs = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  const card = (title: string, icon: string, children: React.ReactNode, color = '#4f46e5') => (
+    <div style={{ background: '#f8fafc', border: `1.5px solid ${color}22`, borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
+      <div style={{ fontWeight: 800, fontSize: '0.82rem', color, marginBottom: '0.75rem' }}>{icon} {title}</div>
+      {children}
+    </div>
+  );
+  const row = (label: string, value: string, valueColor = '#1e293b') => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.78rem' }}>
+      <span style={{ color: '#475569' }}>{label}</span>
+      <strong style={{ color: valueColor }}>{value}</strong>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* 1. CASH SUMMARY */}
+      {card('Cash Drawer Summary', '💰', <>
+        {row('Cash in Drawer (Closing)', fmtRs(data.cash?.cash_in_drawer), '#166534')}
+        {row('Cash Loaded Today', fmtRs(data.cash?.cash_loaded_today), '#0369a1')}
+        {row('Sales Cash Received', fmtRs(data.cash?.sales_cash_in), '#059669')}
+        {row('Exchange Cash Received', fmtRs(data.cash?.exchange_cash_in), '#059669')}
+        {row('Scrap Purchased (Paid Out)', fmtRs(data.cash?.scrap_purchase_cash_out), '#b91c1c')}
+        {row('Loans Issued (Paid Out)', fmtRs(data.cash?.loans_issued_out), '#b91c1c')}
+        {row('Loans Repaid (Received)', fmtRs(data.cash?.loans_repaid_in), '#059669')}
+        {row('Worker Wages Paid', fmtRs(data.cash?.worker_wages_out), '#b91c1c')}
+        {row('Total Transactions', String(data.cash?.total_transactions || 0))}
+      </>, '#059669')}
+
+      {/* 2. METAL POSITION (Grand Total — Gap 1 + 2 combined) */}
+      {card('Total Metal Position — Where Is My Gold & Silver?', '🥇', <>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#b45309', marginBottom: '6px' }}>🥇 GOLD</div>
+            {row('Showcase (Display)', fmt(data.metal_position?.gold?.showcase_grams) + ' g')}
+            {row('Vault Scrap (Old Gold)', fmt(data.metal_position?.gold?.vault_scrap_grams) + ' g')}
+            {row('Pure Gold in Vault', fmt(data.metal_position?.gold?.vault_pure_grams) + ' g')}
+            {row('At Karigars (Workshop)', fmt(data.metal_position?.gold?.at_karigars_grams) + ' g')}
+            <div style={{ marginTop: '6px', padding: '6px', background: '#fef3c7', borderRadius: '6px', fontWeight: 800, fontSize: '0.82rem', color: '#92400e', textAlign: 'center' }}>
+              Total: {fmt(data.metal_position?.gold?.total_gold_grams)} g
+            </div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#475569', marginBottom: '6px' }}>🥈 SILVER</div>
+            {row('Showcase (Display)', fmt(data.metal_position?.silver?.showcase_grams) + ' g')}
+            {row('Vault Scrap (Old Silver)', fmt(data.metal_position?.silver?.vault_scrap_grams) + ' g')}
+            {row('Pure Silver in Vault', fmt(data.metal_position?.silver?.vault_pure_grams) + ' g')}
+            {row('At Karigars (Workshop)', fmt(data.metal_position?.silver?.at_karigars_grams) + ' g')}
+            <div style={{ marginTop: '6px', padding: '6px', background: '#f1f5f9', borderRadius: '6px', fontWeight: 800, fontSize: '0.82rem', color: '#334155', textAlign: 'center' }}>
+              Total: {fmt(data.metal_position?.silver?.total_silver_grams)} g
+            </div>
+          </div>
+        </div>
+      </>, '#b45309')}
+
+      {/* 3. KARIGAR REGISTER — Gap 2 */}
+      {card('Karigar / Workshop Metal Register', '⚒️', <>
+        {(data.karigar_register?.karigars || []).length === 0 ? (
+          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', padding: '0.5rem' }}>No karigar transactions recorded yet.</div>
+        ) : (
+          (data.karigar_register?.karigars || []).map((k: any, i: number) => (
+            <div key={i} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', marginBottom: '6px' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#374151', marginBottom: '4px' }}>👤 {k.worker_name}</div>
+              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.75rem' }}>
+                <span style={{ color: '#b45309' }}>🥇 Gold: <strong>{fmt(k.gold_grams_with_karigar)}g</strong></span>
+                <span style={{ color: '#475569' }}>🥈 Silver: <strong>{fmt(k.silver_grams_with_karigar)}g</strong></span>
+              </div>
+            </div>
+          ))
+        )}
+        <div style={{ marginTop: '6px', display: 'flex', gap: '1rem', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed' }}>
+          <span>Total Gold at Karigars: {fmt(data.karigar_register?.total_gold_at_karigars)}g</span>
+          <span>Total Silver: {fmt(data.karigar_register?.total_silver_at_karigars)}g</span>
+        </div>
+      </>, '#7c3aed')}
+
+      {/* 4. TODAY'S BILLS SUMMARY — Gap 3 */}
+      {card("Today's Bills & Sales Summary", '🧾', <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '0.75rem' }}>
+          {[['Sales', data.bills?.sell_count, '#059669'], ['Buys', data.bills?.buy_count, '#b91c1c'], ['Orders', data.bills?.order_count, '#0369a1'], ['Exchange', data.bills?.exchange_count, '#7c3aed']].map(([label, val, color]: any) => (
+            <div key={label} style={{ background: '#fff', border: `1px solid ${color}33`, borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color }}>{val || 0}</div>
+              <div style={{ fontSize: '0.65rem', color: '#64748b' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+        {row("Today's Total Sales Amount", fmtRs(data.bills?.total_sales_amount), '#059669')}
+        {row("Today's Scrap Paid Out", fmtRs(data.bills?.total_scrap_paid), '#b91c1c')}
+      </>, '#0369a1')}
+
+      {/* 5. UDHAARI / PENDING */}
+      {card(`Pending Udhaari (${(data.udhaari?.customers || []).length} customers)`, '⚠️', <>
+        <div style={{ marginBottom: '8px', fontWeight: 700, fontSize: '0.85rem', color: '#b91c1c' }}>Total Outstanding: {fmtRs(data.udhaari?.total_due)}</div>
+        {(data.udhaari?.customers || []).slice(0, 10).map((u: any, i: number) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #fef2f2', fontSize: '0.75rem' }}>
+            <div>
+              <span style={{ fontWeight: 600, color: '#1e293b' }}>{u.customer_name}</span>
+              {u.customer_phone && <span style={{ color: '#64748b', marginLeft: '6px' }}>{u.customer_phone}</span>}
+              <span style={{ color: '#94a3b8', marginLeft: '6px', fontSize: '0.65rem' }}>{u.bill_date}</span>
+            </div>
+            <strong style={{ color: '#b91c1c' }}>{fmtRs(u.due_amount)}</strong>
+          </div>
+        ))}
+        {(data.udhaari?.customers || []).length > 10 && (
+          <div style={{ fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center', marginTop: '6px' }}>...and {(data.udhaari?.customers || []).length - 10} more</div>
+        )}
+      </>, '#b91c1c')}
+
+      <div style={{ textAlign: 'center', fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+        Generated: {data.generated_at ? new Date(data.generated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'} | Stored as JSON in daily_closing_records
+      </div>
+    </div>
+  );
+}

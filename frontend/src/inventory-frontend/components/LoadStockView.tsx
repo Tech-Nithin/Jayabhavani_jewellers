@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { InventoryProduct } from './ProductGridList';
 import type { Language } from '../../utils/translations';
 import { translations } from '../../utils/translations';
+import { API_BASE } from '../../config/apiConfig';
 
 interface LoadStockViewProps {
   products: InventoryProduct[];
@@ -103,7 +104,6 @@ export const LoadStockView: React.FC<LoadStockViewProps> = ({
 
     setIsSubmitting(true);
     try {
-      const API_BASE = (window as any).__JBJ_API_BASE__ || '/api';
       const res = await fetch(`${API_BASE}/inventory/products/${selectedProductId}/restock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

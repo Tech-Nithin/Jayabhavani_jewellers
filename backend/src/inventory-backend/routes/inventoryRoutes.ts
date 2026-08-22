@@ -201,7 +201,7 @@ router.post('/products', async (req: Request, res: Response) => {
       item_type: item_type || 'GOLD',
       weight_from_grams: finalWeightFrom,
       weight_to_grams: finalWeightTo,
-      current_stock_weight: finalTotalWeight,
+      current_stock_weight: 0,
       sold_quantity: 0.000,
       sell_count: 0,
       img: cloudinaryWebpUrl,
@@ -219,6 +219,32 @@ router.post('/products', async (req: Request, res: Response) => {
       } else {
         console.log('✨ Successfully inserted into inventory_products table:', data);
         
+        if (finalTotalWeight > 0) {
+          try {
+            const { recordInventoryMovement } = await import('../../utils/inventoryLedgerHelper');
+            await recordInventoryMovement({
+              itemId: id,
+              itemName,
+              itemType: (item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
+              eventType: 'OPENING',
+              weightDeltaGrams: finalTotalWeight,
+              referenceType: 'MANUAL',
+              notes: `Initial stock loaded (${finalTotalWeight}g)`,
+            });
+
+            // Update today's opening_records table with loaded stock
+            const { updateOpeningOnLoad } = await import('../../utils/openingRecordHelper');
+            const todayStr = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })).toISOString().split('T')[0];
+            const isSilver = (item_type || 'GOLD').toUpperCase().includes('SILVER');
+            await updateOpeningOnLoad(todayStr, {
+              goldGrams: isSilver ? 0 : finalTotalWeight,
+              silverGrams: isSilver ? finalTotalWeight : 0,
+            });
+          } catch (invLedgerErr: any) {
+            console.warn('⚠️ Inventory ledger opening stock notice:', invLedgerErr.message);
+          }
+        }
+
         // Insert opening log into inventory_stock_logs (item_id is Foreign Key to inventory_products.id)
         const { error: logErr } = await supabase
           .from('inventory_stock_logs')
@@ -282,12 +308,16 @@ router.post('/products/:id/restock', async (req: Request, res: Response) => {
     const currentStockWeight = Number(existing.current_stock_weight ?? existing.weight_from_grams ?? 0);
     const newStockWeight = Number((currentStockWeight + weightToAdd).toFixed(3));
 
-    await supabase
-      .from('inventory_products')
-      .update({
-        current_stock_weight: newStockWeight,
-      })
-      .eq('id', id);
+    const { recordInventoryMovement } = await import('../../utils/inventoryLedgerHelper');
+    await recordInventoryMovement({
+      itemId: id,
+      itemName: existing.item_name || existing.name || existing.category,
+      itemType: (existing.item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
+      eventType: 'RESTOCK',
+      weightDeltaGrams: weightToAdd,
+      referenceType: 'MANUAL',
+      notes: notes || `Restocked +${weightToAdd}g by shop owner`,
+    });
 
     await supabase.from('inventory_stock_logs').insert([{
       item_id: id,
@@ -660,4 +690,68 @@ router.get('/cash/transactions/:cash_history_uuid', async (req: Request, res: Re
   }
 });
 
+// GET /api/inventory/historical-stock - Fetch point-in-time inventory stock for any past date
+router.get('/historical-stock', async (req: Request, res: Response) => {
+  try {
+    const { date } = req.query;
+    const targetDate = typeof date === 'string' && date ? date : new Date().toISOString().split('T')[0];
+    const { getHistoricalInventoryStock } = await import('../../utils/inventoryLedgerHelper');
+    const result = await getHistoricalInventoryStock(targetDate);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error('Error fetching historical inventory stock:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==============================================================================
+// CLOSING RECORD ENDPOINTS (daily_closing_records - EOD Snapshot)
+// ==============================================================================
+
+// POST /api/inventory/closing-record - Generate & save today's EOD snapshot
+router.post('/closing-record', async (req: Request, res: Response) => {
+  try {
+    const { date } = req.body;
+    const { generateClosingRecord, saveClosingRecord } = await import('../../utils/closingRecordHelper');
+    const data = await generateClosingRecord(date || undefined);
+    const saved = await saveClosingRecord(data.record_date, data);
+    if (!saved.success) {
+      return res.status(500).json({ success: false, message: saved.error || 'Failed to save closing record' });
+    }
+    res.json({ success: true, message: 'Closing record saved successfully!', closing_record: data });
+  } catch (err: any) {
+    console.error('Error generating closing record:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/inventory/closing-records - List all saved closing records
+router.get('/closing-records', async (_req: Request, res: Response) => {
+  try {
+    const { listClosingRecords } = await import('../../utils/closingRecordHelper');
+    const records = await listClosingRecords();
+    res.json({ success: true, records });
+  } catch (err: any) {
+    console.error('Error listing closing records:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/inventory/closing-record/:date - Get closing record for a specific date
+router.get('/closing-record/:date', async (req: Request, res: Response) => {
+  try {
+    const { date } = req.params;
+    const { getClosingRecord } = await import('../../utils/closingRecordHelper');
+    const record = await getClosingRecord(date);
+    if (!record) {
+      return res.status(404).json({ success: false, message: `No closing record found for ${date}` });
+    }
+    res.json({ success: true, record });
+  } catch (err: any) {
+    console.error('Error fetching closing record:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 export default router;
+

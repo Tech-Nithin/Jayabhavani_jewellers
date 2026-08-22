@@ -17,7 +17,7 @@ interface AdminDashboardProps {
   user?: { name: string; email: string };
   onLogout: () => void;
   onBackToStore?: () => void;
-  activeModule?: 'accounts' | 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment';
+  activeModule?: 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'accounts';
 }
 
 
@@ -68,7 +68,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const syncFromUrl = () => {
       const params = new URLSearchParams(window.location.search);
       const mod = params.get('module');
-      if (mod && ['accounts', 'dashboard', 'billing', 'orders', 'finance', 'inventory', 'work-assignment', 'workers'].includes(mod)) {
+      if (mod && ['dashboard', 'billing', 'orders', 'finance', 'inventory', 'work-assignment', 'workers', 'accounts'].includes(mod)) {
         setCurrentTab(mod as any);
       }
       const urlLang = (params.get('lang') || '').toUpperCase();
@@ -89,7 +89,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.history.replaceState({}, '', `?${params.toString()}`);
   }, [lang]);
 
-  const handleTabChange = (tab: 'accounts' | 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'workers') => {
+  const handleTabChange = (tab: 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'workers' | 'accounts') => {
     setCurrentTab(tab);
     setMobileMenuOpen(false);
 
@@ -109,13 +109,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const t = translations[lang];
 
   const navItems: Array<{ id: string; label: string; icon: string; imgSrc?: string }> = [
-    { id: 'accounts', label: lang === 'TE' ? 'ఖాతాలు (రోజ్మేల్)' : 'Accounts', icon: 'fa-solid fa-book-bookmark' },
     { id: 'dashboard', label: t.dashboard, icon: 'fa-solid fa-chart-pie' },
     { id: 'billing', label: t.billing, icon: 'fa-solid fa-receipt' },
     { id: 'orders', label: lang === 'TE' ? 'ఆర్డర్లు' : 'Orders', icon: 'fa-solid fa-dolly' },
     { id: 'workers', label: t.workAssignment, icon: 'fa-solid fa-users-gear' },
     { id: 'finance', label: t.finance, icon: 'fa-solid fa-hand-holding-dollar' },
     { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-store' },
+    { id: 'accounts', label: lang === 'TE' ? 'ఖాతాలు (రోజ్మేల్)' : 'Accounts', icon: 'fa-solid fa-book-bookmark' },
+
   ];
 
   return (

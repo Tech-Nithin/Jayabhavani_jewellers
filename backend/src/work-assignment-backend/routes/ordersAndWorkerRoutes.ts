@@ -1460,6 +1460,67 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       console.warn('⚠️ FCM Webhook trigger notice:', fcmErr.message);
     }
 
+    // Sync worker cash or metal movement with financial and inventory ledgers
+    try {
+      const isOutgoing = newTxn.direction === 'OUTGOING'; // Admin to Worker
+      const isCash = newTxn.category === 'CASH' || Number(newTxn.amount_cash) > 0;
+      const cashAmt = Number(newTxn.amount_cash) || 0;
+      const weightGrams = Number(newTxn.weight_grams) || 0;
+      const metalType = (newTxn.category || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+
+      let resolvedWorkerName = newTxn.worker_id;
+      try {
+        const { data: wRecord } = await supabase.from('workers').select('name').eq('id', newTxn.worker_id).single();
+        if (wRecord?.name) resolvedWorkerName = wRecord.name;
+      } catch (wLookupErr) {
+        // fallback
+      }
+
+      if (isCash && cashAmt > 0) {
+        const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
+        await recordCashTransaction({
+          transaction_id: finalInserted.id,
+          transaction_type: 'WORKER',
+          flow_type: isOutgoing ? 'OUT' : 'IN', // Outgoing from shop drawer if sent to worker
+          amount: cashAmt,
+          metal_type: metalType as any,
+          item_type: `Worker Cash: ${resolvedWorkerName}`,
+          notes: newTxn.notes || `Cash ${isOutgoing ? 'sent to' : 'received from'} worker ${resolvedWorkerName}`,
+          date: newTxn.created_at ? newTxn.created_at.split('T')[0] : undefined,
+        });
+      }
+
+      if (weightGrams > 0 && (newTxn.category === 'GOLD' || newTxn.category === 'SILVER' || newTxn.category === 'ORNAMENT')) {
+        const { recordInventoryMovement } = await import('../../utils/inventoryLedgerHelper');
+        const { data: invProds } = await supabase
+          .from('inventory_products')
+          .select('*')
+          .eq('item_type', metalType);
+
+        const targetProd = (invProds || []).find((p: any) => {
+          const pName = (p.item_name || '').toLowerCase();
+          const target = (newTxn.item_name || '').toLowerCase();
+          return pName === target || target.includes(pName) || pName.includes(target);
+        }) || (invProds && invProds.length > 0 ? invProds[0] : null);
+
+        if (targetProd) {
+          await recordInventoryMovement({
+            itemId: targetProd.id,
+            itemName: targetProd.item_name,
+            itemType: metalType,
+            eventType: isOutgoing ? 'KARIGAR_OUT' : 'KARIGAR_IN',
+            weightDeltaGrams: isOutgoing ? -weightGrams : weightGrams,
+            referenceId: finalInserted.id,
+            referenceType: 'WORKER_TXN',
+            notes: `${weightGrams}g ${metalType} ${isOutgoing ? 'issued to' : 'delivered by'} worker ${resolvedWorkerName}`,
+            date: newTxn.created_at ? newTxn.created_at.split('T')[0] : undefined,
+          });
+        }
+      }
+    } catch (ledgerSyncErr: any) {
+      console.warn('⚠️ Worker ledger sync notice:', ledgerSyncErr.message);
+    }
+
     // Broadcast instant Server-Sent Event (SSE) live stream to all connected screens in < 10ms
     if (newTxn.worker_id) {
       broadcastToWorker(newTxn.worker_id, 'NEW_TRANSACTION', finalInserted);

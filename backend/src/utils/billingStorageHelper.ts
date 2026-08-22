@@ -254,6 +254,46 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       } else {
         console.log(`✅ Stored ${lineRecordsToInsert.length} line records in billing_sell_buy_records for ${billingId}`);
       }
+
+      // 4. INVENTORY PRODUCT STOCK DEDUCTION: Update inventory_ledger & daily snapshots for SELL transactions
+      for (const r of lineRecordsToInsert) {
+        if (r.transaction_type === 'SELL' && r.item_weight > 0) {
+          try {
+            const itemName = (r.item_name || '').trim();
+            const cleanMetal = (r.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+
+            const { data: invMatches } = await supabase
+              .from('inventory_products')
+              .select('*')
+              .eq('item_type', cleanMetal);
+
+            if (invMatches && invMatches.length > 0) {
+              const matched = invMatches.find((p: any) => {
+                const pName = (p.item_name || '').toLowerCase();
+                const pCat = (p.category || '').toLowerCase();
+                const target = itemName.toLowerCase();
+                return pName === target || pCat === target || target.includes(pName) || pName.includes(target);
+              });
+
+              if (matched) {
+                const { recordInventoryMovement } = await import('./inventoryLedgerHelper');
+                await recordInventoryMovement({
+                  itemId: matched.id,
+                  itemName: matched.item_name,
+                  itemType: cleanMetal,
+                  eventType: 'SALE',
+                  weightDeltaGrams: -Number(r.item_weight),
+                  referenceId: billingId,
+                  referenceType: 'INVOICE',
+                  notes: `Sold in bill ${billingId} to ${input.customer_name || 'Customer'}`,
+                });
+              }
+            }
+          } catch (invErr) {
+            console.warn('⚠️ Inventory ledger deduction warning:', invErr);
+          }
+        }
+      }
     }
 
     // 3. PAYMENT / INSTALLMENT TABLE: billing_payment_history (Record Initial Payment)

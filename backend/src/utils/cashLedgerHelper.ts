@@ -130,6 +130,16 @@ export async function recordCashTransaction(params: CashTransactionParams): Prom
       return { success: false, error: 'Could not initialize cash_history' };
     }
 
+    // Update daily_opening_records if this is a cash loading transaction
+    if (params.transaction_type === 'LOADING' || (params.flow_type === 'IN' && (params.item_type || '').toUpperCase().includes('LOAD'))) {
+      try {
+        const { updateOpeningOnLoad } = await import('./openingRecordHelper');
+        await updateOpeningOnLoad(todayStr, { cashAmount: amount });
+      } catch (opErr: any) {
+        console.warn('⚠️ Notice updating opening record on cash load:', opErr?.message);
+      }
+    }
+
     // 2. Insert into cash_transaction_ledger
     const { error: ledgerErr } = await supabase
       .from('cash_transaction_ledger')

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Language } from '../../utils/translations';
+import { API_BASE } from '../../config/apiConfig';
 
 interface CashHistoryRow {
   cash_history_uuid: string;
@@ -72,8 +73,6 @@ export const CashHistoryTableView: React.FC<CashHistoryTableViewProps> = ({
   const [expandedUuid, setExpandedUuid] = useState<string | null>(null);
   const [transactionsMap, setTransactionsMap] = useState<Record<string, CashLedgerItem[]>>({});
   const [loadingTxns, setLoadingTxns] = useState<Record<string, boolean>>({});
-
-  const API_BASE = (window as any).__JBJ_API_BASE__ || '/api';
 
   const fetchStatus = async () => {
     try {

@@ -730,8 +730,7 @@ router.post('/create', async (req: Request, res: Response) => {
 
   invoicesList.unshift(createdInvoice);
 
-  // Trigger automatic stock deduction & cash tracking
-  deductInventoryStockOnSale(createdInvoice).catch(() => { });
+  // Record cash movement only — inventory deduction is handled by storeBillingTransaction -> recordInventoryMovement (single source of truth)
   recordInvoiceCashTransaction(createdInvoice).catch(() => { });
 
   // Trigger 3-table billing storage (customer_billing, billing_sell_buy_records, billing_payment_history)
@@ -775,28 +774,44 @@ router.post('/create', async (req: Request, res: Response) => {
 async function recordInvoiceCashTransaction(invoice: any) {
   try {
     const txnType = (invoice.transaction_type || 'SELL').toUpperCase();
-    const finalAmount = Number(invoice.final_amount || 0);
-    if (finalAmount <= 0) return;
 
-    const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
+    // BUG FIX: Use paid_amount for SELL/ORDER/EXCHANGE (actual cash received, not full invoice value)
+    // For BUY (scrap purchase), use final_amount — shop always pays the full amount in cash
+    let cashAmount: number;
+    let flowType: 'IN' | 'OUT';
 
-    let flowType: 'IN' | 'OUT' = 'IN';
     if (txnType === 'BUY') {
-      flowType = 'OUT'; // Shop pays customer cash for scrap gold
+      // Shop pays customer cash for their scrap gold — full amount
+      cashAmount = Number(invoice.final_amount || 0);
+      flowType = 'OUT';
     } else if (txnType === 'SELL' || txnType === 'ORDER') {
-      flowType = 'IN'; // Customer pays shop
+      // Customer pays shop — only record what was ACTUALLY collected (paid_amount)
+      // If customer owes remaining (Udhaari), that will be recorded on each installment separately
+      cashAmount = Number(invoice.paid_amount || invoice.final_amount || 0);
+      flowType = 'IN';
     } else if (txnType === 'EXCHANGE') {
+      // Net cash difference collected (if any)
+      cashAmount = Number(invoice.paid_amount || invoice.final_amount || 0);
+      flowType = 'IN';
+    } else {
+      cashAmount = Number(invoice.paid_amount || invoice.final_amount || 0);
       flowType = 'IN';
     }
 
+    if (cashAmount <= 0) {
+      console.log(`ℹ️ No cash movement for ${txnType} Invoice #${invoice.id} (paid_amount = 0, Udhaari/Credit sale)`);
+      return;
+    }
+
+    const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
     await recordCashTransaction({
       transaction_id: String(invoice.id),
       transaction_type: txnType as any,
       flow_type: flowType,
-      amount: finalAmount,
+      amount: cashAmount,
       metal_type: invoice.metal_type || 'GOLD',
       item_type: invoice.product_name || `${txnType} Invoice`,
-      notes: `${txnType} Invoice #${invoice.id} - ${invoice.customer_name || 'Walk-in'}`,
+      notes: `${txnType} Invoice #${invoice.id} - ${invoice.customer_name || 'Walk-in'} (Paid: ₹${cashAmount.toLocaleString('en-IN')})`,
       date: invoice.created_at ? String(invoice.created_at).split('T')[0] : undefined,
     });
   } catch (err) {
@@ -1323,6 +1338,9 @@ function matchesDateFilterIST(created_at: any, targetDate: string, startDate?: s
 
 // GET /api/accounts/day-book - Comprehensive EOD Day Book & Accounts Ledger
 router.get('/accounts/day-book', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   try {
     const targetDate = (req.query.date as string) || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const startDate = req.query.startDate as string;
@@ -1343,14 +1361,6 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
     const invoices = Array.from(combinedInvoicesMap.values()).filter((inv) =>
       matchesDateFilterIST(inv.created_at, targetDate, startDate, endDate)
     );
-
-    // 2. Fetch Orders for targetDate
-    const { data: ordersData } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    const orders = (ordersData || []).filter((ord) => matchesDateFilterIST(ord.created_at, targetDate, startDate, endDate));
 
     // 3. Fetch Workers table & Worker Transactions for targetDate
     const { data: dbWorkers } = await supabase.from('workers').select('id, name');
@@ -1377,13 +1387,21 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
 
     const addedProductsToday = (dbProducts || []).filter((p) => matchesDateFilterIST(p.created_at, targetDate, startDate, endDate));
 
-    // 5. Fetch Finance Loans from Supabase 'interests' table for targetDate
+    // 5. Fetch Finance Loans from Supabase 'finance' table for targetDate
     const { data: dbLoans } = await supabase
-      .from('interests')
+      .from('finance')
       .select('*')
       .order('created_at', { ascending: true });
 
-    const loansToday = (dbLoans || []).filter((fl) => matchesDateFilterIST(fl.created_at || fl.loan_date, targetDate, startDate, endDate));
+    const loansToday = (dbLoans || []).filter((fl) => matchesDateFilterIST(fl.created_at || fl.debt_date || fl.loan_date, targetDate, startDate, endDate));
+
+    // 5.5 Fetch Cash Ledger transactions from Supabase 'cash_transaction_ledger'
+    const { data: dbCashLedger } = await supabase
+      .from('cash_transaction_ledger')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    const cashLedgerToday = (dbCashLedger || []).filter((tx) => matchesDateFilterIST(tx.created_at, targetDate, startDate, endDate));
 
     // 6. Fetch customer_billing & billing_sell_buy_records for fast Transaction Activity calculation
     const [{ data: dbCustomerBills }, { data: dbBillingRecords }] = await Promise.all([
@@ -1532,12 +1550,53 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       silverBoughtPure: round3Decimals(t.silverBoughtPure),
     });
 
+    const totalGoldSoldGross = round3Decimals(orderTracker.goldSoldGross + sellTracker.goldSoldGross + buyTracker.goldSoldGross + tradeInTracker.goldSoldGross);
+    const totalGoldSoldNet = round3Decimals(orderTracker.goldSoldNet + sellTracker.goldSoldNet + buyTracker.goldSoldNet + tradeInTracker.goldSoldNet);
+    const totalGoldSoldPure = round3Decimals(orderTracker.goldSoldPure + sellTracker.goldSoldPure + buyTracker.goldSoldPure + tradeInTracker.goldSoldPure);
+
+    const totalGoldBoughtGross = round3Decimals(orderTracker.goldBoughtGross + sellTracker.goldBoughtGross + buyTracker.goldBoughtGross + tradeInTracker.goldBoughtGross);
+    const totalGoldBoughtNet = round3Decimals(orderTracker.goldBoughtNet + sellTracker.goldBoughtNet + buyTracker.goldBoughtNet + tradeInTracker.goldBoughtNet);
+    const totalGoldBoughtPure = round3Decimals(orderTracker.goldBoughtPure + sellTracker.goldBoughtPure + buyTracker.goldBoughtPure + tradeInTracker.goldBoughtPure);
+
+    const totalSilverSoldGross = round3Decimals(orderTracker.silverSoldGross + sellTracker.silverSoldGross + buyTracker.silverSoldGross + tradeInTracker.silverSoldGross);
+    const totalSilverSoldNet = round3Decimals(orderTracker.silverSoldNet + sellTracker.silverSoldNet + buyTracker.silverSoldNet + tradeInTracker.silverSoldNet);
+    const totalSilverSoldPure = round3Decimals(orderTracker.silverSoldPure + sellTracker.silverSoldPure + buyTracker.silverSoldPure + tradeInTracker.silverSoldPure);
+
+    const totalSilverBoughtGross = round3Decimals(orderTracker.silverBoughtGross + sellTracker.silverBoughtGross + buyTracker.silverBoughtGross + tradeInTracker.silverBoughtGross);
+    const totalSilverBoughtNet = round3Decimals(orderTracker.silverBoughtNet + sellTracker.silverBoughtNet + buyTracker.silverBoughtNet + tradeInTracker.silverBoughtNet);
+    const totalSilverBoughtPure = round3Decimals(orderTracker.silverBoughtPure + sellTracker.silverBoughtPure + buyTracker.silverBoughtPure + tradeInTracker.silverBoughtPure);
+
+    const netPureGoldFlow = round3Decimals(totalGoldBoughtPure - totalGoldSoldPure);
+    const netPureSilverFlow = round3Decimals(totalSilverBoughtPure - totalSilverSoldPure);
+
+    const overallMetalPuritySummary = {
+      gold: {
+        soldGross: totalGoldSoldGross,
+        soldNet: totalGoldSoldNet,
+        soldPure: totalGoldSoldPure,
+        boughtGross: totalGoldBoughtGross,
+        boughtNet: totalGoldBoughtNet,
+        boughtPure: totalGoldBoughtPure,
+        netPureFlow: netPureGoldFlow,
+      },
+      silver: {
+        soldGross: totalSilverSoldGross,
+        soldNet: totalSilverSoldNet,
+        soldPure: totalSilverSoldPure,
+        boughtGross: totalSilverBoughtGross,
+        boughtNet: totalSilverBoughtNet,
+        boughtPure: totalSilverBoughtPure,
+        netPureFlow: netPureSilverFlow,
+      }
+    };
+
     const billingActivitySummary = {
       totalTransactionsCount,
       orderMode: { count: finalOrderCount, ...roundDetailedTracker(orderTracker) },
       sellMode: { count: finalSellCount, ...roundDetailedTracker(sellTracker) },
       buyMode: { count: finalBuyCount, ...roundDetailedTracker(buyTracker) },
       tradeInMode: { count: finalTradeInCount, ...roundDetailedTracker(tradeInTracker) },
+      overallMetalPuritySummary,
       activityCounts: {
         orderCount: finalOrderCount,
         sellCount: finalSellCount,
@@ -1567,7 +1626,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       const formattedTime = p.created_at
         ? new Date(p.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
         : '12:00 PM';
-      const wt = Number(p.stock_quantity || p.weight_grams || p.weight_from_grams || 0);
+      const wt = Number(p.current_stock_weight ?? p.weight_grams ?? p.stock_quantity ?? p.weight_from_grams ?? 0);
       const pcs = Number(p.initial_quantity || 0);
 
       logBookTimeline.push({
@@ -1591,18 +1650,18 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       const formattedTime = fl.created_at
         ? new Date(fl.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
         : '01:30 PM';
-      const wt = Number(fl.item_weight_grams || fl.net_weight || fl.gross_weight || fl.weight_grams || 0);
-      const loanAmt = Number(fl.amount || fl.principal_amount || fl.loan_amount || 0);
+      const wt = Number(fl.item_weight ?? fl.item_weight_grams ?? fl.net_weight ?? fl.gross_weight ?? 0);
+      const loanAmt = Number(fl.customer_debt_money ?? fl.current_principal ?? fl.amount ?? 0);
       const fullName = `${fl.customer_name || 'Finance'} ${fl.customer_surname || ''}`.trim();
 
       logBookTimeline.push({
-        id: `log-fin-${fl.id || Math.random()}`,
+        id: `log-fin-${fl.finance_uuid || fl.id || Math.random()}`,
         time: formattedTime,
-        created_at: fl.created_at || fl.loan_date || new Date().toISOString(),
+        created_at: fl.created_at || fl.debt_date || fl.loan_date || new Date().toISOString(),
         type: 'FINANCE',
         title: fullName || 'Finance Customer',
-        details: `Gold Loan Finance · ${fl.item_name || fl.ornament_description || 'Gold Item'} (${wt}g)`,
-        category: (fl.item_metal_type || 'GOLD').toUpperCase(),
+        details: `Gold Loan Finance · ${fl.item_name || 'Gold Item'} (${wt}g)`,
+        category: (fl.debt_category || fl.item_metal_type || 'GOLD').toUpperCase(),
         weight_grams: wt,
         amount: loanAmt,
         paid_amount: loanAmt,
@@ -1657,19 +1716,48 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       });
     });
 
-    // Process Invoices
+    // Process Cash Register Ledger Transactions (Cash Loaded / Manual Cash Entries)
+    cashLedgerToday.forEach((tx: any) => {
+      const type = (tx.transaction_type || '').toUpperCase();
+      // Skip bill-based cash entries (SELL, BUY, EXCHANGE) as they are logged via invoices below
+      if (type === 'SELL' || type === 'BUY' || type === 'EXCHANGE' || type === 'FINANCE') return;
+
+      const formattedTime = tx.created_at
+        ? new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '12:00 PM';
+      const amt = Number(tx.transaction_cash_total || 0);
+      const isFlowIn = (tx.flow_type || '').toUpperCase() === 'IN';
+
+      logBookTimeline.push({
+        id: `log-cash-${tx.cash_history_uuid || tx.id || Math.random()}`,
+        time: formattedTime,
+        created_at: tx.created_at || new Date().toISOString(),
+        type: 'CASH_REGISTER',
+        title: type === 'LOADING' ? 'Cash Loaded to Drawer' : (tx.notes || 'Cash Entry'),
+        details: `${isFlowIn ? '💵 Cash IN (Loaded to Drawer)' : '💸 Cash OUT'} · Amount: ₹${amt.toLocaleString('en-IN')}${tx.notes ? ` (${tx.notes})` : ''}`,
+        category: 'CASH',
+        weight_grams: 0,
+        amount: amt,
+        paid_amount: isFlowIn ? amt : 0,
+        due_amount: 0,
+        payment_mode: isFlowIn ? 'CASH_IN' : 'CASH_OUT',
+        raw_cash_ledger: tx,
+      });
+    });
+
+    // Process Invoices (Orders, Sells, Buys, Trade-ins from customer_billing)
     invoices.forEach((inv: any) => {
       const formattedTime = inv.created_at
         ? new Date(inv.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
         : '10:00 AM';
 
-      const jsonMode = inv.receipt_json_data?.transaction_type || inv.transaction_type || 'SELL';
+      const jsonMode = (inv.receipt_json_data?.transaction_type || inv.transaction_type || 'SELL').toUpperCase();
       const items = inv.receipt_json_data?.items || [];
       const netAmount = Number(inv.final_amount || inv.receipt_json_data?.netPayable || 0);
       const paidAmount = Number(inv.paid_amount || inv.receipt_json_data?.advancePaidAmount || netAmount);
       const dueAmount = Number(inv.due_amount || inv.receipt_json_data?.balanceDueAmount || 0);
 
-      const isSell = jsonMode === 'SELL' || jsonMode === 'EXCHANGE';
+      const isSell = jsonMode === 'SELL' || jsonMode === 'EXCHANGE' || jsonMode === 'TRADE_IN' || jsonMode === 'ORDER';
 
       if (isSell) {
         totalSalesValue += netAmount;
@@ -1683,116 +1771,47 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
 
       items.forEach((item: any) => {
         const wt = Number(item.weight_grams || 0);
-        const isGold = item.metal_type !== 'SILVER';
+        const isGold = (item.metal_type || '').toUpperCase() !== 'SILVER';
 
         if (item.item_type === 'SELL') {
           if (isGold) totalGoldWeightSold += wt;
           else totalSilverWeightSold += wt;
           makingChargesProfit += Number(item.making_charges_per_gram || 0) * wt;
-        } else if (item.item_type === 'BUY') {
+        } else if (item.item_type === 'BUY' || item.item_type === 'EXCHANGE_BUY') {
           if (isGold) totalGoldWeightBought += wt;
           else totalSilverWeightBought += wt;
           totalScrapPayout += Number(item.total_price || 0);
         }
       });
 
+      // Build rich description if multi-item (Order or Exchange)
+      const sellItems = items.filter((it: any) => it.item_type === 'SELL');
+      const buyItems = items.filter((it: any) => it.item_type === 'BUY' || it.item_type === 'EXCHANGE_BUY');
+      let detailsText = `${inv.product_name || 'Jewellery'} · Weight: ${inv.weight_grams || 0}g`;
+      if (sellItems.length > 0 && buyItems.length > 0) {
+        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
+        const buyStr = buyItems.map((i: any) => `${i.product_name || 'Scrap'} (${i.weight_grams || 0}g)`).join(', ');
+        detailsText = `📦 Sold: ${sellStr} | ⚖️ Bought: ${buyStr}`;
+      } else if (sellItems.length > 0 && jsonMode === 'ORDER') {
+        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
+        detailsText = `📦 Sold: ${sellStr}`;
+      }
+
       logBookTimeline.push({
         id: `log-inv-${inv.id}`,
         time: formattedTime,
         created_at: inv.created_at,
-        type: jsonMode,
+        type: jsonMode === 'TRADE_IN' ? 'EXCHANGE' : jsonMode,
         title: inv.customer_name || 'Walk-in Customer',
-        details: `${inv.product_name || 'Jewellery'} · Weight: ${inv.weight_grams || 0}g`,
+        details: detailsText,
         category: inv.metal_type || 'GOLD',
         weight_grams: Number(inv.weight_grams || 0),
         amount: netAmount,
         paid_amount: paidAmount,
         due_amount: dueAmount,
-        payment_mode: inv.receipt_json_data?.paymentType || 'CASH',
+        payment_mode: inv.receipt_json_data?.paymentType || (dueAmount === 0 ? 'FULL' : 'PARTIAL'),
         customer_phone: inv.customer_phone,
         raw_invoice: inv,
-      });
-    });
-
-    // Process Orders
-    orders.forEach((ord: any) => {
-      const formattedTime = ord.created_at
-        ? new Date(ord.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '11:00 AM';
-
-      const ordTotal = Number(ord.total_amount || ord.grand_total || ord.final_amount || 0);
-      const ordPaid = Number(ord.paid_amount || ord.advance_amount || 0);
-      const ordDue = Number(ord.due_amount || (ordTotal > ordPaid ? ordTotal - ordPaid : 0));
-      const ordWeight = Number(ord.net_weight || ord.gross_weight || ord.weight_grams || 0);
-
-      // Build complete receipt_json_data for order if not already stored in DB
-      let ordReceiptJson = ord.receipt_json_data;
-      if (typeof ordReceiptJson === 'string') {
-        try { ordReceiptJson = JSON.parse(ordReceiptJson); } catch (e) { }
-      }
-
-      if (!ordReceiptJson) {
-        ordReceiptJson = {
-          transaction_type: 'ORDER',
-          customer_name: ord.customer_name || 'Customer',
-          customer_phone: ord.customer_phone || '',
-          customer_address: ord.customer_address || 'Siddipet, Telangana',
-          items: Array.isArray(ord.items) && ord.items.length > 0 ? ord.items : [
-            {
-              id: 'ord-item-1',
-              product_name: ord.item_name || 'Custom Jewellery',
-              metal_type: (ord.metal_type || 'GOLD').toUpperCase(),
-              weight_grams: ordWeight,
-              total_price: ordTotal,
-              item_type: 'SELL',
-              making_charges_per_gram: Number(ord.making_charges || 0),
-              wastage_percent: Number(ord.wastage_percent || 0),
-            }
-          ],
-          totalSellValue: ordTotal,
-          netPayable: ordTotal,
-          advancePaidAmount: ordPaid,
-          balanceDueAmount: ordDue,
-          paymentType: ordDue === 0 ? 'FULL' : 'PARTIAL',
-          notes: ord.notes || '',
-          delivery_date: ord.delivery_date || '',
-        };
-      }
-
-      // Build detailed Order card description for both-way SELL & BUY orders
-      let orderDetailsText = '';
-      const orderItems = ordReceiptJson?.items || [];
-      const sellItems = orderItems.filter((it: any) => it.item_type === 'SELL');
-      const buyItems = orderItems.filter((it: any) => it.item_type === 'BUY' || it.item_type === 'EXCHANGE_BUY');
-
-      if (sellItems.length > 0 && buyItems.length > 0) {
-        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
-        const buyStr = buyItems.map((i: any) => `${i.product_name || 'Scrap'} (${i.weight_grams || 0}g)`).join(', ');
-        orderDetailsText = `📦 Sold: ${sellStr} | ⚖️ Bought: ${buyStr} · Advance Paid: ₹${ordPaid.toLocaleString('en-IN')}`;
-      } else if (sellItems.length > 0) {
-        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
-        orderDetailsText = `📦 Sold: ${sellStr} · Advance Paid: ₹${ordPaid.toLocaleString('en-IN')}`;
-      } else {
-        orderDetailsText = `📦 Sold: ${ord.item_name || 'Custom Jewellery'} (${ordWeight}g) · Advance Paid: ₹${ordPaid.toLocaleString('en-IN')}`;
-      }
-
-      const isBothWay = sellItems.length > 0 && buyItems.length > 0;
-
-      logBookTimeline.push({
-        id: `log-ord-${ord.id}`,
-        time: formattedTime,
-        created_at: ord.created_at,
-        type: 'ORDER',
-        title: ord.customer_name || 'Customer',
-        details: orderDetailsText,
-        category: (ord.metal_type || 'GOLD').toUpperCase(),
-        weight_grams: ordWeight,
-        amount: ordTotal,
-        paid_amount: ordPaid,
-        due_amount: ordDue,
-        payment_mode: 'ADVANCE',
-        customer_phone: ord.customer_phone,
-        raw_order: { ...ord, receipt_json_data: ordReceiptJson },
       });
     });
 
@@ -1804,24 +1823,108 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       item.payment_status = item.due_amount > 0 ? 'PARTIAL' : 'FULL';
     });
 
-    // --- Category Stock Balance Summary ---
+    // --- Category Stock Balance Summary (100% Dynamic from inventory_products) ---
+    let currentGoldShowcase = 0;
+    let currentSilverShowcase = 0;
+    (dbProducts || []).forEach((p: any) => {
+      const metal = (p.item_type || p.metal_type || 'GOLD').toUpperCase();
+      const wt = Number(p.stock_quantity || p.weight_grams || p.weight_from_grams || 0);
+      if (metal.includes('SILVER')) {
+        currentSilverShowcase += wt;
+      } else {
+        currentGoldShowcase += wt;
+      }
+    });
+
+    const goldLoadedToday = addedProductsToday
+      .filter((p: any) => !(p.item_type || 'GOLD').toUpperCase().includes('SILVER'))
+      .reduce((sum: number, p: any) => sum + Number(p.stock_quantity || p.weight_grams || 0), 0);
+    const silverLoadedToday = addedProductsToday
+      .filter((p: any) => (p.item_type || 'GOLD').toUpperCase().includes('SILVER'))
+      .reduce((sum: number, p: any) => sum + Number(p.stock_quantity || p.weight_grams || 0), 0);
+
+    const goldWorkerOutToday = (workerTransactions || [])
+      .filter((tx: any) => {
+        const dir = String(tx.direction || tx.transfer_direction || tx.type || '').toUpperCase();
+        const isAdminToWorker = dir.includes('OUTGOING') || dir.includes('ADMIN') || dir.includes('SEND') || dir.includes('ISSUE');
+        const itemMode = (tx.category || tx.item_type || tx.metal_type || 'GOLD').toUpperCase();
+        return isAdminToWorker && itemMode.includes('GOLD');
+      })
+      .reduce((sum: number, tx: any) => sum + Number(tx.weight_grams || tx.net_weight || tx.fine_weight_grams || 0), 0);
+
+    const silverWorkerOutToday = (workerTransactions || [])
+      .filter((tx: any) => {
+        const dir = String(tx.direction || tx.transfer_direction || tx.type || '').toUpperCase();
+        const isAdminToWorker = dir.includes('OUTGOING') || dir.includes('ADMIN') || dir.includes('SEND') || dir.includes('ISSUE');
+        const itemMode = (tx.category || tx.item_type || tx.metal_type || 'GOLD').toUpperCase();
+        return isAdminToWorker && itemMode.includes('SILVER');
+      })
+      .reduce((sum: number, tx: any) => sum + Number(tx.weight_grams || tx.net_weight || tx.fine_weight_grams || 0), 0);
+
+    // --- Cash & Register Summary (100% Dynamic from cash_history) ---
+    const { data: todayCashRow } = await supabase
+      .from('cash_history')
+      .select('*')
+      .lte('date', targetDate)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let liveClosingCash = 0;
+    let openingCash = 0;
+
+    if (todayCashRow) {
+      liveClosingCash = Number(todayCashRow.current_cash || 0);
+      // Get opening cash from previous day
+      const { data: prevCashRow } = await supabase
+        .from('cash_history')
+        .select('*')
+        .lt('date', todayCashRow.date)
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      openingCash = Number(prevCashRow?.current_cash || liveClosingCash);
+    }
+
+    const { getOrInitOpeningRecord } = await import('../../utils/openingRecordHelper');
+    const openingRecord = await getOrInitOpeningRecord(
+      targetDate,
+      {
+        goldGrams: round3Decimals(currentGoldShowcase + totalGoldWeightSold + goldWorkerOutToday),
+        silverGrams: round3Decimals(currentSilverShowcase + totalSilverWeightSold + silverWorkerOutToday),
+        cashAmount: Number(openingCash.toFixed(2))
+      },
+      { goldGrams: round3Decimals(goldLoadedToday), silverGrams: round3Decimals(silverLoadedToday) }
+    );
+
+    const goldOpeningWeight = round3Decimals(openingRecord.openingGoldGrams);
+    const silverOpeningWeight = round3Decimals(openingRecord.openingSilverGrams);
+
     const stockSummary = [
-      { category: 'Gold Ornaments (22K)', openingWeight: 1000.000, loadedWeight: 0, soldWeight: totalGoldWeightSold, closingWeight: round3Decimals(1000.000 - totalGoldWeightSold) },
-      { category: 'Silver Articles & Ornaments (92.5)', openingWeight: 40000.000, loadedWeight: 0, soldWeight: totalSilverWeightSold, closingWeight: round3Decimals(40000.000 - totalSilverWeightSold) },
+      {
+        category: 'Gold Ornaments',
+        openingWeight: goldOpeningWeight,
+        loadedWeight: round3Decimals(goldLoadedToday),
+        soldWeight: totalGoldWeightSold,
+        closingWeight: round3Decimals(currentGoldShowcase),
+      },
+      {
+        category: 'Silver Articles & Ornaments',
+        openingWeight: silverOpeningWeight,
+        loadedWeight: round3Decimals(silverLoadedToday),
+        soldWeight: totalSilverWeightSold,
+        closingWeight: round3Decimals(currentSilverShowcase),
+      },
     ];
 
-    // --- Cash & Register Summary ---
-    const openingCash = 800000;
-    const dailyExpenses = 1500;
-    const expectedClosingCash = openingCash + totalSalesCash + oldDuesCollected - totalScrapPayout - dailyExpenses;
-
     const cashSummary = {
-      openingCash,
+      openingCash: Number(openingRecord.openingCashAmount.toFixed(2)),
       salesCashCollected: totalSalesCash,
       oldDuesCollected,
       scrapPayout: totalScrapPayout,
-      dailyExpenses,
-      expectedClosingCash: Math.max(0, expectedClosingCash),
+      dailyExpenses: 0,
+      expectedClosingCash: Number(liveClosingCash.toFixed(2)),
       upiCollected: totalSalesUPI,
       cardCollected: totalSalesCard,
     };
@@ -1879,6 +1982,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
 
 
     // --- Profit Summary ---
+    const dailyExpenses = 0;
     const netProfit = makingChargesProfit - dailyExpenses;
     const profitSummary = {
       makingChargesProfit,

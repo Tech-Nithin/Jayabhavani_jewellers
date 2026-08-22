@@ -36,6 +36,29 @@ import { playJbjNotificationSound } from './utils/soundUtils';
 import { initNativeNotifications, triggerDeviceNotification } from './utils/nativeNotification';
 
 export default function WorkerApp() {
+  // Global Protection: Disable mouse wheel increment/decrement on all number input fields across the entire worker app
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      const activeEl = document.activeElement as HTMLInputElement | null;
+      const targetEl = e.target as HTMLInputElement | null;
+
+      const isNumberInput = (el: HTMLInputElement | null) =>
+        Boolean(el && el.tagName === 'INPUT' && (el.type === 'number' || el.getAttribute('type') === 'number'));
+
+      if (isNumberInput(activeEl)) {
+        activeEl?.blur();
+      }
+      if (isNumberInput(targetEl)) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   const [worker, setWorker] = useState<WorkerProfile | null>(() => {
     try {
       const saved = localStorage.getItem('jbj_worker_profile');
