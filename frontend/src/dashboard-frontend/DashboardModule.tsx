@@ -88,6 +88,10 @@ export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language 
   const [showFinanceAmounts, setShowFinanceAmounts] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
 
+  // Billing Table Filters & Local Search State
+  const [billingSearchTerm, setBillingSearchTerm] = useState('');
+  const [billingMetalFilter, setBillingMetalFilter] = useState<'ALL' | 'GOLD' | 'SILVER' | 'FINANCE'>('ALL');
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dateDropdownRef.current && !dateDropdownRef.current.contains(e.target as Node)) {
@@ -195,14 +199,83 @@ export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language 
 
   // Filtered Datasets
   const filteredInvoices = invoices.filter((inv) => {
-    const term = debouncedSearchTerm.toLowerCase();
-    const matchesSearch =
-      !term ||
-      inv.customer_name?.toLowerCase().includes(term) ||
-      (inv.customer_phone && inv.customer_phone.includes(term)) ||
-      (inv.customer_address && inv.customer_address.toLowerCase().includes(term)) ||
-      inv.product_name?.toLowerCase().includes(term);
-    return matchesSearch && isWithinDateRange(inv.created_at);
+    const globalTerm = debouncedSearchTerm.toLowerCase();
+    const localTerm = billingSearchTerm.trim().toLowerCase();
+    const invNum = (inv.invoice_number || '').toLowerCase();
+    const custName = (inv.customer_name || '').toLowerCase();
+    const custPhone = (inv.customer_phone || '').toLowerCase();
+    const custAddr = (inv.customer_address || '').toLowerCase();
+    const prodName = (inv.product_name || '').toLowerCase();
+
+    const matchesGlobal =
+      !globalTerm ||
+      custName.includes(globalTerm) ||
+      invNum.includes(globalTerm) ||
+      custPhone.includes(globalTerm) ||
+      custAddr.includes(globalTerm) ||
+      prodName.includes(globalTerm);
+
+    const matchesLocal =
+      !localTerm ||
+      custName.includes(localTerm) ||
+      invNum.includes(localTerm) ||
+      custPhone.includes(localTerm) ||
+      custAddr.includes(localTerm) ||
+      prodName.includes(localTerm);
+
+    if (!matchesGlobal || !matchesLocal || !isWithinDateRange(inv.created_at)) return false;
+
+    // Metal & Finance Category Filter
+    if (billingMetalFilter !== 'ALL') {
+      const mode = (inv.transaction_type || '').toUpperCase();
+      const rawItems: any[] = inv.receipt_json_data?.items || [];
+      const topMetal = (
+        inv.receipt_json_data?.metal_type ||
+        (inv as any).metal_type ||
+        ''
+      ).toUpperCase();
+
+      const isFinanceOrCash =
+        mode === 'CASH' ||
+        mode === 'FINANCE' ||
+        topMetal === 'CASH' ||
+        topMetal === 'FINANCE' ||
+        prodName.includes('cash') ||
+        prodName.includes('loan') ||
+        prodName.includes('finance') ||
+        rawItems.some((it: any) => {
+          const m = (it.metal_type || it.product_name || '').toUpperCase();
+          return m.includes('CASH') || m.includes('FINANCE');
+        });
+
+      if (billingMetalFilter === 'FINANCE') {
+        if (!isFinanceOrCash) return false;
+      } else if (billingMetalFilter === 'SILVER') {
+        if (isFinanceOrCash) return false;
+        const hasSilverItem =
+          topMetal === 'SILVER' ||
+          prodName.includes('silver') ||
+          rawItems.some((it: any) => {
+            const m = (it.metal_type || '').toUpperCase();
+            const p = (it.product_name || '').toLowerCase();
+            return m === 'SILVER' || p.includes('silver');
+          });
+        if (!hasSilverItem) return false;
+      } else if (billingMetalFilter === 'GOLD') {
+        if (isFinanceOrCash) return false;
+        const hasGoldItem =
+          topMetal === 'GOLD' ||
+          rawItems.some((it: any) => {
+            const m = (it.metal_type || '').toUpperCase();
+            const p = (it.product_name || '').toLowerCase();
+            return m === 'GOLD' || (!m && !p.includes('silver'));
+          }) ||
+          (rawItems.length === 0 && topMetal !== 'SILVER' && !prodName.includes('silver'));
+        if (!hasGoldItem) return false;
+      }
+    }
+
+    return true;
   });
 
   const filteredOrders = orders.filter((ord) => {
@@ -780,14 +853,87 @@ export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language 
 
       {/* ── Table 1: Recent 10 Billing Transactions ── */}
       <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e6decb', boxShadow: '0 6px 20px rgba(24,19,16,0.03)', marginBottom: '1.25rem', overflow: 'hidden' }}>
-        <div style={{ padding: '0.85rem 1.1rem', background: '#fcfaf7', borderBottom: '1px solid #e6decb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#181310', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className="fa-solid fa-receipt" style={{ color: '#d97706' }}></i>
-            {isTe ? 'ఇటీవలి 10 బిల్లింగ్ లావాదేవీలు' : 'Recent 10 Billing Transactions'}
-          </h3>
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#786a5e', background: '#f4ede4', padding: '3px 8px', borderRadius: '6px' }}>
-            {filteredInvoices.length} {isTe ? 'మొత్తం బిల్లులు' : 'Total Bills'}
-          </span>
+        <div style={{ padding: '0.85rem 1.1rem', background: '#fcfaf7', borderBottom: '1px solid #e6decb', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#181310', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="fa-solid fa-receipt" style={{ color: '#d97706' }}></i>
+              {isTe ? 'ఇటీవలి 10 బిల్లింగ్ లావాదేవీలు' : 'Recent 10 Billing Transactions'}
+            </h3>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#786a5e', background: '#f4ede4', padding: '3px 8px', borderRadius: '6px' }}>
+              {filteredInvoices.length} {isTe ? 'మొత్తం బిల్లులు' : 'Total Bills'}
+            </span>
+          </div>
+
+          {/* Search Input & Category Filters */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {/* Search Input */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <i className="fa-solid fa-magnifying-glass" style={{ position: 'absolute', left: '9px', color: '#94a3b8', fontSize: '0.75rem' }} />
+              <input
+                type="text"
+                value={billingSearchTerm}
+                onChange={(e) => setBillingSearchTerm(e.target.value)}
+                placeholder={isTe ? 'ఖాతా దారుడు, నంబర్ లేదా బిల్...' : 'Search bills, customer, phone...'}
+                style={{
+                  padding: '0.35rem 0.6rem 0.35rem 1.8rem',
+                  fontSize: '0.74rem',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  outline: 'none',
+                  width: '260px',
+                  maxWidth: '100%',
+                  background: '#ffffff',
+                }}
+              />
+              {billingSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setBillingSearchTerm('')}
+                  style={{ position: 'absolute', right: '6px', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.75rem' }}
+                >
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              )}
+            </div>
+
+            {/* Category Pills (ALL, GOLD, SILVER, FINANCE) */}
+            <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              {[
+                { id: 'ALL', label: isTe ? 'అన్నీ' : 'All', icon: 'fa-solid fa-layer-group', color: '#475569' },
+                { id: 'GOLD', label: isTe ? 'బంగారం' : 'Gold', icon: 'fa-solid fa-coins', color: '#b45309' },
+                { id: 'SILVER', label: isTe ? 'వెండి' : 'Silver', icon: 'fa-solid fa-gem', color: '#475569' },
+                { id: 'FINANCE', label: isTe ? 'ఫైనాన్స్' : 'Finance', icon: 'fa-solid fa-hand-holding-dollar', color: '#059669' },
+              ].map((f) => {
+                const isActive = billingMetalFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setBillingMetalFilter(f.id as any)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: isActive ? '#ffffff' : 'transparent',
+                      color: isActive ? f.color : '#64748b',
+                      fontWeight: isActive ? 800 : 600,
+                      fontSize: '0.70rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <i className={f.icon} style={{ fontSize: '0.65rem' }} />
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -827,7 +973,7 @@ export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language 
                 <tr>
                   <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                     <i className="fa-solid fa-folder-open" style={{ fontSize: '1.5rem', marginBottom: '6px', color: '#cbd5e1' }} />
-                    <p style={{ margin: 0, fontWeight: 600 }}>No billing transactions found for selected date range.</p>
+                    <p style={{ margin: 0, fontWeight: 600 }}>No billing transactions found for selected filter.</p>
                   </td>
                 </tr>
               ) : (
@@ -838,15 +984,35 @@ export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language 
 
                   const rawProductName = inv.product_name || inv.receipt_json_data?.items?.[0]?.product_name || 'Jewellery Item';
                   const cleanedProductName = rawProductName
-                    // 1. Remove concatenated order references like AnkletORD-20260813-9935, BangleORD-20260813-5282, Order-123
                     .replace(/(?:Custom\s*)?(?:Order|ORD|ord)[-0-9a-z]*/gi, '')
-                    // 2. Remove parenthesized order references like (-9935), (-5282), (-ord-834u3), (-9935, (ORD-9935)
                     .replace(/\s*\(\s*-(?:ORD|ord)?-?[0-9a-z]+\s*\)?/gi, '')
                     .replace(/\s*\(\s*#(?:ORD|ord)?-?[0-9a-z]+\s*\)?/gi, '')
                     .replace(/\s*\(\s*(?:ORD|ord)-?[0-9a-z]+\s*\)?/gi, '')
                     .replace(/\s+-\d{3,}\b/g, '')
                     .replace(/^[\s:\-\|\(\)]+|[\s:\-\|\(\)]+$/g, '')
                     .trim() || rawProductName || 'Jewellery Item';
+
+                  const rawMetal = (
+                    inv.receipt_json_data?.items?.[0]?.metal_type ||
+                    inv.receipt_json_data?.metal_type ||
+                    (inv as any).metal_type ||
+                    ''
+                  ).toUpperCase();
+
+                  const isFinanceItem =
+                    mode === 'CASH' ||
+                    mode === 'FINANCE' ||
+                    rawMetal === 'CASH' ||
+                    rawMetal === 'FINANCE' ||
+                    rawProductName.toLowerCase().includes('cash') ||
+                    rawProductName.toLowerCase().includes('loan') ||
+                    rawProductName.toLowerCase().includes('finance');
+
+                  const detectedMetal = isFinanceItem
+                    ? 'FINANCE'
+                    : rawMetal === 'SILVER' || rawProductName.toLowerCase().includes('silver')
+                      ? 'SILVER'
+                      : 'GOLD';
 
                   return (
                     <tr key={inv.id || idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
@@ -878,25 +1044,127 @@ export const DashboardModule: React.FC<{ globalSearch?: string; lang?: Language 
                         </span>
                       </td>
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {primaryImg ? (
-                            <img
-                              src={primaryImg}
-                              alt="Product"
-                              onClick={() => setPreviewImage({ url: primaryImg, title: `${inv.customer_name}'s ${cleanedProductName}` })}
-                              title="Click to enlarge image"
-                              style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #d97706', cursor: 'pointer', flexShrink: 0 }}
-                            />
-                          ) : (
-                            <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>
-                              <i className="fa-solid fa-gem" style={{ color: '#d97706' }} />
+                        {(() => {
+                          const rawItems: any[] = inv.receipt_json_data?.items || [];
+                          let itemsToDisplay: Array<{ name: string; metal: string; type?: string; weight?: number; pureWeight?: number }> = [];
+
+                          if (rawItems.length > 0) {
+                            itemsToDisplay = rawItems.map((it: any) => {
+                              const rawName = it.product_name || `${it.metal_type || 'Jewellery'} Item`;
+                              const cleanName = rawName
+                                .replace(/(?:Custom\s*)?(?:Order|ORD|ord)[-0-9a-z]*/gi, '')
+                                .replace(/\s*\(\s*-(?:ORD|ord)?-?[0-9a-z]+\s*\)?/gi, '')
+                                .replace(/\s*\(\s*#(?:ORD|ord)?-?[0-9a-z]+\s*\)?/gi, '')
+                                .replace(/\s*\(\s*(?:ORD|ord)-?[0-9a-z]+\s*\)?/gi, '')
+                                .replace(/\s+-\d{3,}\b/g, '')
+                                .replace(/^[\s:\-\|\(\)]+|[\s:\-\|\(\)]+$/g, '')
+                                .trim() || rawName;
+
+                              const itMetal = (it.metal_type || (rawName.toLowerCase().includes('silver') ? 'SILVER' : 'GOLD')).toUpperCase();
+                              const itType = (it.item_type || mode).toUpperCase();
+                              const itWt = Number(it.weight_grams ?? it.weight ?? it.net_weight_grams ?? it.gross_weight_grams ?? 0);
+                              
+                              const rawPure = Number(it.pure_metal_weight ?? it.pureWeight ?? it.pure_weight_grams ?? it.return_pure_gold ?? 0);
+                              const touchPct = Number(it.purity_percentage ?? it.touch_percentage ?? it.hmw_percentage ?? it.touch_percent ?? it.purity ?? 0);
+                              const computedPure = rawPure > 0 ? rawPure : (touchPct > 0 && itWt > 0 ? (itWt * (touchPct / 100)) : 0);
+
+                              return {
+                                name: cleanName,
+                                metal: itMetal,
+                                type: itType,
+                                weight: itWt,
+                                pureWeight: computedPure > 0 ? Number(computedPure.toFixed(2)) : undefined,
+                              };
+                            });
+                          } else {
+                            const singlePure = Number(
+                              (inv as any).pure_metal_weight ??
+                              inv.receipt_json_data?.pure_metal_weight ??
+                              inv.receipt_json_data?.total_pure_metal_weight ??
+                              0
+                            );
+                            itemsToDisplay = [{
+                              name: cleanedProductName,
+                              metal: detectedMetal,
+                              type: mode,
+                              weight: Number(inv.weight_grams || 0),
+                              pureWeight: singlePure > 0 ? Number(singlePure.toFixed(2)) : undefined,
+                            }];
+                          }
+
+                          const isMultiOrExchange = mode === 'EXCHANGE' || itemsToDisplay.some(i => i.type && i.type !== mode);
+
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {primaryImg ? (
+                                <img
+                                  src={primaryImg}
+                                  alt="Product"
+                                  onClick={() => setPreviewImage({ url: primaryImg, title: `${inv.customer_name}'s ${cleanedProductName}` })}
+                                  title="Click to enlarge image"
+                                  style={{ width: '38px', height: '38px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #d97706', cursor: 'pointer', flexShrink: 0 }}
+                                />
+                              ) : (
+                                <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>
+                                  <i className="fa-solid fa-gem" style={{ color: '#d97706' }} />
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {itemsToDisplay.map((it, i) => {
+                                  const isGold = it.metal === 'GOLD';
+                                  const isSilver = it.metal === 'SILVER';
+                                  const isSell = it.type === 'SELL';
+                                  const wtVal = it.weight && it.weight > 0 ? it.weight : (itemsToDisplay.length === 1 && inv.weight_grams ? Number(inv.weight_grams) : 0);
+                                  const pwVal = it.pureWeight;
+
+                                  return (
+                                    <div key={i} style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px' }}>
+                                      <span
+                                        style={{
+                                          fontSize: '0.60rem',
+                                          fontWeight: 800,
+                                          padding: '1px 5px',
+                                          borderRadius: '4px',
+                                          background: isGold ? '#fffbeb' : isSilver ? '#f1f5f9' : '#ecfdf5',
+                                          color: isGold ? '#b45309' : isSilver ? '#475569' : '#059669',
+                                          border: isGold ? '1px solid #fde68a' : isSilver ? '1px solid #cbd5e1' : '1px solid #a7f3d0',
+                                          lineHeight: '1.2',
+                                        }}
+                                      >
+                                        {it.metal}
+                                      </span>
+
+                                      <span style={{ fontWeight: 700, color: '#0f172a' }}>{it.name}</span>
+
+                                      {wtVal > 0 && (
+                                        <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>
+                                          ({wtVal}g{pwVal ? `, PW: ${pwVal}g` : ''})
+                                        </span>
+                                      )}
+
+                                      {(isMultiOrExchange || mode === 'EXCHANGE') && it.type && (
+                                        <span
+                                          style={{
+                                            padding: '1px 5px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.60rem',
+                                            fontWeight: 800,
+                                            background: isSell ? '#fffbeb' : '#e0f2fe',
+                                            color: isSell ? '#b45309' : '#0369a1',
+                                            border: isSell ? '1px solid #fde68a' : '1px solid #bae6fd',
+                                            lineHeight: '1.2',
+                                          }}
+                                        >
+                                          JBJ-{it.type}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          )}
-                          <div>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{cleanedProductName}</div>
-                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>{inv.weight_grams ? `${inv.weight_grams}g` : '—'}</div>
-                          </div>
-                        </div>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
                         {showBillingFinalAmount ? `₹${(Number(inv.final_amount) || 0).toLocaleString('en-IN')}` : '••••••••'}

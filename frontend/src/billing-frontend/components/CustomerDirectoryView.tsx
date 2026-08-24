@@ -1358,8 +1358,6 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                         </span>
                                         <span style={{ fontWeight: 600, color: '#0f172a' }}>{pName}</span>
 
-
-
                                         {mode === 'EXCHANGE' && (
                                           <span
                                             style={{

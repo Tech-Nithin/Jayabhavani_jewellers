@@ -1207,12 +1207,14 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                   {filteredLedger.length === 0 ? (
                     <tr><td colSpan={11} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No loan records found.</td></tr>
                   ) : paginatedLedger.map((rec, index) => {
-                    const isCashLoan = rec.item_metal_type?.toLowerCase() === 'cash' || rec.item_name?.toLowerCase() === 'cash';
+                    const isCashLoan = (rec.debt_category || rec.item_metal_type)?.toLowerCase() === 'cash' || rec.item_name?.toLowerCase() === 'cash';
                     const recDeductionWt = Number(rec.item_deduction_weight_grams ?? rec.item_deduction_weight ?? 0);
-                    const recPureWt = Math.max(0, (Number(rec.item_weight_grams || 0) - recDeductionWt) * (Number(rec.item_purity_percent || 100) / 100));
-                    const currentBuyRate = rec.item_metal_type?.toLowerCase() === 'silver' ? (metalRates.silver_rate_per_gram || 250) : (metalRates.gold_rate_per_gram || 15000);
+                    const recGrossWt = Number(rec.item_weight_grams ?? rec.item_weight ?? 0);
+                    const recTouch = Number(rec.item_purity_percent ?? rec.touch ?? 100);
+                    const recPureWt = Number(rec.pure_metal_weight && rec.pure_metal_weight > 0 ? rec.pure_metal_weight : Math.max(0, (recGrossWt - recDeductionWt) * (recTouch / 100)));
+                    const currentBuyRate = (rec.debt_category || rec.item_metal_type)?.toLowerCase() === 'silver' ? (metalRates.silver_rate_per_gram || 250) : (metalRates.gold_rate_per_gram || 15000);
                     const liveMarketVal = isCashLoan ? 0 : Math.round(recPureWt * currentBuyRate);
-                    const openTotalAmount = Number(rec.amount || 0) + Number(rec.month_wise_interest || 0);
+                    const openTotalAmount = Number(rec.current_principal ?? rec.customer_debt_money ?? rec.amount ?? 0) + Number(rec.current_interest_due ?? rec.month_wise_interest ?? 0);
                     const isExceeded = !isCashLoan && liveMarketVal > 0 && openTotalAmount > liveMarketVal;
 
                     return (
