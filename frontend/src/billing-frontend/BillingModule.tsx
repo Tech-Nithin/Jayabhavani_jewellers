@@ -696,6 +696,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         const effPaid = paymentType === 'FULL' ? grandTotalVal : Math.min(grandTotalVal, parseIndianCurrencyNumber(advancePaidAmount));
         const effDue = Math.max(0, grandTotalVal - effPaid);
 
+        const isShopPayingCustomer = totalBuyCredit > totalSellValue && totalBuyCredit > 0;
+        const flowTypeStr = isShopPayingCustomer ? 'OUT' : 'IN';
+
         const orderReceiptPayload = {
           ...receiptPayload,
           mode: 'ORDER',
@@ -703,6 +706,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           paymentType,
           advancePaidAmount: effPaid,
           balanceDueAmount: effDue,
+          flow_type: flowTypeStr,
+          shop_pays_customer: isShopPayingCustomer,
         };
 
         const postBody = {
@@ -727,6 +732,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           due_amount: effDue,
           sold_status: effDue === 0 ? 'SOLD' : 'DUE',
           submitted: 'no',
+          flow_type: flowTypeStr,
+          shop_pays_customer: isShopPayingCustomer,
           receipt_json_data: orderReceiptPayload,
           image_url: primaryItem?.image_url || '',
           hmw_percentage: Number(primaryItem?.wastage_percent) || 0,

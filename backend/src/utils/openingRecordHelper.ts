@@ -33,22 +33,6 @@ export async function getOrInitOpeningRecord(
       let silver = Number(existing.opening_silver ?? existing.opening_silver_grams ?? 0);
       let cash = Number(existing.opening_cash ?? existing.opening_cash_amount ?? 0);
 
-      // Auto-correct stale fallback if worker gold was not included when table row was first inserted
-      if (fallbackStock.goldGrams > gold) {
-        gold = fallbackStock.goldGrams;
-        try {
-          await supabase
-            .from('daily_opening_records')
-            .upsert([{
-              record_date: dateStr,
-              opening_gold: gold,
-              opening_silver: silver,
-              opening_cash: cash,
-              updated_at: new Date().toISOString(),
-            }], { onConflict: 'record_date' });
-        } catch {}
-      }
-
       return {
         recordDate: dateStr,
         openingGoldGrams: gold,
@@ -59,7 +43,7 @@ export async function getOrInitOpeningRecord(
       };
     }
 
-    // 2. Otherwise calculate: Yesterday Closing + Today Loaded Stock
+    // 2. Otherwise calculate read-only fallback values WITHOUT inserting into daily_opening_records
     const prevDateObj = new Date(dateStr);
     prevDateObj.setDate(prevDateObj.getDate() - 1);
     const prevDateStr = prevDateObj.toISOString().split('T')[0];
@@ -73,7 +57,7 @@ export async function getOrInitOpeningRecord(
     const openingSilverGrams = Number((prevSilver + loadedToday.silverGrams).toFixed(3));
     const openingCashAmount = Number(prevCash.toFixed(2));
 
-    const newRecord: DailyOpeningData = {
+    return {
       recordDate: dateStr,
       openingGoldGrams,
       openingSilverGrams,
@@ -81,23 +65,6 @@ export async function getOrInitOpeningRecord(
       loadedGoldGrams: loadedToday.goldGrams,
       loadedSilverGrams: loadedToday.silverGrams,
     };
-
-    // 3. Save to daily_opening_records matching exact schema: record_date, opening_gold, opening_silver, opening_cash
-    try {
-      await supabase
-        .from('daily_opening_records')
-        .upsert([{
-          record_date: dateStr,
-          opening_gold: openingGoldGrams,
-          opening_silver: openingSilverGrams,
-          opening_cash: openingCashAmount,
-          updated_at: new Date().toISOString(),
-        }], { onConflict: 'record_date' });
-    } catch {
-      // Fail-safe
-    }
-
-    return newRecord;
   } catch (err: any) {
     console.warn(`⚠️ Error in getOrInitOpeningRecord for ${dateStr}:`, err?.message);
     return {

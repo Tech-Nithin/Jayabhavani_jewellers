@@ -332,15 +332,44 @@ router.post('/orders', async (req: Request, res: Response) => {
         // ✅ Success — record inserted and confirmed
         if (Number(newOrder.paid_amount || 0) > 0) {
           try {
+            const rawBody = req.body || {};
+            const rawReceipt = typeof newOrder.receipt_json_data === 'string'
+              ? JSON.parse(newOrder.receipt_json_data)
+              : (newOrder.receipt_json_data || {});
+
+            const totalBuyCredit = Number(
+              rawBody.total_buy_credit ??
+              rawBody.totalBuyCredit ??
+              rawReceipt.total_buy_credit ??
+              rawReceipt.totalBuyCredit ??
+              0
+            );
+
+            const totalSellValue = Number(
+              rawBody.total_sell_value ??
+              rawBody.totalSellValue ??
+              rawReceipt.total_sell_value ??
+              rawReceipt.totalSellValue ??
+              0
+            );
+
+            const isShopPayingCustomer = 
+              String(rawBody.flow_type || rawReceipt.flow_type || '').toUpperCase() === 'OUT' ||
+              Boolean(rawBody.shop_pays_customer || rawReceipt.shop_pays_customer) ||
+              (totalBuyCredit > totalSellValue && totalBuyCredit > 0);
+
+            const flowType: 'IN' | 'OUT' = isShopPayingCustomer ? 'OUT' : 'IN';
+            const cashAmt = Math.abs(Number(newOrder.paid_amount || 0));
+
             const { recordCashTransaction } = await import('../../utils/cashLedgerHelper');
             await recordCashTransaction({
               transaction_id: String(newOrder.id),
               transaction_type: 'ORDER',
-              flow_type: 'IN',
-              amount: Number(newOrder.paid_amount),
+              flow_type: flowType,
+              amount: cashAmt,
               metal_type: (newOrder.metal_type || 'GOLD').toUpperCase() as any,
-              item_type: `Order Advance: ${newOrder.item_name}`,
-              notes: `Advance for Order #${newOrder.id} - ${newOrder.customer_name}`,
+              item_type: `Order ${flowType === 'OUT' ? 'Payout to Customer' : 'Advance'}: ${newOrder.item_name}`,
+              notes: `Order #${newOrder.id} - ${newOrder.customer_name} (${flowType === 'OUT' ? 'Shop Paid Customer' : 'Customer Paid Shop'}: ₹${cashAmt.toLocaleString('en-IN')})`,
               date: newOrder.created_at ? String(newOrder.created_at).split('T')[0] : undefined,
             });
           } catch (cashErr) {

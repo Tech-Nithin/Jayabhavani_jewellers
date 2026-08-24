@@ -777,25 +777,33 @@ async function recordInvoiceCashTransaction(invoice: any) {
 
     // BUG FIX: Use paid_amount for SELL/ORDER/EXCHANGE (actual cash received, not full invoice value)
     // For BUY (scrap purchase), use final_amount — shop always pays the full amount in cash
-    let cashAmount: number;
-    let flowType: 'IN' | 'OUT';
+    let cashAmount = Number(invoice.paid_amount || invoice.final_amount || 0);
+    let flowType: 'IN' | 'OUT' = 'IN';
 
+    // 1. BUY (Scrap purchases from customer): Shop pays cash OUT to customer
     if (txnType === 'BUY') {
-      // Shop pays customer cash for their scrap gold — full amount
-      cashAmount = Number(invoice.final_amount || 0);
+      cashAmount = Math.abs(Number(invoice.final_amount || invoice.paid_amount || 0));
       flowType = 'OUT';
-    } else if (txnType === 'SELL' || txnType === 'ORDER') {
-      // Customer pays shop — only record what was ACTUALLY collected (paid_amount)
-      // If customer owes remaining (Udhaari), that will be recorded on each installment separately
-      cashAmount = Number(invoice.paid_amount || invoice.final_amount || 0);
-      flowType = 'IN';
-    } else if (txnType === 'EXCHANGE') {
-      // Net cash difference collected (if any)
-      cashAmount = Number(invoice.paid_amount || invoice.final_amount || 0);
-      flowType = 'IN';
-    } else {
-      cashAmount = Number(invoice.paid_amount || invoice.final_amount || 0);
-      flowType = 'IN';
+    } 
+    // 2. ORDER, SELL, EXCHANGE: Check exact cash direction (IN vs OUT)
+    else {
+      const totalBuyCredit = Number(invoice.total_buy_credit || invoice.receipt_json_data?.totalBuyCredit || 0);
+      const totalSellValue = Number(invoice.total_sell_value || invoice.receipt_json_data?.totalSellValue || 0);
+
+      const isShopPayingCustomer = 
+        String(invoice.flow_type || invoice.direction || '').toUpperCase().includes('OUT') ||
+        Number(invoice.paid_amount || 0) < 0 ||
+        Boolean(invoice.is_refund) ||
+        Boolean(invoice.shop_pays_customer) ||
+        (totalBuyCredit > totalSellValue && totalBuyCredit > 0);
+
+      if (isShopPayingCustomer) {
+        flowType = 'OUT';
+        cashAmount = Math.abs(Number(invoice.paid_amount || invoice.final_amount || 0));
+      } else {
+        flowType = 'IN';
+        cashAmount = Math.abs(Number(invoice.paid_amount || invoice.final_amount || 0));
+      }
     }
 
     if (cashAmount <= 0) {
@@ -811,7 +819,7 @@ async function recordInvoiceCashTransaction(invoice: any) {
       amount: cashAmount,
       metal_type: invoice.metal_type || 'GOLD',
       item_type: invoice.product_name || `${txnType} Invoice`,
-      notes: `${txnType} Invoice #${invoice.id} - ${invoice.customer_name || 'Walk-in'} (Paid: ₹${cashAmount.toLocaleString('en-IN')})`,
+      notes: `${txnType} Invoice #${invoice.id} - ${invoice.customer_name || 'Walk-in'} (${flowType === 'OUT' ? 'Paid to Customer' : 'Collected'}: ₹${cashAmount.toLocaleString('en-IN')})`,
       date: invoice.created_at ? String(invoice.created_at).split('T')[0] : undefined,
     });
   } catch (err) {
@@ -1652,7 +1660,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         : '01:30 PM';
       const wt = Number(fl.item_weight ?? fl.item_weight_grams ?? fl.net_weight ?? fl.gross_weight ?? 0);
       const loanAmt = Number(fl.customer_debt_money ?? fl.current_principal ?? fl.amount ?? 0);
-      const fullName = `${fl.customer_name || 'Finance'} ${fl.customer_surname || ''}`.trim();
+      const fullName = (fl.customer_name || 'Finance Customer').trim();
 
       logBookTimeline.push({
         id: `log-fin-${fl.finance_uuid || fl.id || Math.random()}`,
@@ -1719,14 +1727,38 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
     // Process Cash Register Ledger Transactions (Cash Loaded / Manual Cash Entries)
     cashLedgerToday.forEach((tx: any) => {
       const type = (tx.transaction_type || '').toUpperCase();
-      // Skip bill-based cash entries (SELL, BUY, EXCHANGE) as they are logged via invoices below
-      if (type === 'SELL' || type === 'BUY' || type === 'EXCHANGE' || type === 'FINANCE') return;
-
       const formattedTime = tx.created_at
         ? new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
         : '12:00 PM';
       const amt = Number(tx.transaction_cash_total || 0);
       const isFlowIn = (tx.flow_type || '').toUpperCase() === 'IN';
+
+      // Handle Finance Loan Repayments/Installments recorded in cash drawer
+      if (type === 'FINANCE') {
+        const isRepayment = isFlowIn || (tx.item_type || '').toLowerCase().includes('payment') || (tx.item_type || '').toLowerCase().includes('repay') || (tx.notes || '').toLowerCase().includes('received');
+        if (isRepayment) {
+          logBookTimeline.push({
+            id: `log-fin-repay-${tx.cash_history_uuid || tx.id || Math.random()}`,
+            time: formattedTime,
+            created_at: tx.created_at || new Date().toISOString(),
+            type: 'FINANCE_REPAYMENT',
+            title: tx.notes ? (tx.notes.includes('from ') ? tx.notes.split('from ')?.[1] : tx.notes) : 'Finance Payment',
+            details: `💰 Finance Repayment · ${tx.item_type || 'Loan Payment'}: ${tx.notes || ''}`,
+            category: (tx.metal_type || 'GOLD').toUpperCase(),
+            weight_grams: 0,
+            amount: amt,
+            paid_amount: amt,
+            due_amount: 0,
+            payment_mode: 'REPAYMENT',
+            flow_type: 'IN',
+            raw_cash_ledger: tx,
+          });
+        }
+        return;
+      }
+
+      // Skip bill-based cash entries (SELL, BUY, EXCHANGE, ORDER) as they are logged via invoices below
+      if (type === 'SELL' || type === 'BUY' || type === 'EXCHANGE' || type === 'ORDER') return;
 
       logBookTimeline.push({
         id: `log-cash-${tx.cash_history_uuid || tx.id || Math.random()}`,
@@ -1797,6 +1829,14 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         detailsText = `📦 Sold: ${sellStr}`;
       }
 
+      const totalBuyCredit = Number(inv.total_buy_credit || inv.receipt_json_data?.totalBuyCredit || inv.receipt_json_data?.total_buy_credit || 0);
+      const totalSellValue = Number(inv.total_sell_value || inv.receipt_json_data?.totalSellValue || inv.receipt_json_data?.total_sell_value || 0);
+
+      const isOutflow = 
+        String(inv.flow_type || inv.receipt_json_data?.flow_type || '').toUpperCase() === 'OUT' ||
+        Boolean(inv.shop_pays_customer || inv.receipt_json_data?.shop_pays_customer) ||
+        (totalBuyCredit > totalSellValue && totalBuyCredit > 0);
+
       logBookTimeline.push({
         id: `log-inv-${inv.id}`,
         time: formattedTime,
@@ -1811,6 +1851,8 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         due_amount: dueAmount,
         payment_mode: inv.receipt_json_data?.paymentType || (dueAmount === 0 ? 'FULL' : 'PARTIAL'),
         customer_phone: inv.customer_phone,
+        flow_type: isOutflow ? 'OUT' : 'IN',
+        direction: isOutflow ? 'SHOP_TO_CUSTOMER' : 'CUSTOMER_TO_SHOP',
         raw_invoice: inv,
       });
     });
@@ -1999,6 +2041,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       logBookTimeline,
       stockSummary,
       cashSummary,
+      cashLedgerRecords: cashLedgerToday || [],
       scrapSummary,
       oldMetalVaultItems,
       udhaariSummary,

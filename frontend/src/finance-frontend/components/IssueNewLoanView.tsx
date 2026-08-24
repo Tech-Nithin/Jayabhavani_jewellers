@@ -295,7 +295,6 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
       }
       const payload = {
         customer_name: toStartCase(form.customer_name.trim()),
-        customer_surname: '',
         customer_phone: form.customer_phone.trim(),
         customer_address: toStartCase(form.customer_address.trim()),
         debt_category: form.item_metal_type,

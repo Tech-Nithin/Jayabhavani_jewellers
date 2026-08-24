@@ -84,7 +84,6 @@ function buildReceiptJson(loan: any, paymentHistory: any[]) {
     finance_uuid: loan.finance_uuid,
     customer_id: loan.customer_id,
     customer_name: loan.customer_name,
-    customer_surname: loan.customer_surname,
     customer_phone: loan.customer_phone,
     customer_address: loan.customer_address,
     debt_category: loan.debt_category,
@@ -271,7 +270,7 @@ router.get('/:uuid', async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/create', async (req: Request, res: Response) => {
   const {
-    customer_name, customer_surname, customer_phone, customer_address,
+    customer_name, customer_phone, customer_address,
     debt_category,
     item_name, item_weight, item_deduction_name, item_deduction_weight,
     touch, pure_metal_weight, metal_value_per_gram, total_value_of_item, item_image_url,
@@ -287,7 +286,6 @@ router.post('/create', async (req: Request, res: Response) => {
 
   const payload: any = {
     customer_name: String(customer_name).trim(),
-    customer_surname: String(customer_surname || '').trim(),
     customer_phone: String(customer_phone).trim(),
     customer_address: customer_address ? String(customer_address).trim() : null,
     debt_category: (debt_category || 'GOLD').toUpperCase(),
@@ -335,7 +333,7 @@ router.post('/create', async (req: Request, res: Response) => {
         amount: principal,
         metal_type: (newLoan.debt_category === 'SILVER' ? 'SILVER' : 'GOLD') as any,
         item_type: `Pledge Loan: ${newLoan.item_name || 'Ornament'}`,
-        notes: `Loan disbursed ₹${principal.toLocaleString('en-IN')} to ${newLoan.customer_name} ${newLoan.customer_surname || ''}`,
+        notes: `Loan disbursed ₹${principal.toLocaleString('en-IN')} to ${newLoan.customer_name}`,
         date: loanDate,
       });
     } catch (cashErr) {
@@ -521,7 +519,7 @@ router.post('/:uuid/pay', async (req: Request, res: Response) => {
 router.patch('/:uuid/update', async (req: Request, res: Response) => {
   const { uuid } = req.params;
   const allowed = [
-    'customer_name', 'customer_surname', 'customer_phone', 'customer_address',
+    'customer_name', 'customer_phone', 'customer_address',
     'item_name', 'item_weight', 'item_deduction_name', 'item_deduction_weight',
     'touch', 'pure_metal_weight', 'metal_value_per_gram', 'total_value_of_item',
     'item_image_url', 'interest_rate_percent', 'timeline_months', 'debt_date', 'debt_category',
