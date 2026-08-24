@@ -60,11 +60,12 @@ jobs:
           ./gradlew assembleDebug
 
       - name: Upload Worker Standalone APK Artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: JayaBhavaniWorker-Standalone-APK
           path: worker-frontend/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          retention-days: 1
 
       - name: Upload Worker APK to Supabase Public Storage (Auto-overwrite)
         if: github.ref == 'refs/heads/main'
@@ -139,11 +140,12 @@ jobs:
           ./gradlew assembleDebug
 
       - name: Upload Admin Standalone APK Artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: JayaBhavaniAdmin-Standalone-APK
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          retention-days: 1
 
       - name: Upload Admin APK to Supabase Public Storage (Auto-overwrite)
         if: github.ref == 'refs/heads/main'
