@@ -299,8 +299,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
     }
 
     // Making charges = flat amount directly (no per-gram multiplication)
-    const makingVal = isSell ? Number((Number(item.making_charges_per_gram) || 0).toFixed(2)) : 0;
-    const additionalVal = isSell ? Number((Number(item.additional_charges_amount) || 0).toFixed(2)) : 0;
+    const makingVal = isSell ? Number((Number(item.making_charges ?? item.making_charges_per_gram ?? item.makingVal ?? 0)).toFixed(2)) : 0;
+    const additionalVal = isSell ? Number((Number(item.additional_cost ?? item.additional_charges_amount ?? item.additional_charge_value ?? 0)).toFixed(2)) : 0;
     const lineTotal = Number((metalVal + makingVal + additionalVal).toFixed(2));
 
     return {
@@ -320,7 +320,8 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
     }
   };
 
-  const isPartialOrDue = (balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL';
+  const isNeedToPayCustomer = mode === 'BUY' || totalBuyCredit > totalSellValue;
+  const isPartialOrDue = !isNeedToPayCustomer && ((balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL');
 
   return (
     <div
@@ -525,7 +526,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     <>
                       {details.additionalVal > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700 }}>
-                          <span>{it.additional_charges_name || 'Additional Charges'}:</span>
+                          <span>{it.additional_charges || it.additional_charges_name || it.additional_charge_name || 'Additional Charges'}:</span>
                           <strong>+ ₹{details.additionalVal.toLocaleString('en-IN')}</strong>
                         </div>
                       )}
@@ -573,12 +574,12 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               alt={
                 billType === 'ESTIMATION'
                   ? 'Estimation Stamp'
-                  : (balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL'
+                  : isPartialOrDue
                     ? 'Payment Due Stamp'
                     : 'Sale Done Stamp'
               }
               style={{
-                width: (balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL' ? '110px' : billType === 'ESTIMATION' ? '120px' : '110px',
+                width: isPartialOrDue ? '110px' : billType === 'ESTIMATION' ? '120px' : '110px',
                 height: 'auto',
                 objectFit: 'contain',
                 filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.15))',

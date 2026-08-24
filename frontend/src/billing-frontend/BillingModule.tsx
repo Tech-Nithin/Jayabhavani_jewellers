@@ -235,17 +235,38 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     return {};
   });
 
-  const fetchPresets = async (force = false) => {
+  const [inventoryProducts, setInventoryProducts] = useState<any[]>([]);
+
+  const getItemNameOptions = (metalType: 'GOLD' | 'SILVER'): string[] => {
+    const cleanMetal = (metalType || 'GOLD').toUpperCase();
+    const filtered = inventoryProducts.filter((p: any) => (p.item_type || 'GOLD').toUpperCase() === cleanMetal);
+    const names = filtered.map((p: any) => p.name || p.item_name || p.category).filter(Boolean);
+    return Array.from(new Set(names));
+  };
+
+  const fetchPresets = async (_force = false) => {
+    void _force;
     try {
-      if (!force && Object.keys(presets).length > 0) return;
-      const res = await fetch(`${API_BASE}/billing/presets`);
-      const data = await res.json();
-      if (data.success && data.presets) {
-        setPresets(data.presets);
-        try { localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(data.presets)); } catch { }
+      const [presetsRes, invRes] = await Promise.all([
+        fetch(`${API_BASE}/billing/presets`).catch(() => null),
+        fetch(`${API_BASE}/inventory/products`).catch(() => null),
+      ]);
+
+      if (presetsRes) {
+        const presetsData = await presetsRes.json().catch(() => null);
+        if (presetsData?.success && presetsData.presets) {
+          setPresets((prev) => ({ ...prev, ...presetsData.presets }));
+        }
       }
-    } catch {
-      // Fallback
+
+      if (invRes) {
+        const invData = await invRes.json().catch(() => null);
+        if (invData?.success && Array.isArray(invData.products)) {
+          setInventoryProducts(invData.products);
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Presets & inventory fetch warning:', err);
     }
   };
 
@@ -253,6 +274,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     if (!presetName.trim()) return;
     const cleanName = presetName.trim();
     const cleanCat = categoryName.trim().toLowerCase();
+
+    // Do not save item_name to billing_presets table (item_name is strictly managed via inventory_products)
+    if (cleanCat === 'item_name') return;
 
     setPresets((prev) => {
       const currentList = prev[cleanCat] || [];
@@ -612,20 +636,29 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           pure_weight_grams: pureW,
           metalVal: det?.metalVal ?? 0,
           makingVal: det?.makingVal ?? 0,
+          making_charges: Number(det?.makingVal ?? it.making_charges_per_gram ?? 0),
+          additional_charges: it.additional_charges_name || (it as any).additional_charges || (it as any).additional_charge_name || null,
+          additional_cost: Number(it.additional_charges_amount || (it as any).additional_cost || (it as any).additional_charge_value || 0),
+          deduction_name: it.deduction_name || null,
+          deduction_weight: Number(it.deduction_weight_grams || (it as any).deduction_weight || 0),
+          hmw_percentage: Number(it.wastage_percent || 0),
+          touch_percentage: Number(it.purity_percentage || 0),
           gstVal: det?.gstVal ?? 0,
         };
       });
 
+      const isNeedToPayCustomer = mode === 'BUY' || totalBuyCredit > totalSellValue;
+      const effectivePaymentType = isNeedToPayCustomer ? 'FULL' : paymentType;
       const grandTotVal = mode === 'BUY' ? totalBuyCredit : mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
-      const paidVal = paymentType === 'FULL' ? grandTotVal : Math.min(grandTotVal, parseIndianCurrencyNumber(advancePaidAmount));
-      const dueVal = Math.max(0, grandTotVal - paidVal);
+      const paidVal = effectivePaymentType === 'FULL' ? grandTotVal : Math.min(grandTotVal, parseIndianCurrencyNumber(advancePaidAmount));
+      const dueVal = isNeedToPayCustomer ? 0 : Math.max(0, grandTotVal - paidVal);
 
       const initialPaymentHistory = [
         {
           installment: 1,
           amount: paidVal,
           paid_at: new Date().toISOString(),
-          note: paymentType === 'FULL' ? 'Full Payment Done' : 'Advance / Initial Payment',
+          note: effectivePaymentType === 'FULL' ? (isNeedToPayCustomer ? 'Paid to Customer' : 'Full Payment Done') : 'Advance / Initial Payment',
         },
       ];
 
@@ -663,6 +696,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         const effPaid = paymentType === 'FULL' ? grandTotalVal : Math.min(grandTotalVal, parseIndianCurrencyNumber(advancePaidAmount));
         const effDue = Math.max(0, grandTotalVal - effPaid);
 
+        const isShopPayingCustomer = totalBuyCredit > totalSellValue && totalBuyCredit > 0;
+        const flowTypeStr = isShopPayingCustomer ? 'OUT' : 'IN';
+
         const orderReceiptPayload = {
           ...receiptPayload,
           mode: 'ORDER',
@@ -670,6 +706,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           paymentType,
           advancePaidAmount: effPaid,
           balanceDueAmount: effDue,
+          flow_type: flowTypeStr,
+          shop_pays_customer: isShopPayingCustomer,
         };
 
         const postBody = {
@@ -694,6 +732,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           due_amount: effDue,
           sold_status: effDue === 0 ? 'SOLD' : 'DUE',
           submitted: 'no',
+          flow_type: flowTypeStr,
+          shop_pays_customer: isShopPayingCustomer,
           receipt_json_data: orderReceiptPayload,
           image_url: primaryItem?.image_url || '',
           hmw_percentage: Number(primaryItem?.wastage_percent) || 0,
@@ -1250,6 +1290,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     handleRemoveItem={handleRemoveItem}
                     calcResults={calcResults}
                     presets={presets}
+                    getItemNameOptions={getItemNameOptions}
                     handleAddNewPreset={handleAddNewPreset}
                     rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
@@ -1267,6 +1308,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     handleRemoveItem={handleRemoveItem}
                     calcResults={calcResults}
                     presets={presets}
+                    getItemNameOptions={getItemNameOptions}
                     handleAddNewPreset={handleAddNewPreset}
                     rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
@@ -1284,6 +1326,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     handleRemoveItem={handleRemoveItem}
                     calcResults={calcResults}
                     presets={presets}
+                    getItemNameOptions={getItemNameOptions}
                     handleAddNewPreset={handleAddNewPreset}
                     rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
@@ -1301,6 +1344,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                     handleRemoveItem={handleRemoveItem}
                     calcResults={calcResults}
                     presets={presets}
+                    getItemNameOptions={getItemNameOptions}
                     handleAddNewPreset={handleAddNewPreset}
                     rates={rates || { gold_sell_value: 0, gold_sell_value_updated_at: '', gold_buy_value: 0, gold_buy_value_updated_at: '', silver_sell_value: 0, silver_sell_value_updated_at: '', silver_buy_value: 0, silver_buy_value_updated_at: '' }}
                     lang={lang}
@@ -1313,9 +1357,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   />
                 )}
 
-                {/* Payment Breakdown Box: Full Payment vs Partial Payment (Only shown when customer owes money or in ORDER mode) */}
+                {/* Payment Breakdown Box: Full Payment vs Partial Payment (Only shown when customer owes money to store) */}
                 {(() => {
-                  const isCustomerPaying = mode === 'ORDER' || ((mode as string) !== 'BUY' && totalSellValue >= totalBuyCredit);
+                  const isCustomerPaying = mode !== 'BUY' && (mode === 'ORDER' ? totalSellValue >= totalBuyCredit : totalSellValue > totalBuyCredit);
                   if (!isCustomerPaying) return null;
 
                   const grandTotalAmount = mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);

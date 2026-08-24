@@ -93,6 +93,7 @@ export const OrderModeForm: React.FC<ModeFormProps> = ({
   handleRemoveItem,
   calcResults,
   presets,
+  getItemNameOptions,
   handleAddNewPreset,
   rates,
   lang,
@@ -286,7 +287,7 @@ export const OrderModeForm: React.FC<ModeFormProps> = ({
                     handleUpdateItem(it.id, 'product_name', toStartCase(val));
                     if (showValidationErrors) setShowValidationErrors(false);
                   }}
-                  options={presets.item_name || []}
+                  options={getItemNameOptions ? getItemNameOptions(it.metal_type) : (presets.item_name || [])}
                   placeholder={t.itemNamePlaceholder}
                   categoryName="item_name"
                   onAddNewPreset={handleAddNewPreset}

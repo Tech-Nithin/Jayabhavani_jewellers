@@ -22,6 +22,35 @@ select {
   cursor: pointer !important;
 }
 
+/* =====================================================
+   RESPONSIVE TABLET VS LAPTOP FONT SIZE UTILITIES
+   ===================================================== */
+@media screen and (min-width: 1025px) {
+  /* Laptop / Desktop View: Clean, crisp earlier font sizes */
+  .table-responsive-font {
+    font-size: 0.82rem !important;
+  }
+  .badge-responsive-font {
+    font-size: 0.68rem !important;
+  }
+  .weight-responsive-font {
+    font-size: 0.88rem !important;
+  }
+}
+
+@media screen and (max-width: 1024px) {
+  /* Tablet View (768px - 1024px): Touch-friendly font sizes */
+  .table-responsive-font {
+    font-size: 0.88rem !important;
+  }
+  .badge-responsive-font {
+    font-size: 0.74rem !important;
+  }
+  .weight-responsive-font {
+    font-size: 0.94rem !important;
+  }
+}
+
 /* Hide number input spinner arrows (up/down icons) */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {

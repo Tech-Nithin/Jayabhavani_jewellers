@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../config/apiConfig';
 import type { LoanRecord, MetalRates } from './types';
 import { HeaderRefreshButton } from '../components/HeaderRefreshButton';
-import { IssueNewLoanModal, DeleteConfirmDialog, SettlementDialog } from './components';
+import { IssueNewLoanModal, DeleteConfirmDialog, SettlementDialog, InstallmentPaymentModal, IssueNewLoanView, FinanceReceiptView, LoanPassbookPayView } from './components';
 
 import { getFinanceTranslation } from './financeTranslations';
 import type { Language } from '../utils/translations';
@@ -34,6 +34,179 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
   const [editingRecord, setEditingRecord] = useState<LoanRecord | null>(null);
   const [deleteConfirmRecord, setDeleteConfirmRecord] = useState<LoanRecord | null>(null);
   const [actionUpdating, setActionUpdating] = useState<string | null>(null);
+
+  // Installment Payment & Passbook View State
+  const [paymentModalLoan, setPaymentModalLoan] = useState<LoanRecord | null>(null);
+  const [selectedPassbookLoan, setSelectedPassbookLoan] = useState<LoanRecord | null>(null);
+
+  // Billing Receipt State
+  const [selectedReceiptLoan, setSelectedReceiptLoan] = useState<LoanRecord | null>(null);
+
+  // Full-screen Navigation State & Real-time URL Parameter Sync
+  const [subView, setSubView] = useState<'MAIN' | 'ISSUE_LOAN' | 'PASSBOOK' | 'RECEIPT'>('MAIN');
+
+  // Sync subview from URL params on load or ledger load
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const loanAction = searchParams.get('loanAction');
+    const loanId = searchParams.get('loanId');
+
+    if (loanAction === 'new') {
+      setEditingRecord(null);
+      setSubView('ISSUE_LOAN');
+    } else if (loanAction === 'edit' && loanId && ledger.length > 0) {
+      const found = ledger.find(r => (r.finance_uuid || r.id) === loanId);
+      if (found) {
+        setEditingRecord(found);
+        setSubView('ISSUE_LOAN');
+      }
+    } else if (loanAction === 'passbook' && loanId) {
+      if (ledger.length > 0) {
+        const found = ledger.find(r => (r.finance_uuid || r.id) === loanId);
+        if (found) {
+          setSelectedPassbookLoan(found);
+          setSubView('PASSBOOK');
+        }
+      } else {
+        // Direct refresh on passbook URL: fetch loan record directly from API!
+        fetch(`${API_BASE}/finance/${loanId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.loan) {
+              setSelectedPassbookLoan(data.loan);
+              setSubView('PASSBOOK');
+            }
+          })
+          .catch(err => console.error('Failed to fetch passbook loan from URL:', err));
+      }
+    } else if (loanAction === 'receipt' && loanId) {
+      if (ledger.length > 0) {
+        const found = ledger.find(r => (r.finance_uuid || r.id) === loanId);
+        if (found) {
+          setSelectedReceiptLoan(found);
+          setSubView('RECEIPT');
+        }
+      } else {
+        // Direct refresh on receipt URL: fetch loan record directly from API!
+        fetch(`${API_BASE}/finance/${loanId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.loan) {
+              setSelectedReceiptLoan(data.loan);
+              setSubView('RECEIPT');
+            }
+          })
+          .catch(err => console.error('Failed to fetch receipt loan from URL:', err));
+      }
+    }
+  }, [ledger]);
+
+  // Browser Back / Forward Button Handler
+  useEffect(() => {
+    const handlePopState = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const loanAction = searchParams.get('loanAction');
+      const loanId = searchParams.get('loanId');
+
+      if (loanAction === 'new') {
+        setEditingRecord(null);
+        setSubView('ISSUE_LOAN');
+      } else if (loanAction === 'edit' && loanId && ledger.length > 0) {
+        const found = ledger.find(r => (r.finance_uuid || r.id) === loanId);
+        if (found) {
+          setEditingRecord(found);
+          setSubView('ISSUE_LOAN');
+        }
+      } else if (loanAction === 'passbook' && loanId) {
+        const found = ledger.find(r => (r.finance_uuid || r.id) === loanId);
+        if (found) {
+          setSelectedPassbookLoan(found);
+          setSubView('PASSBOOK');
+        } else {
+          fetch(`${API_BASE}/finance/${loanId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.success && data.loan) {
+                setSelectedPassbookLoan(data.loan);
+                setSubView('PASSBOOK');
+              }
+            })
+            .catch(err => console.error(err));
+        }
+      } else if (loanAction === 'receipt' && loanId) {
+        const found = ledger.find(r => (r.finance_uuid || r.id) === loanId);
+        if (found) {
+          setSelectedReceiptLoan(found);
+          setSubView('RECEIPT');
+        } else {
+          fetch(`${API_BASE}/finance/${loanId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.success && data.loan) {
+                setSelectedReceiptLoan(data.loan);
+                setSubView('RECEIPT');
+              }
+            })
+            .catch(err => console.error(err));
+        }
+      } else {
+        setSubView('MAIN');
+        setEditingRecord(null);
+        setSelectedPassbookLoan(null);
+        setSelectedReceiptLoan(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [ledger]);
+
+  const navigateToIssueLoan = (recToEdit?: LoanRecord | null) => {
+    const url = new URL(window.location.href);
+    if (recToEdit) {
+      const targetId = recToEdit.finance_uuid || recToEdit.id || '';
+      url.searchParams.set('loanAction', 'edit');
+      url.searchParams.set('loanId', targetId);
+      setEditingRecord(recToEdit);
+    } else {
+      url.searchParams.set('loanAction', 'new');
+      url.searchParams.delete('loanId');
+      setEditingRecord(null);
+    }
+    window.history.pushState({}, '', url);
+    setSubView('ISSUE_LOAN');
+  };
+
+  const navigateToPassbook = (rec: LoanRecord) => {
+    const targetId = rec.finance_uuid || rec.id || '';
+    const url = new URL(window.location.href);
+    url.searchParams.set('loanAction', 'passbook');
+    url.searchParams.set('loanId', targetId);
+    window.history.pushState({}, '', url);
+    setSelectedPassbookLoan(rec);
+    setSubView('PASSBOOK');
+  };
+
+  const navigateToReceipt = (rec: LoanRecord) => {
+    const targetId = rec.finance_uuid || rec.id || '';
+    const url = new URL(window.location.href);
+    url.searchParams.set('loanAction', 'receipt');
+    url.searchParams.set('loanId', targetId);
+    window.history.pushState({}, '', url);
+    setSelectedReceiptLoan(rec);
+    setSubView('RECEIPT');
+  };
+
+  const navigateBackToLedger = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('loanAction');
+    url.searchParams.delete('loanId');
+    window.history.pushState({}, '', url);
+    setSubView('MAIN');
+    setEditingRecord(null);
+    setSelectedPassbookLoan(null);
+    setSelectedReceiptLoan(null);
+  };
 
   // Custom Calendar state & refs for Date Filters
   const [openStartCalendar, setOpenStartCalendar] = useState(false);
@@ -106,8 +279,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
   };
 
   const handleEditRecord = (rec: LoanRecord) => {
-    setEditingRecord(rec);
-    setShowModal(true);
+    navigateToIssueLoan(rec);
   };
 
   const handleRecordAction = async (id: string, action: string | null) => {
@@ -165,33 +337,36 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
   };
 
   const isRecordOverdue = (rec: LoanRecord) => {
-    if (rec.status !== 'OPEN') return false;
-    const diffDays = Math.max(0, Math.floor((new Date().getTime() - new Date(rec.loan_date).getTime()) / (1000 * 60 * 60 * 24)));
-    return (diffDays / 30 > rec.timeline_months);
+    if (rec.payment_status === 'CLOSED' || rec.status === 'CLOSED') return false;
+    const loanDateStr = rec.debt_date || rec.loan_date || new Date().toISOString().split('T')[0];
+    const diffDays = Math.max(0, Math.floor((new Date().getTime() - new Date(loanDateStr).getTime()) / (1000 * 60 * 60 * 24)));
+    return (diffDays / 30 > (rec.timeline_months || 1));
   };
 
   const metalFilteredLedger = ledger.filter(rec => {
     if (metalFilter === 'all') return true;
-    const isCashRec = rec.item_metal_type?.toLowerCase() === 'cash' || rec.item_name?.toLowerCase() === 'cash';
+    const mType = (rec.debt_category || rec.item_metal_type || 'GOLD').toLowerCase();
+    const isCashRec = mType === 'cash' || rec.item_name?.toLowerCase() === 'cash';
     if (metalFilter === 'cash') return isCashRec;
-    if (metalFilter === 'gold') return rec.item_metal_type?.toLowerCase() === 'gold' && !isCashRec;
-    if (metalFilter === 'silver') return rec.item_metal_type?.toLowerCase() === 'silver' && !isCashRec;
+    if (metalFilter === 'gold') return mType === 'gold' && !isCashRec;
+    if (metalFilter === 'silver') return mType === 'silver' && !isCashRec;
     return true;
   });
 
-  const pendingMetalCount = metalFilteredLedger.filter(r => r.status === 'OPEN' && r.record_action !== 'deleted').length;
-  const completedMetalCount = metalFilteredLedger.filter(r => r.status === 'CLOSED' && r.record_action !== 'deleted').length;
+  const pendingMetalCount = metalFilteredLedger.filter(r => r.payment_status !== 'CLOSED' && r.status !== 'CLOSED' && r.record_action !== 'deleted').length;
+  const completedMetalCount = metalFilteredLedger.filter(r => (r.payment_status === 'CLOSED' || r.status === 'CLOSED') && r.record_action !== 'deleted').length;
   const overdueMetalCount = metalFilteredLedger.filter(r => isRecordOverdue(r) && r.record_action !== 'deleted').length;
   const deletedMetalCount = metalFilteredLedger.filter(r => r.record_action === 'deleted').length;
 
   const filteredLedger = metalFilteredLedger.filter(rec => {
-    // Deleted tab: show only deleted records
-    if (statusFilter === 'deleted') return rec.record_action === 'deleted';
-    // All other tabs: exclude deleted records
-    if (rec.record_action === 'deleted') return false;
-    if (statusFilter === 'pending' && rec.status !== 'OPEN') return false;
-    if (statusFilter === 'completed' && rec.status !== 'CLOSED') return false;
-    if (statusFilter === 'overdue' && !isRecordOverdue(rec)) return false;
+    if (statusFilter === 'deleted') {
+      if (rec.record_action !== 'deleted') return false;
+    } else {
+      if (rec.record_action === 'deleted') return false;
+      if (statusFilter === 'pending' && (rec.payment_status === 'CLOSED' || rec.status === 'CLOSED')) return false;
+      if (statusFilter === 'completed' && (rec.payment_status !== 'CLOSED' && rec.status !== 'CLOSED')) return false;
+      if (statusFilter === 'overdue' && !isRecordOverdue(rec)) return false;
+    }
 
     const term = debouncedSearchTerm.toLowerCase().trim();
     const match =
@@ -201,41 +376,124 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       rec.customer_phone?.includes(term) ||
       rec.customer_address?.toLowerCase().includes(term) ||
       rec.item_name?.toLowerCase().includes(term) ||
-      String(rec.amount || '').includes(term) ||
-      String(rec.monthly_interest || '').includes(term) ||
-      String(rec.month_wise_interest || '').includes(term) ||
-      String(rec.total_interest_till_today || '').includes(term) ||
+      String((rec.current_principal ?? rec.customer_debt_money ?? rec.amount) || '').includes(term) ||
+      String((rec.current_interest_due ?? rec.month_wise_interest) || '').includes(term) ||
       String(rec.item_total_value || '').includes(term) ||
-      String(rec.loan_date || '').toLowerCase().includes(term) ||
-      String(rec.timeline_months || '').includes(term) ||
-      `${rec.timeline_months} mo`.toLowerCase().includes(term) ||
-      `${rec.timeline_months} month`.toLowerCase().includes(term) ||
-      `${rec.timeline_months} months`.toLowerCase().includes(term);
-    const d = new Date(rec.loan_date);
+      String(rec.debt_date || rec.loan_date || '').toLowerCase().includes(term);
+
+    const loanDateStr = rec.debt_date || rec.loan_date || '';
+    const d = loanDateStr ? new Date(loanDateStr) : new Date();
     if (startDate && d < new Date(startDate)) return false;
     if (endDate && d > new Date(endDate)) return false;
     return match;
   });
 
   // ── KPI values computed live from metalFilteredLedger ──────────────────
-  const kpiOpenLoans = metalFilteredLedger.filter(r => r.status === 'OPEN' && r.record_action !== 'deleted');
-  const kpiClosedLoans = metalFilteredLedger.filter(r => r.status === 'CLOSED' && r.record_action !== 'deleted');
-  const kpiTotalDebt = kpiOpenLoans.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const kpiOpenLoans = metalFilteredLedger.filter(r => r.payment_status !== 'CLOSED' && r.status !== 'CLOSED' && r.record_action !== 'deleted');
+  const kpiClosedLoans = metalFilteredLedger.filter(r => (r.payment_status === 'CLOSED' || r.status === 'CLOSED') && r.record_action !== 'deleted');
+  const kpiTotalDebt = kpiOpenLoans.reduce((acc, r) => acc + Number(r.current_principal ?? r.customer_debt_money ?? r.amount ?? 0), 0);
   const kpiTotalInterest = metalFilteredLedger
     .filter(r => r.record_action !== 'deleted')
     .reduce((acc, r) => {
-      const interest = r.status === 'CLOSED'
-        ? Number(r.final_consideration_interest_amount ?? r.total_interest_till_today ?? 0)
-        : Number(r.month_wise_interest || 0);
+      const interest = (r.payment_status === 'CLOSED' || r.status === 'CLOSED')
+        ? Number(r.total_interest_paid ?? r.final_consideration_interest_amount ?? r.total_interest_till_today ?? 0)
+        : Number(r.current_interest_due ?? r.month_wise_interest ?? 0);
       return acc + interest;
     }, 0);
 
   // ── Pagination derived ──────────────────────────────────────────────────
   const sortedFilteredLedger = [...filteredLedger].sort((a, b) => {
-    return new Date(b.loan_date).getTime() - new Date(a.loan_date).getTime();
+    const dateA = a.debt_date || a.loan_date || '';
+    const dateB = b.debt_date || b.loan_date || '';
+    return new Date(dateB).getTime() - new Date(dateA).getTime();
   });
   const totalPages = Math.max(1, Math.ceil(sortedFilteredLedger.length / pageSize));
   const paginatedLedger = sortedFilteredLedger.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  if (subView === 'ISSUE_LOAN') {
+    return (
+      <IssueNewLoanView
+        editingRecord={editingRecord}
+        metalRates={metalRates}
+        lang={lang}
+        onBack={navigateBackToLedger}
+        onSaveSuccess={() => {
+          navigateBackToLedger();
+          fetchData();
+        }}
+      />
+    );
+  }
+
+  if (subView === 'PASSBOOK' && selectedPassbookLoan) {
+    return (
+      <LoanPassbookPayView
+        loan={selectedPassbookLoan}
+        metalRates={metalRates}
+        lang={lang}
+        onBack={navigateBackToLedger}
+        onPaymentSuccess={() => {
+          fetchData();
+        }}
+      />
+    );
+  }
+
+  if (subView === 'RECEIPT' && selectedReceiptLoan) {
+    return (
+      <div style={{ padding: '1.25rem', background: '#f8fafc', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
+        {/* Top Full-screen Action Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', background: '#ffffff', padding: '0.85rem 1.25rem', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button
+              type="button"
+              onClick={navigateBackToLedger}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#334155', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}
+            >
+              <i className="fa-solid fa-arrow-left" /> Back to Loans List
+            </button>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="fa-solid fa-receipt" style={{ color: '#7c3aed' }} />
+              Finance / Girvi Receipt
+            </h3>
+          </div>
+
+        </div>
+
+        {/* View Body */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0' }}>
+          <div style={{ maxWidth: '700px', width: '100%', background: '#ffffff', borderRadius: '16px', border: '1px solid #cbd5e1', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)', padding: '1.25rem', overflow: 'hidden' }}>
+            <FinanceReceiptView
+              data={{
+                customer_name: selectedReceiptLoan.customer_name || '',
+                customer_phone: selectedReceiptLoan.customer_phone || '',
+                customer_address: selectedReceiptLoan.customer_address,
+                item_metal_type: (selectedReceiptLoan.debt_category || selectedReceiptLoan.item_metal_type || 'GOLD').toUpperCase() as any,
+                item_name: selectedReceiptLoan.item_name || 'Ornament',
+                item_weight_grams: Number(selectedReceiptLoan.item_weight_grams ?? selectedReceiptLoan.item_weight ?? 0),
+                item_deduction_name: selectedReceiptLoan.item_deduction_name,
+                item_deduction_weight: Number(selectedReceiptLoan.item_deduction_weight_grams ?? selectedReceiptLoan.item_deduction_weight ?? 0),
+                item_purity_percent: Number(selectedReceiptLoan.item_purity_percent ?? selectedReceiptLoan.touch ?? 91.6),
+                pure_metal_weight: Number(selectedReceiptLoan.pure_metal_weight ?? 0),
+                metal_value_per_gram: Number(selectedReceiptLoan.metal_value_per_gram ?? (selectedReceiptLoan.item_metal_type?.toUpperCase() === 'SILVER' ? (metalRates.silver_rate_per_gram || 250) : (metalRates.gold_rate_per_gram || 15000))),
+                total_value_of_item: Number(selectedReceiptLoan.total_value_of_item ?? 0),
+                item_image_url: selectedReceiptLoan.item_image_url,
+                amount: Number(selectedReceiptLoan.customer_debt_money ?? selectedReceiptLoan.amount ?? 0),
+                interest_rate_percent: Number(selectedReceiptLoan.interest_rate_percent || 1.5),
+                timeline_months: Number(selectedReceiptLoan.timeline_months || 3),
+                loan_date: selectedReceiptLoan.debt_date || selectedReceiptLoan.loan_date || new Date().toISOString().split('T')[0],
+                current_principal: Number(selectedReceiptLoan.current_principal ?? selectedReceiptLoan.amount ?? 0),
+                total_interest_paid: Number(selectedReceiptLoan.total_interest_paid || 0),
+                total_principal_paid: Number(selectedReceiptLoan.total_principal_paid || 0),
+                payment_history: (selectedReceiptLoan as any).payment_history || [],
+                receipt_json: selectedReceiptLoan.receipt_json,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ color: '#1e293b', fontFamily: "'Inter', 'DM Sans', sans-serif" }}>
@@ -553,8 +811,22 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
           </div>
 
           <button
-            onClick={() => { setEditingRecord(null); setShowModal(true); }}
-            style={{ padding: '8px 16px', background: 'linear-gradient(135deg, #d99b26 0%, #b45309 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 4px 14px rgba(180, 83, 9, 0.3)' }}
+            onClick={() => navigateToIssueLoan(null)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '12px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
+              color: '#ffffff',
+              fontWeight: 800,
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+              transition: 'all 0.2s',
+            }}
           >
             <i className="fa-solid fa-plus" /> {t.issueNewLoanBtn}
           </button>
@@ -916,229 +1188,238 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
             </div>
             <div style={{ width: '100%', overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #eaecf0', background: '#f8fafc', color: '#475569' }}>
-                <th style={{ padding: '10px 12px' }}>{t.snCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.loanDateCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.customerCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.itemCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.debtAmountCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.timelineCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.monthlyRateCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.totalAmountCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.itemValueCol}</th>
-                <th style={{ padding: '10px 12px' }}>{t.statusHeader}</th>
-                <th style={{ padding: '10px 12px' }}>{t.actionsCol}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLedger.length === 0 ? (
-                <tr><td colSpan={11} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No loan records found.</td></tr>
-              ) : paginatedLedger.map((rec, index) => {
-                const isCashLoan = rec.item_metal_type?.toLowerCase() === 'cash' || rec.item_name?.toLowerCase() === 'cash';
-                const recDeductionWt = Number(rec.item_deduction_weight_grams ?? rec.item_deduction_weight ?? 0);
-                const recPureWt = Math.max(0, (Number(rec.item_weight_grams || 0) - recDeductionWt) * (Number(rec.item_purity_percent || 100) / 100));
-                const currentBuyRate = rec.item_metal_type?.toLowerCase() === 'silver' ? (metalRates.silver_rate_per_gram || 250) : (metalRates.gold_rate_per_gram || 15000);
-                const liveMarketVal = isCashLoan ? 0 : Math.round(recPureWt * currentBuyRate);
-                const openTotalAmount = Number(rec.amount || 0) + Number(rec.month_wise_interest || 0);
-                const isExceeded = !isCashLoan && liveMarketVal > 0 && openTotalAmount > liveMarketVal;
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #eaecf0', background: '#f8fafc', color: '#475569' }}>
+                    <th style={{ padding: '10px 12px' }}>{t.snCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.loanDateCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.customerCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.itemCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.debtAmountCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.timelineCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.monthlyRateCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.totalAmountCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.itemValueCol}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.statusHeader}</th>
+                    <th style={{ padding: '10px 12px' }}>{t.actionsCol}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLedger.length === 0 ? (
+                    <tr><td colSpan={11} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No loan records found.</td></tr>
+                  ) : paginatedLedger.map((rec, index) => {
+                    const isCashLoan = rec.item_metal_type?.toLowerCase() === 'cash' || rec.item_name?.toLowerCase() === 'cash';
+                    const recDeductionWt = Number(rec.item_deduction_weight_grams ?? rec.item_deduction_weight ?? 0);
+                    const recPureWt = Math.max(0, (Number(rec.item_weight_grams || 0) - recDeductionWt) * (Number(rec.item_purity_percent || 100) / 100));
+                    const currentBuyRate = rec.item_metal_type?.toLowerCase() === 'silver' ? (metalRates.silver_rate_per_gram || 250) : (metalRates.gold_rate_per_gram || 15000);
+                    const liveMarketVal = isCashLoan ? 0 : Math.round(recPureWt * currentBuyRate);
+                    const openTotalAmount = Number(rec.amount || 0) + Number(rec.month_wise_interest || 0);
+                    const isExceeded = !isCashLoan && liveMarketVal > 0 && openTotalAmount > liveMarketVal;
 
-                return (
-                  <tr key={rec.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#6366f1', fontSize: '0.78rem' }}>{index + 1}</td>
-                    <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: '0.62rem', color: '#0f172a' }}>
-                      {rec.loan_date}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.customer_name} {rec.customer_surname}</div>
-                      <small style={{ color: '#64748b', display: 'block' }}>{rec.customer_phone}</small>
-                      {rec.customer_address && <small style={{ color: '#94a3b8', fontSize: '0.68rem', display: 'block' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', marginRight: '3px' }} /> {rec.customer_address}</small>}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {rec.item_image_url && (
-                          <img
-                            src={rec.item_image_url}
-                            alt={rec.item_name}
-                            onClick={() => setSelectedLedgerImage({
-                              url: rec.item_image_url!,
-                              title: rec.item_name,
-                              subtitle: `${rec.item_weight_grams}g · ${rec.item_purity_percent}% · ${rec.item_metal_type.toUpperCase()} · ${rec.customer_name} ${rec.customer_surname}`,
-                            })}
-                            title="Click to view full-size photo"
-                            style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #cbd5e1', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                            onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
-                            onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}
-                          />
+                    return (
+                      <tr key={rec.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#6366f1', fontSize: '0.78rem' }}>{index + 1}</td>
+                        <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: '0.62rem', color: '#0f172a' }}>
+                          {rec.loan_date}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.customer_name} {rec.customer_surname}</div>
+                          <small style={{ color: '#64748b', display: 'block' }}>{rec.customer_phone}</small>
+                          {rec.customer_address && <small style={{ color: '#94a3b8', fontSize: '0.68rem', display: 'block' }}><i className="fa-solid fa-location-dot" style={{ color: '#ef4444', marginRight: '3px' }} /> {rec.customer_address}</small>}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {rec.item_image_url && (
+                              <img
+                                src={rec.item_image_url}
+                                alt={rec.item_name || 'Item'}
+                                onClick={() => setSelectedLedgerImage({
+                                  url: rec.item_image_url || '',
+                                  title: rec.item_name || 'Item',
+                                  subtitle: `${rec.item_weight_grams ?? rec.item_weight ?? 0}g · ${rec.item_purity_percent ?? rec.touch ?? 0}% · ${(rec.item_metal_type || rec.debt_category || 'GOLD').toUpperCase()} · ${rec.customer_name} ${rec.customer_surname}`,
+                                })}
+                                title="Click to view full-size photo"
+                                style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid #cbd5e1', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                                onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
+                                onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}
+                              />
+                            )}
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.item_name || 'Item'}</div>
+                              {!isCashLoan && (
+                                <small style={{ color: '#64748b' }}>
+                                  {rec.item_weight_grams ?? rec.item_weight ?? 0}g {recDeductionWt > 0 ? `(Ded: ${recDeductionWt}g)` : ''} · {rec.item_purity_percent ?? rec.touch ?? 0}% · {rec.item_metal_type || rec.debt_category || 'GOLD'}
+                                </small>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#b45309' }}>₹{Number(rec.current_principal ?? rec.customer_debt_money ?? rec.amount ?? 0).toLocaleString('en-IN')}</td>
+                        <td style={{ padding: '10px 12px', color: '#64748b' }}>{rec.timeline_months} mo</td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ color: '#4f46e5', fontWeight: 600, marginTop: '2px' }}>
+                            {rec.interest_rate_percent}%
+                          </div>
+                          <div style={{ fontWeight: 600, fontSize: '0.68rem', color: '#10b981' }}>
+                            ( ₹{Math.round(Number(rec.current_principal ?? rec.customer_debt_money ?? rec.amount ?? 0) * (Number(rec.interest_rate_percent || 1.5) / 100)).toLocaleString('en-IN')}/mo)
+                          </div>
+                        </td>
+                        {statusFilter === 'completed' ? (
+                          <td style={{ padding: '10px 12px', fontWeight: 700, color: '#059669' }}>
+                            ₹{Number(Number(rec.current_principal ?? rec.customer_debt_money ?? rec.amount ?? 0) + Number(rec.total_interest_paid ?? rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0)).toLocaleString('en-IN')}
+                            <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Final Considered Settlement Total" />
+                            <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
+                              (₹{Number(rec.total_interest_paid ?? rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0).toLocaleString('en-IN')} interest)
+                            </div>
+                          </td>
+                        ) : (
+                          <td style={{ padding: '10px 12px', fontWeight: 700, color: (rec.payment_status === 'CLOSED' || rec.status === 'CLOSED') ? '#059669' : '#4f46e5' }}>
+                            {(rec.payment_status === 'CLOSED' || rec.status === 'CLOSED') ? (
+                              <>
+                                ₹{Number(Number(rec.customer_debt_money ?? rec.amount ?? 0) + Number(rec.total_interest_paid ?? rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0)).toLocaleString('en-IN')}
+                                <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Settled Total Amount" />
+                                <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
+                                  (₹{Number(rec.total_interest_paid ?? rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0).toLocaleString('en-IN')} interest) · Settled ({rec.closing_date})
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                  <span>₹{openTotalAmount.toLocaleString('en-IN')}</span>
+                                  {isExceeded && (
+                                    <span style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }} title={`Total amount ₹${openTotalAmount.toLocaleString('en-IN')} exceeds live market value ₹${liveMarketVal.toLocaleString('en-IN')}`}>
+                                      <i className="fa-solid fa-triangle-exclamation" /> Exceeded
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '0.68rem', color: '#6366f1', fontWeight: 600, marginTop: '2px' }}>
+                                  (₹{Number(rec.current_interest_due ?? rec.month_wise_interest ?? 0).toLocaleString('en-IN')} interest)
+                                </div>
+                              </>
+                            )}
+                          </td>
                         )}
-                        <div>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.item_name}</div>
-                          {!isCashLoan && (
-                            <small style={{ color: '#64748b' }}>
-                              {rec.item_weight_grams}g {recDeductionWt > 0 ? `(Ded: ${recDeductionWt}g)` : ''} · {rec.item_purity_percent}% · {rec.item_metal_type}
-                            </small>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#b45309' }}>₹{Number(rec.amount).toLocaleString('en-IN')}</td>
-                    <td style={{ padding: '10px 12px', color: '#64748b' }}>{rec.timeline_months} mo</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ color: '#4f46e5', fontWeight: 600, marginTop: '2px' }}>
-                        {rec.interest_rate_percent}%
-                      </div>
-                      <div style={{ fontWeight: 600, fontSize: '0.68rem', color: '#10b981' }}>
-                        ( ₹{Number(rec.monthly_interest).toLocaleString('en-IN')})
-                      </div>
-                    </td>
-                    {statusFilter === 'completed' ? (
-                      <td style={{ padding: '10px 12px', fontWeight: 700, color: '#059669' }}>
-                        ₹{Number(Number(rec.amount) + Number(rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0)).toLocaleString('en-IN')}
-                        <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Final Considered Settlement Total" />
-                        <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
-                          (₹{Number(rec.final_consideration_interest_amount ?? rec.total_interest_till_today ?? 0).toLocaleString('en-IN')} interest)
-                        </div>
-                      </td>
-                    ) : (
-                      <td style={{ padding: '10px 12px', fontWeight: 700, color: (rec.status === 'CLOSED' && rec.considered_type === 'Month-Wise Interest') ? '#059669' : rec.status === 'CLOSED' ? '#64748b' : '#4f46e5' }}>
-                        {rec.status === 'CLOSED' ? (
-                          rec.considered_type === 'Month-Wise Interest' ? (
-                            <>
-                              ₹{Number(Number(rec.amount) + Number(rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0)).toLocaleString('en-IN')}
-                              <i className="fa-solid fa-circle-check" style={{ color: '#059669', marginLeft: '5px', fontSize: '0.85rem' }} title="Settled Total Amount" />
-                              <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
-                                (₹{Number(rec.final_consideration_interest_amount ?? rec.month_wise_interest ?? 0).toLocaleString('en-IN')} interest) · Settled ({rec.closing_date})
-                              </div>
-                            </>
+                        <td style={{ padding: '10px 12px' }}>
+                          {isCashLoan ? (
+                            <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <i className="fa-solid fa-money-bill-wave" /> Cash
+                            </span>
                           ) : (
                             <>
-                              <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>-</span>
-                              <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 400 }}>Account Closed</div>
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                                ₹{Number(rec.total_value_of_item ?? rec.item_total_value ?? 0).toLocaleString('en-IN')}
+                              </div>
+                              <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }} title="Daily Live Current Market Value based on today's metal rate">
+                                <i className="fa-solid fa-chart-line" style={{ fontSize: '0.65rem' }} />
+                                <span>₹{liveMarketVal.toLocaleString('en-IN')}</span>
+                                <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 400 }}>(Live Market)</span>
+                              </div>
                             </>
-                          )
-                        ) : (
-                          <>
-                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                              <span>₹{openTotalAmount.toLocaleString('en-IN')}</span>
-                              {isExceeded && (
-                                <span style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }} title={`Total amount ₹${openTotalAmount.toLocaleString('en-IN')} exceeds live market value ₹${liveMarketVal.toLocaleString('en-IN')}`}>
-                                  <i className="fa-solid fa-triangle-exclamation" /> Exceeded
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          {(rec.payment_status === 'CLOSED' || rec.status === 'CLOSED') ? (
+                            <div>
+                              <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, background: '#d1fae5', color: '#047857', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <i className="fa-solid fa-circle-check" /> Completed
+                              </span>
+                              {rec.closing_date && (
+                                <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <i className="fa-solid fa-calendar-check" style={{ fontSize: '0.65rem' }} />
+                                  {rec.closing_date}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                              <button
+                                type="button"
+                                onClick={() => navigateToPassbook(rec)}
+                                title="Click to pay installment or view passbook"
+                                style={{ padding: '6px 14px', background: rec.payment_status === 'PARTIAL' ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', transition: 'all 0.2s' }}
+                              >
+                                <i className="fa-solid fa-clock-rotate-left" /> {rec.payment_status === 'PARTIAL' ? 'Partial Paid' : 'Pending'}
+                              </button>
+                              {isRecordOverdue(rec) && (
+                                <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.66rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <i className="fa-solid fa-triangle-exclamation" /> Overdue
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.68rem', color: '#6366f1', fontWeight: 600, marginTop: '2px' }}>
-                              (₹{(rec.month_wise_interest || 0).toLocaleString('en-IN')} interest) · {rec.month_wise_count || 1} Month{(rec.month_wise_count || 1) > 1 ? 's' : ''}
-                            </div>
-                          </>
-                        )}
-                      </td>
-                    )}
-                    <td style={{ padding: '10px 12px' }}>
-                      {isCashLoan ? (
-                        <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <i className="fa-solid fa-money-bill-wave" /> Cash
-                        </span>
-                      ) : (
-                        <>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                            ₹{Number(rec.item_total_value).toLocaleString('en-IN')}
-                          </div>
-                          <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }} title="Daily Live Current Market Value based on today's metal rate">
-                            <i className="fa-solid fa-chart-line" style={{ fontSize: '0.65rem' }} />
-                            <span>₹{liveMarketVal.toLocaleString('en-IN')}</span>
-                            <span style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 400 }}>(Live Market)</span>
-                          </div>
-                        </>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      {rec.status?.toUpperCase() === 'OPEN' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setConfirmCompleteRecord(rec);
-                            }}
-                            title="Click to complete/settle this loan"
-                            style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.25)', transition: 'all 0.2s' }}
-                          >
-                            <i className="fa-solid fa-clock-rotate-left" /> Pending
-                          </button>
-                          {isRecordOverdue(rec) && (
-                            <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.66rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                              <i className="fa-solid fa-triangle-exclamation" /> Overdue
-                            </span>
                           )}
-                        </div>
-                      ) : (
-                        <div>
-                          <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, background: '#d1fae5', color: '#047857', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <i className="fa-solid fa-circle-check" /> Completed
-                          </span>
-                          {rec.closing_date && (
-                            <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <i className="fa-solid fa-calendar-check" style={{ fontSize: '0.65rem' }} />
-                              {rec.closing_date}
+                        </td>
+                        {/* ── Actions Column ── */}
+                        <td style={{ padding: '10px 12px' }}>
+                          {statusFilter === 'deleted' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRecordAction(rec.finance_uuid || rec.id || '', null)}
+                              disabled={actionUpdating === (rec.finance_uuid || rec.id)}
+                              title="Undo delete — restore this record"
+                              style={{ padding: '5px 12px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', color: '#ffffff', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)', opacity: actionUpdating === (rec.finance_uuid || rec.id) ? 0.6 : 1 }}
+                            >
+                              {actionUpdating === (rec.finance_uuid || rec.id) ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-rotate-left" />} Undo
+                            </button>
+                          ) : (
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                              <button
+                                type="button"
+                                onClick={() => navigateToPassbook(rec)}
+                                title="Pay installment / View Passbook history"
+                                style={{ padding: '4px 8px', border: '1px solid #818cf8', borderRadius: '7px', background: '#eef2ff', color: '#4338ca', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 800, transition: 'all 0.15s' }}
+                              >
+                                💳 Pay / History
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => navigateToReceipt(rec)}
+                                title="View Billing Receipt & Receipt JSON"
+                                style={{ width: '30px', height: '30px', border: '1px solid #c084fc', borderRadius: '7px', background: '#f3e8ff', color: '#7c3aed', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.color = '#ffffff'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = '#f3e8ff'; e.currentTarget.style.color = '#7c3aed'; }}
+                              >
+                                <i className="fa-solid fa-receipt" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEditRecord(rec)}
+                                title="Edit this loan record"
+                                style={{ width: '30px', height: '30px', border: '1px solid #c7d2fe', borderRadius: '7px', background: '#eef2ff', color: '#4f46e5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#6366f1'; e.currentTarget.style.color = '#ffffff'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.color = '#4f46e5'; }}
+                              >
+                                <i className="fa-solid fa-pen-to-square" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmRecord(rec)}
+                                title="Delete this loan record"
+                                style={{ width: '30px', height: '30px', border: '1px solid #fecaca', borderRadius: '7px', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = '#ffffff'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                              >
+                                <i className="fa-solid fa-trash" />
+                              </button>
                             </div>
                           )}
-                        </div>
-                      )}
-                    </td>
-                    {/* ── Actions Column ── */}
-                    <td style={{ padding: '10px 12px' }}>
-                      {statusFilter === 'deleted' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleRecordAction(rec.id, null)}
-                          disabled={actionUpdating === rec.id}
-                          title="Undo delete — restore this record"
-                          style={{ padding: '5px 12px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', color: '#ffffff', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)', opacity: actionUpdating === rec.id ? 0.6 : 1 }}
-                        >
-                          {actionUpdating === rec.id ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-rotate-left" />} Undo
-                        </button>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleEditRecord(rec)}
-                            title="Edit this loan record"
-                            style={{ width: '30px', height: '30px', border: '1px solid #c7d2fe', borderRadius: '7px', background: '#eef2ff', color: '#4f46e5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', transition: 'all 0.15s' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#6366f1'; e.currentTarget.style.color = '#ffffff'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.color = '#4f46e5'; }}
-                          >
-                            <i className="fa-solid fa-pen-to-square" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirmRecord(rec)}
-                            title="Delete this loan record"
-                            style={{ width: '30px', height: '30px', border: '1px solid #fecaca', borderRadius: '7px', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', transition: 'all 0.15s' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = '#ffffff'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
-                          >
-                            <i className="fa-solid fa-trash" />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          {/* Pagination Footer */}
-          {filteredLedger.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
-              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                <button type="button" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === 1 ? '#f8fafc' : '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#475569', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>«</button>
-                <button type="button" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === 1 ? '#f8fafc' : '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#475569', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>‹ Prev</button>
-                <span style={{ fontSize: '0.75rem', color: '#64748b', padding: '4px 10px' }}>Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></span>
-                <button type="button" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === totalPages ? '#f8fafc' : '#ffffff', color: currentPage === totalPages ? '#cbd5e1' : '#475569', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>Next ›</button>
-                <button type="button" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === totalPages ? '#f8fafc' : '#ffffff', color: currentPage === totalPages ? '#cbd5e1' : '#475569', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>»</button>
+            {/* Pagination Footer */}
+            {filteredLedger.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <button type="button" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === 1 ? '#f8fafc' : '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#475569', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>«</button>
+                  <button type="button" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === 1 ? '#f8fafc' : '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#475569', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>‹ Prev</button>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b', padding: '4px 10px' }}>Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></span>
+                  <button type="button" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === totalPages ? '#f8fafc' : '#ffffff', color: currentPage === totalPages ? '#cbd5e1' : '#475569', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>Next ›</button>
+                  <button type="button" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '7px', background: currentPage === totalPages ? '#f8fafc' : '#ffffff', color: currentPage === totalPages ? '#cbd5e1' : '#475569', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>»</button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
           </>
         )}
       </div>
@@ -1164,7 +1445,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         onClose={() => setDeleteConfirmRecord(null)}
         onConfirm={async () => {
           if (deleteConfirmRecord) {
-            await handleRecordAction(deleteConfirmRecord.id, 'deleted');
+            const targetId = deleteConfirmRecord.finance_uuid || deleteConfirmRecord.id || '';
+            await handleRecordAction(targetId, 'deleted');
             setDeleteConfirmRecord(null);
           }
         }}
@@ -1184,6 +1466,19 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         }}
         submitting={completingLoan}
       />
+
+      {/* ── Installment Payment & History Passbook Modal ── */}
+      <InstallmentPaymentModal
+        isOpen={paymentModalLoan !== null}
+        loan={paymentModalLoan}
+        lang={lang}
+        onClose={() => setPaymentModalLoan(null)}
+        onPaymentSuccess={() => {
+          fetchData();
+        }}
+      />
+
+
 
       {/* ── High-Resolution Item Photo Lightbox Modal Dialog ── */}
       {selectedLedgerImage && (

@@ -20,13 +20,24 @@ export interface BillItem {
   wastage_percent?: number | string;
   wastage_amount?: number;
   making_charges_per_gram?: number | string; // Making Charges amount
+  making_charges?: number | string;
   additional_charges_name?: string;
+  additional_charges?: string;
+  additional_charge_name?: string;
   additional_charges_amount?: number | string;
+  additional_cost?: number | string;
+  additional_charge_value?: number | string;
   item_type: 'SELL' | 'BUY';
   custom_rate_per_gram?: number | string;
   customRate?: number;
   appliedRate?: number;
   purity_percentage?: number | string;
+  deduction_weight?: number | string;
+  hmw_percentage?: number | string;
+  touch_percentage?: number | string;
+  pure_metal_weight?: number | string;
+  pureWeight?: number;
+  pure_weight_grams?: number;
   gst_percent?: number | string;
   quantity_unit?: 'PIECES' | 'PAIRS' | 'GRAMS';
   quantity_value?: number | string;

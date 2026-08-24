@@ -29,6 +29,8 @@ interface ChatHeaderProps {
   setShowWorkerModal: (v: boolean) => void;
   activeChatFilter?: ChatFilterOption;
   setActiveChatFilter?: (f: ChatFilterOption) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -56,6 +58,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   setShowWorkerModal,
   activeChatFilter = 'ALL',
   setActiveChatFilter,
+  onRefresh,
+  isRefreshing = false,
 }) => {
   const t = getWorkAssignmentTranslation(lang);
 
@@ -231,6 +235,30 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Direct Supabase Refresh Button */}
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            title="Direct refresh from Supabase database"
+            style={{
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              padding: '4px 7px',
+              fontSize: '0.78rem',
+              color: '#075e54',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <i className={`fa-solid fa-rotate-right ${isRefreshing ? 'fa-spin' : ''}`} />
+          </button>
+        )}
 
         {/* Simple Borderless Vertical 3-Dots Menu */}
         <div style={{ position: 'relative' }}>

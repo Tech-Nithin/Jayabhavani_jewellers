@@ -12,6 +12,11 @@ interface Props {
   onPreviewImage: (url: string) => void;
 }
 
+const toSentenceCase = (str?: string | null): string => {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
 export const WhatsAppMessageBubble: React.FC<Props> = ({
   transaction,
   isWorkerSent,
@@ -39,6 +44,7 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
     : '';
 
   const isDeleted = Boolean(transaction.is_deleted);
+  const isOutgoing = transaction.direction === 'OUTGOING';
   const editHistory = Array.isArray(transaction.edited_at_history) ? transaction.edited_at_history : [];
   const isEdited = editHistory.length > 0;
   const isWithin30Mins = transaction.created_at
@@ -180,7 +186,7 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
 
               return (
                 <>
-                  {/* 1. Category 3-Column Summary Card (Only if specs exist) */}
+                  {/* 1. Category Summary Card (Only if specs exist) */}
                   {hasCard && (
                     <div
                       style={{
@@ -190,92 +196,106 @@ export const WhatsAppMessageBubble: React.FC<Props> = ({
                           transaction.category === 'GOLD'
                             ? '#fffbe8'
                             : transaction.category === 'SILVER'
-                            ? '#f8fafc'
-                            : '#f0f9ff',
+                              ? '#f8fafc'
+                              : '#f0fdf4',
                         borderRadius: '10px',
                         border:
                           transaction.category === 'GOLD'
                             ? '1px solid #fde68a'
                             : transaction.category === 'SILVER'
-                            ? '1px solid #cbd5e1'
-                            : '1px solid #bae6fd',
+                              ? '1px solid #cbd5e1'
+                              : '1px solid #bbf7d0',
                       }}
                     >
-                      {/* Title Row */}
-                      <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0f172a', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span>
-                          {transaction.category === 'GOLD'
-                            ? '🥇'
-                            : transaction.category === 'SILVER'
-                            ? '🥈'
-                            : transaction.category === 'CASH'
-                            ? '🏅'
-                            : '👑'}
-                        </span>
-                        <span>
-                          {transaction.item_name
-                            ? transaction.item_name
-                            : transaction.category === 'GOLD'
-                            ? 'Raw Gold Bar'
-                            : transaction.category === 'SILVER'
-                            ? 'Raw Silver Bar'
-                            : transaction.category === 'CASH'
-                            ? 'Cash Transfer'
-                            : 'Ornament Item'}
-                        </span>
-                      </div>
-
-                      {/* 3-Column Spec Table */}
-                      {transaction.weight_grams ? (
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr 1.2fr',
-                            gap: '4px',
-                            fontSize: '0.68rem',
-                            background: '#ffffff',
-                            padding: '5px 8px',
-                            borderRadius: '7px',
-                            border: '1px solid #cbd5e1',
-                          }}
-                        >
-                          <div>
-                            <span style={{ color: '#64748b', display: 'block', fontSize: '0.52rem', fontWeight: 700, letterSpacing: '0.2px' }}>
-                              GROSS WT
-                            </span>
-                            <strong style={{ fontSize: '0.72rem', color: '#0f172a' }}>
-                              {Number(transaction.weight_grams).toFixed(3)} g
-                            </strong>
+                      {/* Header & For Which Item */}
+                      {transaction.category === 'CASH' ? (
+                        <div>
+                          <div style={{ fontSize: '0.62rem', color: '#166534', fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                            <span>💵 CASH {transaction.cash_metal_link === 'FOR_GOLD' ? 'FOR GOLD' : transaction.cash_metal_link === 'FOR_SILVER' ? 'FOR SILVER' : 'PAYMENT'}</span>
+                            {transaction.cash_metal_link && (
+                              <span style={{ fontSize: '0.58rem', background: '#dcfce7', padding: '1px 5px', borderRadius: '4px', color: '#15803d' }}>
+                                {transaction.cash_metal_link === 'FOR_GOLD' ? '🥇 Raw Gold' : transaction.cash_metal_link === 'FOR_SILVER' ? '🥈 Raw Silver' : '💵 General'}
+                              </span>
+                            )}
                           </div>
-
-                          <div>
-                            <span style={{ color: '#64748b', display: 'block', fontSize: '0.52rem', fontWeight: 700, letterSpacing: '0.2px' }}>
-                              TOUNCH
-                            </span>
-                            <strong style={{ fontSize: '0.72rem', color: '#d97706' }}>
-                              {transaction.touch_percentage || (transaction.category === 'SILVER' ? 80.0 : 100.0)}%
-                            </strong>
+                          <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#15803d', marginTop: '1px' }}>
+                            💵 ₹{transaction.amount_cash?.toLocaleString('en-IN') || '0'}
                           </div>
-
-                          <div>
-                            <span style={{ color: '#64748b', display: 'block', fontSize: '0.52rem', fontWeight: 700, letterSpacing: '0.2px' }}>
-                              100% PURE
-                            </span>
-                            <strong style={{ fontSize: '0.72rem', color: '#15803d' }}>
-                              {Number(
-                                (Number(transaction.weight_grams) *
-                                  (Number(transaction.touch_percentage) || (transaction.category === 'SILVER' ? 80.0 : 100.0))) /
-                                  100
-                              ).toFixed(3)} g
-                            </strong>
-                          </div>
+                          {transaction.item_name && (
+                            <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, marginTop: '2px' }}>
+                              {isOutgoing ? `For ${toSentenceCase(transaction.item_name)}` : toSentenceCase(transaction.item_name)}
+                            </div>
+                          )}
+                          {transaction.applied_rate_per_gram && transaction.applied_rate_per_gram > 0 ? (
+                            <div style={{ marginTop: '4px', fontSize: '0.66rem', background: '#ffffff', padding: '3px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span><strong>Rate:</strong> ₹{transaction.applied_rate_per_gram.toLocaleString('en-IN')}/g</span>
+                              <span style={{ color: '#15803d', fontWeight: 800 }}>
+                                <strong>Eq. Pure:</strong> {(Number(transaction.amount_cash) / Number(transaction.applied_rate_per_gram)).toFixed(3)} g
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
-                      ) : transaction.amount_cash ? (
-                        <div style={{ fontSize: '0.75rem', background: '#ffffff', padding: '5px 8px', borderRadius: '7px', border: '1px solid #cbd5e1' }}>
-                          <span style={{ color: '#64748b', fontSize: '0.58rem', fontWeight: 700, display: 'block' }}>CASH AMOUNT</span>
-                          <strong style={{ color: '#15803d', fontSize: '0.85rem' }}>₹{transaction.amount_cash.toLocaleString('en-IN')}</strong>
+                      ) : (
+                        <div>
+                          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>{transaction.category === 'GOLD' ? '🥇 Gold' : '🥈 Silver'}</span>
+                            </div>
+                            {transaction.item_name && (
+                              <div style={{ fontSize: '0.72rem', color: transaction.category === 'GOLD' ? '#b45309' : '#0369a1', fontWeight: 700, marginTop: '1px' }}>
+                                {isOutgoing ? `For ${toSentenceCase(transaction.item_name)}` : toSentenceCase(transaction.item_name)}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 3-Column Spec Table */}
+                          {transaction.weight_grams ? (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 1fr 1.2fr',
+                                gap: '4px',
+                                fontSize: '0.68rem',
+                                background: '#ffffff',
+                                padding: '5px 8px',
+                                borderRadius: '7px',
+                                border: '1px solid #cbd5e1',
+                              }}
+                            >
+                              <div>
+                                <span style={{ color: '#64748b', display: 'block', fontSize: '0.52rem', fontWeight: 700, letterSpacing: '0.2px' }}>
+                                  GROSS WT
+                                </span>
+                                <strong style={{ fontSize: '0.72rem', color: '#0f172a' }}>
+                                  {Number(transaction.weight_grams).toFixed(3)} g
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span style={{ color: '#64748b', display: 'block', fontSize: '0.52rem', fontWeight: 700, letterSpacing: '0.2px' }}>
+                                  TOUNCH
+                                </span>
+                                <strong style={{ fontSize: '0.72rem', color: '#d97706' }}>
+                                  {transaction.touch_percentage || 100.0}%
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span style={{ color: '#64748b', display: 'block', fontSize: '0.52rem', fontWeight: 700, letterSpacing: '0.2px' }}>
+                                  100% PURE
+                                </span>
+                                <strong style={{ fontSize: '0.72rem', color: '#15803d' }}>
+                                  {Number(
+                                    (Number(transaction.weight_grams) *
+                                      (Number(transaction.touch_percentage) || 100.0)) /
+                                    100
+                                  ).toFixed(3)} g
+                                </strong>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
+                      )}
                     </div>
                   )}
 

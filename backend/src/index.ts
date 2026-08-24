@@ -117,6 +117,49 @@ app.post('/api/health/purge-cache', (req: Request, res: Response) => {
   }
 });
 
+// Daily 11:55 PM IST EOD Auto-Scheduler
+let lastScheduledRunDate = '';
+setInterval(async () => {
+  try {
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const hours = nowIST.getHours();
+    const minutes = nowIST.getMinutes();
+    const todayStr = nowIST.toISOString().split('T')[0];
+
+    if (hours === 23 && minutes === 55 && lastScheduledRunDate !== todayStr) {
+      lastScheduledRunDate = todayStr;
+      console.log(`🌙 [11:55 PM IST Scheduler] Generating EOD Closing & Tomorrow Opening Record for ${todayStr}...`);
+      
+      const { generateClosingRecord, saveClosingRecord } = await import('./utils/closingRecordHelper');
+      const closingData = await generateClosingRecord(todayStr);
+      await saveClosingRecord(todayStr, closingData);
+
+      const tomorrowObj = new Date(nowIST);
+      tomorrowObj.setDate(tomorrowObj.getDate() + 1);
+      const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
+
+      const goldClosing = closingData?.goldStock?.totalGrams ?? 0;
+      const silverClosing = closingData?.silverStock?.totalGrams ?? 0;
+      const cashClosing = closingData?.cashInHand ?? 0;
+
+      const { supabase } = await import('./config/supabase');
+      try {
+        await supabase.from('daily_opening_records').upsert([{
+          record_date: tomorrowStr,
+          opening_gold: goldClosing,
+          opening_silver: silverClosing,
+          opening_cash: cashClosing,
+          updated_at: new Date().toISOString()
+        }], { onConflict: 'record_date' });
+      } catch {}
+
+      console.log(`✨ [11:55 PM IST Scheduler] Tomorrow (${tomorrowStr}) Opening Record initialized: Gold ${goldClosing}g, Silver ${silverClosing}g, Cash ₹${cashClosing}`);
+    }
+  } catch (err: any) {
+    console.warn(`⚠️ [11:55 PM IST Scheduler Warning]:`, err?.message);
+  }
+}, 60000);
+
 if (process.env.VERCEL !== '1') {
   app.listen(PORT, () => {
     console.log(`✨ Jaya Bhavani Central Backend running on http://localhost:${PORT}`);

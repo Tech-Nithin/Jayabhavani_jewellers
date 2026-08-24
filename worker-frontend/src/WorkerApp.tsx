@@ -6,8 +6,10 @@ import { WorkerProfile, WorkerTransaction, ReplyMessageData, TransactionCategory
 import {
   fetchWorkerTransactions,
   sendWorkerTransaction,
+  updateWorkerTransaction,
   updateWorkerTransactionNotes,
   deleteWorkerTransaction,
+  fetchWorkerAssignedOrders,
 } from './services/workerApi';
 import { WorkerLoginForm } from './components/auth/WorkerLoginForm';
 import { WhatsAppHeader } from './components/chat/WhatsAppHeader';
@@ -19,6 +21,9 @@ import { EditMessageModal } from './components/modals/EditMessageModal';
 import { EditHistoryModal } from './components/modals/EditHistoryModal';
 import { NewTransactionModal } from './components/modals/NewTransactionModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
+import { WhatsAppListView } from './components/hub/WhatsAppListView';
+import { WorkerOrdersView } from './components/orders/WorkerOrdersView';
+import { WorkerTransactionsStatementView } from './components/ledger/WorkerTransactionsStatementView';
 
 import { API_BASE } from './config/apiConfig';
 import { mergeTransactions } from './utils/chatCache';
@@ -31,6 +36,29 @@ import { playJbjNotificationSound } from './utils/soundUtils';
 import { initNativeNotifications, triggerDeviceNotification } from './utils/nativeNotification';
 
 export default function WorkerApp() {
+  // Global Protection: Disable mouse wheel increment/decrement on all number input fields across the entire worker app
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      const activeEl = document.activeElement as HTMLInputElement | null;
+      const targetEl = e.target as HTMLInputElement | null;
+
+      const isNumberInput = (el: HTMLInputElement | null) =>
+        Boolean(el && el.tagName === 'INPUT' && (el.type === 'number' || el.getAttribute('type') === 'number'));
+
+      if (isNumberInput(activeEl)) {
+        activeEl?.blur();
+      }
+      if (isNumberInput(targetEl)) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   const [worker, setWorker] = useState<WorkerProfile | null>(() => {
     try {
       const saved = localStorage.getItem('jbj_worker_profile');
@@ -45,6 +73,11 @@ export default function WorkerApp() {
   const [isSending, setIsSending] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
 
+  // Navigation Channel State: 'LIST' | 'CHAT' | 'ORDERS' | 'TRANSACTIONS'
+  const [activeChannel, setActiveChannel] = useState<'LIST' | 'CHAT' | 'ORDERS' | 'TRANSACTIONS'>('LIST');
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [completedOrdersCount, setCompletedOrdersCount] = useState(0);
+
   // Pagination & Search States
   const [loadedDays, setLoadedDays] = useState(7);
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
@@ -53,6 +86,24 @@ export default function WorkerApp() {
   const isSendingRef = useRef(isSending);
   const searchQueryRef = useRef(searchQuery);
   const loadedDaysRef = useRef(loadedDays);
+
+  const loadOrderCounts = () => {
+    if (!worker?.id) return;
+    fetchWorkerAssignedOrders(worker.id)
+      .then((all) => {
+        const pending = all.filter((o: any) => o.returned_from_worker !== 'yes' && o.status !== 'COMPLETED').length;
+        const completed = all.filter((o: any) => o.returned_from_worker === 'yes' || o.status === 'COMPLETED').length;
+        setPendingOrdersCount(pending);
+        setCompletedOrdersCount(completed);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (worker?.id) {
+      loadOrderCounts();
+    }
+  }, [worker?.id]);
 
   useEffect(() => {
     isSendingRef.current = isSending;
@@ -319,6 +370,27 @@ export default function WorkerApp() {
     }
   };
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleDirectDatabaseRefresh = async () => {
+    if (!worker?.id || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      // 1. Force fresh fetch from database
+      const fresh = await fetchWorkerTransactions(worker.id, 60, '');
+      const validTxns = Array.isArray(fresh) ? fresh.filter((t: any) => !t.is_deleted) : [];
+      setTransactions(validTxns);
+      await saveCachedTransactions(worker.id, validTxns);
+
+      // 2. Fetch fresh assigned orders
+      await loadOrderCounts();
+    } catch (err) {
+      console.warn('Direct database refresh error:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Handle Search overall chat
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -447,10 +519,10 @@ export default function WorkerApp() {
     }
   };
 
-  // Edit message
-  const handleSaveEdit = async (txId: string, newNotes: string) => {
+  // Edit message / transaction
+  const handleSaveEdit = async (txId: string, editPayload: any) => {
     try {
-      const res = await updateWorkerTransactionNotes(txId, newNotes);
+      const res = await updateWorkerTransaction(txId, typeof editPayload === 'string' ? { notes: editPayload } : editPayload);
       if (res.success) {
         await loadTransactions(loadedDays, searchQuery, false);
       } else {
@@ -481,6 +553,7 @@ export default function WorkerApp() {
   const handleSendTransactionSpec = async (specData: {
     category: TransactionCategory;
     itemName: string;
+    orderId?: string | null;
     weightGrams?: number;
     touchPercentage?: number;
     amountCash?: number;
@@ -495,6 +568,7 @@ export default function WorkerApp() {
       const res = await sendWorkerTransaction(worker.id, specData.notes, specData.photos, replyTo, {
         category: specData.category,
         itemName: specData.itemName,
+        orderId: specData.orderId,
         weightGrams: specData.weightGrams,
         touchPercentage: specData.touchPercentage,
         amountCash: specData.amountCash,
@@ -517,38 +591,94 @@ export default function WorkerApp() {
   return (
     <div className="wa-app-root">
       <AppUpdateModal />
-      <WhatsAppHeader
-        worker={worker}
-        isOnline={isOnline}
-        onLogout={handleLogout}
-        onOpenProfile={() => setIsProfileOpen(true)}
-        onSearch={handleSearch}
-      />
 
-      <WhatsAppChatArea
-        transactions={transactions}
-        loading={loading}
-        workerId={worker.id}
-        onReply={(data) => setReplyTo(data)}
-        onEdit={(tx) => setEditingTx(tx)}
-        onDelete={handleDeleteTx}
-        onViewEditHistory={(tx) => setHistoryTx(tx)}
-        onPreviewImage={(url) => setPreviewImageUrl(url)}
-        onLoadEarlier={handleLoadEarlier}
-        isLoadingEarlier={isLoadingEarlier}
-      />
+      {/* ── CHANNEL 1: WHATSAPP HUB LIST VIEW ── */}
+      {activeChannel === 'LIST' && (
+        <>
+          <WhatsAppHeader
+            worker={worker}
+            isOnline={isOnline}
+            onLogout={handleLogout}
+            onOpenProfile={() => setIsProfileOpen(true)}
+            onSearch={handleSearch}
+            onRefresh={handleDirectDatabaseRefresh}
+            isRefreshing={isRefreshing}
+          />
+          <WhatsAppListView
+            worker={worker}
+            transactions={transactions}
+            pendingOrdersCount={pendingOrdersCount}
+            completedOrdersCount={completedOrdersCount}
+            onOpenChat={() => setActiveChannel('CHAT')}
+            onOpenOrders={() => setActiveChannel('ORDERS')}
+            onOpenTransactions={() => setActiveChannel('TRANSACTIONS')}
+          />
+        </>
+      )}
 
-      <WhatsAppInputBar
-        replyTo={replyTo}
-        onClearReply={() => setReplyTo(null)}
-        onSendMessage={handleSendMessage}
-        onOpenSpecModal={() => setIsSpecModalOpen(true)}
-        isSending={isSending}
-      />
+      {/* ── CHANNEL 2: JBJ - ADMIN LIVE CHAT ── */}
+      {activeChannel === 'CHAT' && (
+        <>
+          <WhatsAppHeader
+            worker={worker}
+            isOnline={isOnline}
+            onLogout={handleLogout}
+            onOpenProfile={() => setIsProfileOpen(true)}
+            onSearch={handleSearch}
+            onBack={() => setActiveChannel('LIST')}
+            onRefresh={handleDirectDatabaseRefresh}
+            isRefreshing={isRefreshing}
+          />
+          <WhatsAppChatArea
+            transactions={transactions}
+            loading={loading}
+            workerId={worker.id}
+            onReply={(data) => setReplyTo(data)}
+            onEdit={(tx) => setEditingTx(tx)}
+            onDelete={handleDeleteTx}
+            onViewEditHistory={(tx) => setHistoryTx(tx)}
+            onPreviewImage={(url) => setPreviewImageUrl(url)}
+            onLoadEarlier={handleLoadEarlier}
+            isLoadingEarlier={isLoadingEarlier}
+          />
+          <WhatsAppInputBar
+            replyTo={replyTo}
+            onClearReply={() => setReplyTo(null)}
+            onSendMessage={handleSendMessage}
+            onOpenSpecModal={() => setIsSpecModalOpen(true)}
+            isSending={isSending}
+          />
+        </>
+      )}
+
+      {/* ── CHANNEL 3: MY ORDERS (ASSIGNED TASKS) ── */}
+      {activeChannel === 'ORDERS' && (
+        <WorkerOrdersView
+          worker={worker}
+          onBack={() => {
+            setActiveChannel('LIST');
+            loadOrderCounts();
+          }}
+          onPreviewImage={(url) => setPreviewImageUrl(url)}
+        />
+      )}
+
+      {/* ── CHANNEL 4: TRANSACTIONS STATEMENT (LEDGER) ── */}
+      {activeChannel === 'TRANSACTIONS' && (
+        <WorkerTransactionsStatementView
+          worker={worker}
+          transactions={transactions}
+          onBack={() => setActiveChannel('LIST')}
+          onPreviewImage={(url) => setPreviewImageUrl(url)}
+          onRefresh={handleDirectDatabaseRefresh}
+          isRefreshing={isRefreshing}
+        />
+      )}
 
       {/* Modals */}
       <NewTransactionModal
         isOpen={isSpecModalOpen}
+        workerId={worker.id}
         onClose={() => setIsSpecModalOpen(false)}
         onSubmitTransaction={async (specData) => {
           await handleSendTransactionSpec(specData);

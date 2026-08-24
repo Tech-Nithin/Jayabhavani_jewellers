@@ -64,6 +64,7 @@ export const SellModeForm: React.FC<ModeFormProps> = ({
   handleRemoveItem,
   calcResults,
   presets,
+  getItemNameOptions,
   handleAddNewPreset,
   rates,
   t,
@@ -162,14 +163,12 @@ export const SellModeForm: React.FC<ModeFormProps> = ({
 
             {/* Row 2: Item Name & Gross Weight */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && (!it.product_name || !it.product_name.trim()) ? '#dc2626' : '#475569', display: 'block', marginBottom: '3px' }}>
                     {t.itemNameLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
                   </label>
-                  {showValidationErrors && (!it.product_name || !it.product_name.trim()) && (
-                    <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#dc2626' }}>* Required</span>
-                  )}
                 </div>
                 <CreatablePresetSelect
                   value={it.product_name}
@@ -177,7 +176,7 @@ export const SellModeForm: React.FC<ModeFormProps> = ({
                     handleUpdateItem(it.id, 'product_name', toStartCase(val));
                     if (showValidationErrors) setShowValidationErrors(false);
                   }}
-                  options={presets.item_name || []}
+                  options={getItemNameOptions ? getItemNameOptions(it.metal_type) : (presets.item_name || [])}
                   placeholder={t.itemNamePlaceholder}
                   categoryName="item_name"
                   onAddNewPreset={handleAddNewPreset}

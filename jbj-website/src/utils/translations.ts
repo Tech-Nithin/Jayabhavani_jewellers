@@ -120,7 +120,7 @@ export const translations = {
 
     // Invoice Details View
     invoiceDetailsTitle: 'Invoice Details',
-    backToHistoryBtn: 'Back to Purchase History',
+    backToHistoryBtn: 'Back',
     printThermalReceiptBtn: 'Print Thermal Receipt',
     downloadPngBtn: 'Download image',
     editInvoiceBtn: 'Edit Invoice',
@@ -410,7 +410,7 @@ export const translations = {
 
     // Invoice Details View
     invoiceDetailsTitle: 'బిల్లు వివరాలు',
-    backToHistoryBtn: 'కొనుగోలు చరిత్రకు తిరిగి వెళ్లు',
+    backToHistoryBtn: 'తిరిగి వెళ్లు',
     printThermalReceiptBtn: 'థర్మల్ రశీదు ప్రింట్ చేయి',
     downloadPngBtn: 'బిల్లు డౌన్‌లోడ్ చేయి',
     editInvoiceBtn: 'బిల్లు సవరించు',
