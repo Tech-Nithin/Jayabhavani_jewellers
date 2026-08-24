@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface StockMovementProps {
   stockViewMode: 'ALL' | 'TODAY';
   setStockViewMode: (mode: 'ALL' | 'TODAY') => void;
   metalCategoryFilter: 'ALL' | 'GOLD' | 'SILVER';
   setMetalCategoryFilter: (filter: 'ALL' | 'GOLD' | 'SILVER') => void;
-  ornamentsStockList: any[];
+  ornamentsStockList?: any[];
   eodReorderList: any[];
   logBookTimeline?: any[];
   dayBookStockSummary?: any[];
@@ -16,11 +16,17 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
   setStockViewMode,
   metalCategoryFilter,
   setMetalCategoryFilter,
-  ornamentsStockList,
   eodReorderList,
   logBookTimeline = [],
   dayBookStockSummary = [],
 }) => {
+  // Accordion Expand/Collapse State
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+
+  const toggleRowAccordion = (id: string) => {
+    setExpandedRowId((prev) => (prev === id ? null : id));
+  };
+
   // 1. Determine Opening Stock Weight for selected metal category (ALL, GOLD, or SILVER)
   let openingStockWeight = 0;
   if (metalCategoryFilter === 'ALL') {
@@ -32,7 +38,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
     openingStockWeight = Number(targetSummary?.openingWeight || 0);
   }
 
-  // 2. Expand logBookTimeline entries into itemized metal events (separating SELL vs BUY/TRADE-IN items)
+  // 2. Expand logBookTimeline entries into itemized metal events
   const expandedMetalEvents: any[] = [];
 
   logBookTimeline.forEach((entry: any) => {
@@ -43,15 +49,17 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
     }
 
     const partyName = entry.title || rawInv?.customer_name || 'Walk-in Customer';
+    const partyPhone = rawInv?.customer_phone || entry.customer_phone || '-';
 
     if (rData && Array.isArray(rData.items) && rData.items.length > 0) {
       rData.items.forEach((it: any, itemIdx: number) => {
         const itemTypeRaw = (it.item_type || entry.type || '').toUpperCase();
         const isBuyScrap = itemTypeRaw === 'BUY' || itemTypeRaw === 'EXCHANGE_BUY' || itemTypeRaw === 'EXCHANGE';
-        const isSellItem = itemTypeRaw === 'SELL';
 
         const itemMetal = (it.metal_type || entry.category || 'GOLD').toUpperCase();
         const itemWt = Number(it.weight_grams || it.net_weight || it.gross_weight || 0);
+        const purityPct = Number(it.purity_percentage || it.purity || 91.6);
+        const fineWt = Number(it.pure_weight || (itemWt * (purityPct / 100)));
 
         // Filter by selected metal category (ALL vs GOLD vs SILVER)
         const isTargetMetal = metalCategoryFilter === 'ALL'
@@ -71,12 +79,19 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
             created_at: entry.created_at,
             time: entry.time,
             partyName: partyName,
+            partyPhone: partyPhone,
+            invoiceId: rawInv?.id || entry.id || 'N/A',
             rawType: displayType,
             productName: it.product_name || (isBuyScrap ? 'Old Scrap Metal' : 'New Ornament'),
             details: `Invoice #${rawInv?.id || 'N/A'} · ${it.product_name || 'Item'} (${itemWt.toFixed(3)}g)`,
             metalCategory: itemMetal,
             weight_grams: itemWt,
-            isInflow: isBuyScrap, // BUY/Trade-in is IN (+g), SELL is OUT (-g)
+            purity_percentage: purityPct,
+            fine_weight: fineWt,
+            amount: Number(it.total_amount || it.price || entry.amount || 0),
+            isInflow: isBuyScrap,
+            rawItem: it,
+            rawEntry: entry,
           });
         }
       });
@@ -85,6 +100,8 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
       const rawType = (entry.type || '').toUpperCase();
       const wt = Number(entry.weight_grams || 0);
       const cat = (entry.category || '').toUpperCase();
+      const purityPct = Number(entry.purity_percentage || 91.6);
+      const fineWt = Number(entry.pure_weight || (wt * (purityPct / 100)));
 
       const isTargetMetal = metalCategoryFilter === 'ALL'
         ? true
@@ -101,16 +118,22 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
 
       if (wt > 0 && isTargetMetal) {
         expandedMetalEvents.push({
-          id: entry.id || Math.random(),
+          id: String(entry.id || Math.random()),
           created_at: entry.created_at,
           time: entry.time,
           partyName: partyName,
+          partyPhone: partyPhone,
+          invoiceId: entry.id || 'N/A',
           rawType: rawType,
           productName: entry.details || 'Jewellery Movement',
           details: entry.details || '-',
           metalCategory: cat || 'GOLD',
           weight_grams: wt,
+          purity_percentage: purityPct,
+          fine_weight: fineWt,
+          amount: Number(entry.amount || entry.paid_amount || 0),
           isInflow: isInflow,
+          rawEntry: entry,
         });
       }
     }
@@ -150,34 +173,40 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Container Box */}
+      {/* Main Card Container */}
       <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-        {/* Top Header & Filter Controls */}
+        
+        {/* Header Bar & Metal Filter Controls */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className="fa-solid fa-boxes-stacked" style={{ color: metalCategoryFilter === 'GOLD' ? '#d97706' : metalCategoryFilter === 'SILVER' ? '#0284c7' : '#7c3aed' }}></i>
-            {metalCategoryFilter === 'ALL' ? 'All Metals (Gold & Silver)' : metalCategoryFilter} Stock Movement Passbook Ledger
-          </h3>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="fa-solid fa-boxes-stacked" style={{ color: metalCategoryFilter === 'GOLD' ? '#d97706' : metalCategoryFilter === 'SILVER' ? '#0284c7' : '#7c3aed' }}></i>
+              {metalCategoryFilter === 'ALL' ? 'All Metals (Gold & Silver)' : metalCategoryFilter} Stock Movement Passbook
+            </h3>
+            <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', color: '#64748b' }}>
+              Click on any row to expand the full transaction breakdown accordion 🔽
+            </p>
+          </div>
 
-          {/* Filters */}
+          {/* Filter Switch Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Metal Filter Switch (ALL vs GOLD vs SILVER) */}
+            {/* Metal Category Filter (ALL | GOLD | SILVER) */}
             <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
               <button
                 type="button"
                 onClick={() => setMetalCategoryFilter('ALL')}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: metalCategoryFilter === 'ALL' ? '#0f172a' : 'transparent',
                   color: metalCategoryFilter === 'ALL' ? '#ffffff' : '#64748b',
                   fontWeight: 800,
-                  fontSize: '0.8rem',
+                  fontSize: '0.78rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -188,62 +217,62 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 type="button"
                 onClick={() => setMetalCategoryFilter('GOLD')}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: metalCategoryFilter === 'GOLD' ? '#d97706' : 'transparent',
                   color: metalCategoryFilter === 'GOLD' ? '#ffffff' : '#64748b',
                   fontWeight: 800,
-                  fontSize: '0.8rem',
+                  fontSize: '0.78rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   transition: 'all 0.15s ease',
                 }}
               >
-                <i className="fa-solid fa-gem"></i> Gold Stock
+                <i className="fa-solid fa-gem"></i> Gold
               </button>
 
               <button
                 type="button"
                 onClick={() => setMetalCategoryFilter('SILVER')}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: metalCategoryFilter === 'SILVER' ? '#0284c7' : 'transparent',
                   color: metalCategoryFilter === 'SILVER' ? '#ffffff' : '#64748b',
                   fontWeight: 800,
-                  fontSize: '0.8rem',
+                  fontSize: '0.78rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   transition: 'all 0.15s ease',
                 }}
               >
-                <i className="fa-solid fa-coins"></i> Silver Stock
+                <i className="fa-solid fa-coins"></i> Silver
               </button>
             </div>
 
-            {/* Time Filter Switch */}
+            {/* Time Filter (ALL | TODAY) */}
             <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
               <button
                 type="button"
                 onClick={() => setStockViewMode('ALL')}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: stockViewMode === 'ALL' ? '#0284c7' : 'transparent',
                   color: stockViewMode === 'ALL' ? '#ffffff' : '#64748b',
                   fontWeight: 800,
-                  fontSize: '0.8rem',
+                  fontSize: '0.78rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -254,17 +283,17 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 type="button"
                 onClick={() => setStockViewMode('TODAY')}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: stockViewMode === 'TODAY' ? '#166534' : 'transparent',
                   color: stockViewMode === 'TODAY' ? '#ffffff' : '#64748b',
                   fontWeight: 800,
-                  fontSize: '0.8rem',
+                  fontSize: '0.78rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -275,55 +304,57 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
         </div>
 
         {/* ============================================================ */}
-        {/* METAL STOCK MOVEMENT PASSBOOK LEDGER TABLE (IN vs OUT)        */}
+        {/* EXPANDABLE ACCORDION TABLE (IN vs OUT)                        */}
         {/* ============================================================ */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
-                <th style={{ padding: '10px 12px' }}>S.No</th>
-                <th style={{ padding: '10px 12px' }}>Date / Time</th>
-                <th style={{ padding: '10px 12px' }}>Customer / Party Name</th>
-                <th style={{ padding: '10px 12px' }}>Transaction Type</th>
-                <th style={{ padding: '10px 12px' }}>Flow Type</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Weight (g)</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', background: '#f0fdf4', color: '#166534' }}>After Transaction (g)</th>
-                <th style={{ padding: '10px 12px' }}>Metal Category</th>
-                <th style={{ padding: '10px 12px' }}>Item & Details</th>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1', color: '#475569', textAlign: 'left' }}>
+                <th style={{ padding: '14px 12px', width: '40px' }}></th>
+                <th style={{ padding: '14px 12px' }}>S.No</th>
+                <th style={{ padding: '14px 12px' }}>Date / Time</th>
+                <th style={{ padding: '14px 12px' }}>Customer / Party</th>
+                <th style={{ padding: '14px 12px' }}>Transaction Type</th>
+                <th style={{ padding: '14px 12px' }}>Flow</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right' }}>Weight (g)</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right', background: '#f0fdf4', color: '#166534' }}>After Tx (g)</th>
+                <th style={{ padding: '14px 12px' }}>Metal</th>
+                <th style={{ padding: '14px 12px' }}>Item & Details</th>
               </tr>
             </thead>
             <tbody>
-              {/* Row #0: Opening Stock Weight at Top */}
+              {/* Row #0: Opening Stock Weight */}
               <tr style={{ background: '#fffbeb', borderBottom: '2px solid #fef3c7' }}>
-                <td style={{ padding: '10px 12px', fontWeight: 800, color: '#b45309' }}>#0</td>
-                <td style={{ padding: '10px 12px', fontWeight: 800, color: '#b45309' }}>Opening (9:00 AM)</td>
-                <td style={{ padding: '10px 12px', fontWeight: 800, color: '#b45309' }}>Shop Opening Balance</td>
-                <td style={{ padding: '10px 12px' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                <td style={{ padding: '14px 12px', textAlign: 'center' }}>📌</td>
+                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>#0</td>
+                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Opening (9:00 AM)</td>
+                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Shop Opening Balance</td>
+                <td style={{ padding: '14px 12px' }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
                     OPENING STOCK
                   </span>
                 </td>
-                <td style={{ padding: '10px 12px' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: '#ffffff', color: '#b45309', border: '1px solid #fde68a' }}>
+                <td style={{ padding: '14px 12px' }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#ffffff', color: '#b45309', border: '1px solid #fde68a' }}>
                     START
                   </span>
                 </td>
-                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#94a3b8' }}>
+                <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 800, color: '#94a3b8' }}>
                   {openingStockWeight.toFixed(3)} g
                 </td>
-                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#b45309', fontSize: '0.9rem' }}>
+                <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: '#b45309', fontSize: '0.9rem' }}>
                   {openingStockWeight.toFixed(3)} g
                 </td>
-                <td style={{ padding: '10px 12px', fontWeight: 700, color: '#b45309' }}>
+                <td style={{ padding: '14px 12px', fontWeight: 700, color: '#b45309' }}>
                   {metalCategoryFilter === 'ALL' ? 'ALL METALS' : metalCategoryFilter}
                 </td>
-                <td style={{ padding: '10px 12px', color: '#b45309', fontWeight: 700 }}>Starting Showcase Stock Weight</td>
+                <td style={{ padding: '14px 12px', color: '#b45309', fontWeight: 700 }}>Starting Showcase Stock Weight</td>
               </tr>
 
-              {/* Ascending Order Timeline Events */}
+              {/* Dynamic Accordion Transactions Rows */}
               {processedStockRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                  <td colSpan={10} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                     No {metalCategoryFilter === 'ALL' ? 'Gold or Silver' : metalCategoryFilter} weight movement transactions recorded today.
                   </td>
                 </tr>
@@ -332,6 +363,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                   const txType = entry.rawType;
                   const createdStr = entry.time || (entry.created_at ? new Date(entry.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-');
                   const itemMetal = (entry.metalCategory || 'GOLD').toUpperCase();
+                  const isExpanded = expandedRowId === entry.id;
 
                   // Dynamic color styling for Transaction Type
                   let typeBg = '#f1f5f9', typeColor = '#475569', typeBorder = '#cbd5e1';
@@ -343,36 +375,124 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                   else if (txType === 'WORK ASSIGN' || txType === 'WORKER TX') { typeBg = '#ecfdf5'; typeColor = '#047857'; typeBorder = '#a7f3d0'; }
 
                   return (
-                    <tr key={entry.id || idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{createdStr}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0f172a' }}>{entry.partyName || 'Customer'}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: typeBg, color: typeColor, border: `1px solid ${typeBorder}` }}>
-                          Jb-{txType}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: entry.isInflow ? '#f0fdf4' : '#fef2f2', color: entry.isInflow ? '#15803d' : '#b91c1c', border: `1px solid ${entry.isInflow ? '#bbf7d0' : '#fecaca'}` }}>
-                          {entry.isInflow ? '⬇ IN' : '⬆ OUT'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: entry.isInflow ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
-                        {entry.isInflow ? '+' : '-'}{entry.wt.toFixed(3)} g
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#0f172a', background: '#f8fafc', whiteSpace: 'nowrap' }}>
-                        {entry.afterTxStockWt.toFixed(3)} g
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: itemMetal.includes('SILVER') ? '#f0f9ff' : '#fffbe6', color: itemMetal.includes('SILVER') ? '#0369a1' : '#b45309', border: `1px solid ${itemMetal.includes('SILVER') ? '#bae6fd' : '#fde68a'}` }}>
-                          {itemMetal.includes('SILVER') ? '🥈 SILVER' : '🥇 GOLD'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px', color: '#334155' }}>
-                        <div style={{ fontWeight: 700 }}>{entry.productName || '-'}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>{entry.details || '-'}</div>
-                      </td>
-                    </tr>
+                    <React.Fragment key={entry.id || idx}>
+                      {/* Main Clickable Accordion Row */}
+                      <tr
+                        onClick={() => toggleRowAccordion(entry.id)}
+                        style={{
+                          borderBottom: isExpanded ? 'none' : '1px solid #f1f5f9',
+                          background: isExpanded ? '#f0f9ff' : idx % 2 === 0 ? '#ffffff' : '#fafafa',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s ease',
+                        }}
+                      >
+                        {/* Expand Icon Chevron */}
+                        <td style={{ padding: '14px 12px', textAlign: 'center', color: '#0284c7', fontWeight: 800, fontSize: '0.8rem' }}>
+                          <span style={{ padding: '2px 6px', borderRadius: '6px', background: isExpanded ? '#e0f2fe' : '#f1f5f9' }}>
+                            {isExpanded ? '▲' : '▼'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
+                        <td style={{ padding: '14px 12px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{createdStr}</td>
+                        <td style={{ padding: '14px 12px', fontWeight: 800, color: '#0f172a' }}>{entry.partyName || 'Customer'}</td>
+                        <td style={{ padding: '14px 12px' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: typeBg, color: typeColor, border: `1px solid ${typeBorder}` }}>
+                            Jb-{txType}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 12px' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: entry.isInflow ? '#f0fdf4' : '#fef2f2', color: entry.isInflow ? '#15803d' : '#b91c1c', border: `1px solid ${entry.isInflow ? '#bbf7d0' : '#fecaca'}` }}>
+                            {entry.isInflow ? '⬇ IN' : '⬆ OUT'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: entry.isInflow ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                          {entry.isInflow ? '+' : '-'}{entry.wt.toFixed(3)} g
+                        </td>
+                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: '#0f172a', background: '#f8fafc', whiteSpace: 'nowrap' }}>
+                          {entry.afterTxStockWt.toFixed(3)} g
+                        </td>
+                        <td style={{ padding: '14px 12px' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 6px', borderRadius: '6px', background: itemMetal.includes('SILVER') ? '#f0f9ff' : '#fffbe6', color: itemMetal.includes('SILVER') ? '#0369a1' : '#b45309', border: `1px solid ${itemMetal.includes('SILVER') ? '#bae6fd' : '#fde68a'}` }}>
+                            {itemMetal.includes('SILVER') ? '🥈 SILVER' : '🥇 GOLD'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 12px', color: '#334155' }}>
+                          <div style={{ fontWeight: 700 }}>{entry.productName || '-'}</div>
+                        </td>
+                      </tr>
+
+                      {/* Smooth Accordion Expanded Detail Dropdown */}
+                      {isExpanded && (
+                        <tr style={{ background: '#f0f9ff', borderBottom: '2px solid #bae6fd' }}>
+                          <td colSpan={10} style={{ padding: '12px 16px' }}>
+                            <div style={{
+                              background: '#ffffff',
+                              borderRadius: '12px',
+                              padding: '14px 18px',
+                              border: '1.5px solid #0284c7',
+                              boxShadow: '0 8px 24px rgba(2,132,199,0.1)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '10px',
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+                                <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span>🔍 Full Item & Transaction Breakdown</span>
+                                  <span style={{ fontSize: '0.70rem', background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '4px' }}>
+                                    Invoice/Tx #{entry.invoiceId}
+                                  </span>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b' }}>
+                                  ⏰ {createdStr}
+                                </span>
+                              </div>
+
+                              {/* Breakdown Grid */}
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontSize: '0.80rem' }}>
+                                <div>
+                                  <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Customer / Party Name:</span>
+                                  <div style={{ fontWeight: 800, color: '#0f172a' }}>👤 {entry.partyName || 'Walk-in Customer'}</div>
+                                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>📞 Phone: {entry.partyPhone || '-'}</div>
+                                </div>
+
+                                <div>
+                                  <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Product / Ornament Name:</span>
+                                  <div style={{ fontWeight: 800, color: '#b45309' }}>📦 {entry.productName}</div>
+                                  <div style={{ fontSize: '0.72rem', color: '#475569' }}>Metal: <strong>{entry.metalCategory}</strong></div>
+                                </div>
+
+                                <div>
+                                  <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Weight & Purity Breakdown:</span>
+                                  <div style={{ fontWeight: 800, color: '#0f172a' }}>
+                                    Gross Weight: <strong>{entry.wt.toFixed(3)} g</strong>
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: '#d97706' }}>
+                                    Purity: <strong>{entry.purity_percentage}%</strong> · Pure Fine: <strong>{entry.fine_weight.toFixed(3)} g</strong>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Transaction Amount & Impact:</span>
+                                  <div style={{ fontWeight: 900, color: entry.isInflow ? '#15803d' : '#b91c1c', fontSize: '0.9rem' }}>
+                                    {entry.isInflow ? '+' : '-'}{entry.wt.toFixed(3)} g ({entry.isInflow ? '⬇ Stock Inflow' : '⬆ Stock Outflow'})
+                                  </div>
+                                  {entry.amount > 0 && (
+                                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#166534' }}>
+                                      Paid/Billed Amount: ₹{entry.amount.toLocaleString('en-IN')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Itemized details line */}
+                              <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '0.75rem', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                <strong>Log Description:</strong> {entry.details}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
@@ -381,19 +501,17 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
             {/* Table Footer with Whole Metal Flow Totals */}
             <tfoot style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
               <tr>
-                <td colSpan={5} style={{ padding: '12px', textAlign: 'right', fontSize: '0.88rem', color: '#0f172a' }}>
+                <td colSpan={6} style={{ padding: '12px', textAlign: 'right', fontSize: '0.82rem', color: '#0f172a' }}>
                   📊 TOTAL {metalCategoryFilter === 'ALL' ? 'ALL METALS' : metalCategoryFilter} MOVEMENT SUMMARY:
                 </td>
-                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, fontSize: '0.88rem' }}>
+                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem' }}>
                   <div style={{ color: '#15803d' }}>+{totalMetalIn.toFixed(3)} g (⬇ IN)</div>
                   <div style={{ color: '#b91c1c' }}>-{totalMetalOut.toFixed(3)} g (⬆ OUT)</div>
                 </td>
-                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#b45309', fontSize: '1.05rem', background: '#fffbeb', border: '1px solid #fde68a' }}>
+                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#b45309', fontSize: '0.88rem', background: '#fffbeb', border: '1px solid #fde68a' }}>
                   {finalAvailableStockWt.toFixed(3)} g
                 </td>
-                <td colSpan={2} style={{ padding: '12px', color: '#475569', fontSize: '0.78rem', fontWeight: 700 }}>
-                  ← FINAL SHOWCASE STOCK WEIGHT
-                </td>
+                <td colSpan={2}></td>
               </tr>
             </tfoot>
           </table>

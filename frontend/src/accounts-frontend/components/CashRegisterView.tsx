@@ -53,55 +53,6 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-        {/* Physical Cash Counter Balance */}
-        <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-          <h4 style={{ margin: '0 0 0.85rem 0', color: '#0f172a', fontWeight: 800 }}>💵 Physical Cash Counter Balance</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748b' }}>Opening Cash (9 AM):</span>
-              <strong>₹{cashSummary.openingCash.toLocaleString('en-IN')}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#166534' }}>
-              <span>(+) Sales Cash Collected:</span>
-              <strong>+₹{cashSummary.salesCashCollected.toLocaleString('en-IN')}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#166534' }}>
-              <span>(+) Old Dues Collected:</span>
-              <strong>+₹{cashSummary.oldDuesCollected.toLocaleString('en-IN')}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b91c1c' }}>
-              <span>(-) Old Metal Purchases Paid:</span>
-              <strong>-₹{cashSummary.scrapPayout.toLocaleString('en-IN')}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b91c1c' }}>
-              <span>(-) Daily Shop Expenses:</span>
-              <strong>-₹{cashSummary.dailyExpenses.toLocaleString('en-IN')}</strong>
-            </div>
-            <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '6px 0' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', color: '#0f172a' }}>
-              <strong>Expected Closing Cash in Drawer:</strong>
-              <strong style={{ color: '#d97706' }}>₹{cashSummary.expectedClosingCash.toLocaleString('en-IN')}</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* Digital & Bank Collections */}
-        <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-          <h4 style={{ margin: '0 0 0.85rem 0', color: '#0f172a', fontWeight: 800 }}>💳 Digital & Bank Collection Summary</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
-            <div style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>PhonePe / UPI Collections:</span>
-              <strong>₹{cashSummary.upiCollected.toLocaleString('en-IN')}</strong>
-            </div>
-            <div style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Card POS Terminal Swipes:</span>
-              <strong>₹{cashSummary.cardCollected.toLocaleString('en-IN')}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Complete Cash Transaction Ledger Table (Chronological Ascending Order) */}
       <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
@@ -116,7 +67,6 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
                 <th style={{ padding: '10px 12px' }}>S.No</th>
                 <th style={{ padding: '10px 12px' }}>Date / Time</th>
-                <th style={{ padding: '10px 12px' }}>Customer / Party Name</th>
                 <th style={{ padding: '10px 12px' }}>Transaction Type</th>
                 <th style={{ padding: '10px 12px' }}>Flow Type</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right' }}>Total (₹)</th>
@@ -131,11 +81,7 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
                 <td style={{ padding: '10px 12px', fontWeight: 800, color: '#006d12ff' }}>#0</td>
                 <td style={{ padding: '10px 12px', fontWeight: 800, color: '#006d12ff' }}>Opening (9:00 AM)</td>
                 <td style={{ padding: '10px 12px', fontWeight: 800, color: '#006d12ff' }}>Shop Opening Balance</td>
-                <td style={{ padding: '10px 12px' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: '#e0f2fe', color: '#006d12ff', border: '1px solid #bae6fd' }}>
-                    OPENING BALANCE
-                  </span>
-                </td>
+
                 <td style={{ padding: '10px 12px' }}>
                   <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: '#ffffff', color: '#006d12ff', border: '1px solid #bae6fd' }}>
                     START
@@ -148,7 +94,6 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
                   ₹{cashSummary.openingCash.toLocaleString('en-IN')}
                 </td>
                 <td style={{ padding: '10px 12px', fontWeight: 700, color: '#94a3b8' }}>-</td>
-                <td style={{ padding: '10px 12px', color: '#006d12ff', fontWeight: 700 }}>Day Opening Cash Balance in Drawer</td>
               </tr>
 
               {/* Transactions in Ascending Order with Running Balance */}
@@ -158,7 +103,7 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
                   ? new Date(tx.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, month: 'short', day: 'numeric' })
                   : '-';
 
-                const partyName = tx.customer_name || tx.notes?.split('·')[0] || tx.item_type || 'Walk-in Customer';
+                // const partyName = tx.customer_name || tx.notes?.split('·')[0] || tx.item_type || 'Walk-in Customer';
 
                 // Dynamic color styling for Transaction Type
                 let typeBg = '#f1f5f9', typeColor = '#475569', typeBorder = '#cbd5e1';
@@ -174,7 +119,7 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
                   <tr key={tx.uuid || tx.id || idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
                     <td style={{ padding: '10px 12px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{createdStr}</td>
-                    <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0f172a' }}>{partyName}</td>
+                    {/* <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0f172a' }}>{partyName}</td> */}
                     <td style={{ padding: '10px 12px' }}>
                       <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: typeBg, color: typeColor, border: `1px solid ${typeBorder}` }}>
                         {txType}
@@ -209,19 +154,17 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
             {/* Table Footer with Whole Transactions Total and Available Balance */}
             <tfoot style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
               <tr>
-                <td colSpan={5} style={{ padding: '12px', textAlign: 'right', fontSize: '0.88rem', color: '#0f172a' }}>
+                <td colSpan={4} style={{ padding: '12px', textAlign: 'right', fontSize: '0.82rem', color: '#0f172a' }}>
                   📊 TOTAL TRANSACTIONS SUMMARY:
                 </td>
-                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, fontSize: '0.88rem' }}>
+                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem' }}>
                   <div style={{ color: '#15803d' }}>+₹{totalCashIn.toLocaleString('en-IN')} (⬇ IN)</div>
                   <div style={{ color: '#b91c1c' }}>-₹{totalCashOut.toLocaleString('en-IN')} (⬆ OUT)</div>
                 </td>
-                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#166534', fontSize: '1.05rem', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#166534', fontSize: '0.88rem', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
                   ₹{finalAvailableCash.toLocaleString('en-IN')}
                 </td>
-                <td colSpan={2} style={{ padding: '12px', color: '#475569', fontSize: '0.78rem', fontWeight: 700 }}>
-                  ← FINAL AVAILABLE CASH IN DRAWER
-                </td>
+
               </tr>
             </tfoot>
           </table>

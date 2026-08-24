@@ -17,6 +17,11 @@ export interface InventoryProduct {
   sell_count?: number;
   img: string;
   stock_quantity?: number;
+  created_at?: string;
+  making_charge?: number;
+  making_charge_percent?: number;
+  making_charge_rs?: number;
+  purity?: number;
 }
 
 interface ProductGridListProps {

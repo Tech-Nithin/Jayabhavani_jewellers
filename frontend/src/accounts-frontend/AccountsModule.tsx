@@ -4,12 +4,12 @@ import { HeaderRefreshButton } from '../components/HeaderRefreshButton';
 import type { Language } from '../utils/translations';
 import { InvoiceDetailsView } from '../billing-frontend/components/InvoiceDetailsView';
 import { useMetalRates } from '../utils/metalRatesStore';
-import { DailySnapshotView, SnapshotDetailView } from './components/DailySnapshotView';
+// import { DailySnapshotView, SnapshotDetailView } from './components/DailySnapshotView';
 import { StockMovementView } from './components/StockMovementView';
 import { CashRegisterView } from './components/CashRegisterView';
 import { OldMetalVaultView } from './components/OldMetalVaultView';
 import { UdhaariKarigarView } from './components/UdhaariKarigarView';
-import { DailyProfitsView } from './components/DailyProfitsView';
+// import { DailyProfitsView } from './components/DailyProfitsView';
 
 interface AccountsModuleProps {
   lang?: Language;
@@ -29,7 +29,6 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
   const [activeSubTab, setActiveSubTab] = useState<AccountTab>('logbook');
   const [loading, setLoading] = useState(false);
   const [selectedBillModalItem, setSelectedBillModalItem] = useState<any | null>(null);
-  const [selectedSnapshotRecord, setSelectedSnapshotRecord] = useState<{ date: string; data: any } | null>(null);
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [logBookViewMode, setLogBookViewMode] = useState<'TABLE' | 'CARD'>('TABLE');
   const [kpiDrillFilter, setKpiDrillFilter] = useState<null | 'ORDER' | 'SELL' | 'BUY' | 'EXCHANGE'>(null);
@@ -48,16 +47,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
   const [cashLedgerRecords, setCashLedgerRecords] = useState<any[]>([]);
   const [scrapSummary, setScrapSummary] = useState<any>(null);
   const [udhaariSummary, setUdhaariSummary] = useState<any>(null);
-  const [profitSummary, setProfitSummary] = useState<any>(null);
   const [serverBillingActivity, setServerBillingActivity] = useState<any>(null);
-
-  // Closing Record State
-  const [showClosingModal, setShowClosingModal] = useState(false);
-  const [closingRecord, setClosingRecord] = useState<any>(null);
-  const [closingLoading, setClosingLoading] = useState(false);
-  const [closingHistory, setClosingHistory] = useState<any[]>([]);
-  const [closingHistoryView, setClosingHistoryView] = useState<'generate' | 'history'>('generate');
-  const [closingHistorySelected, setClosingHistorySelected] = useState<any>(null);
 
   const sortedTimeline = [...logBookTimeline].sort((a, b) => {
     const timeA = new Date(a.created_at || 0).getTime();
@@ -298,7 +288,6 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
         setScrapSummary(dataBook.scrapSummary || null);
         setOldMetalVaultItems(dataBook.oldMetalVaultItems || []);
         setUdhaariSummary(dataBook.udhaariSummary || null);
-        setProfitSummary(dataBook.profitSummary || null);
         setServerBillingActivity(dataBook.billingActivitySummary || null);
       }
 
@@ -446,21 +435,6 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
     );
   }
 
-  // Full-Page Closing Snapshot View (Separate screen takeover)
-  if (selectedSnapshotRecord) {
-    return (
-      <div className="accounts-module" style={{ padding: '0.5rem', background: '#f8fafc', minHeight: '100vh' }}>
-        <SnapshotDetailView
-          data={selectedSnapshotRecord.data}
-          date={selectedSnapshotRecord.date}
-          onBack={() => setSelectedSnapshotRecord(null)}
-        />
-      </div>
-    );
-  }
-
-  void setClosingLoading;
-
   return (
     <div style={{ fontFamily: "'Inter', 'DM Sans', sans-serif", color: '#181310' }}>
       {/* Top Controls & Header Bar */}
@@ -475,25 +449,6 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
             {lang === 'TE' ? 'రోజువారీ నగదు రసీదులు, అమ్మకాలు, కొనుగోళ్లు మరియు ప్రాఫిట్ లెడ్జర్' : 'Daily sales, cash counter, scrap purchases, worker fine accounts & net profit'}
           </p>
         </div>
-
-        {/* Closing Record Button */}
-        <button
-          id="btn-closing-record"
-          type="button"
-          onClick={async () => {
-            try {
-              const res = await fetch(`${API_BASE}/inventory/closing-record`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-              const data = await res.json();
-              if (data.success && data.closing_record) {
-                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                setSelectedSnapshotRecord({ date: todayStr, data: data.closing_record });
-              }
-            } catch (e) { console.error(e); }
-          }}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', boxShadow: '0 2px 8px rgba(124,58,237,0.25)', letterSpacing: '0.01em' }}
-        >
-          📊 Closing Record
-        </button>
 
         {/* Date Selector Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -605,10 +560,9 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
           { id: 'logbook', label: '📖 Daily Entry Log Book', desc: 'Live Minute-by-Minute Timeline' },
           { id: 'stock', label: '📦 Stock Movement', desc: 'Opening, Sold & Closing Weight' },
           { id: 'cash', label: '💵 Cash & Counter Register', desc: 'Cash Drawer Reconciliation' },
-          { id: 'scrap', label: '⚖️ Old Metal Vault', desc: 'Scrap Gold & Silver Purchases' },
+          { id: 'scrap', label: '⚖️ Buy Metal Vault', desc: 'Scrap Gold & Silver Purchases' },
           { id: 'udhaari', label: '🤝 Udhaari & Karigar', desc: 'Credit Dues & Goldsmith Fine' },
-          { id: 'profit', label: '📈 Daily Profit Engine', desc: 'Gross & Net Profit Breakdown' },
-          { id: 'snapshot', label: '📸 Daily Snapshot', desc: 'Full EOD Closing Snapshot History' },
+          // { id: 'snapshot', label: '📸 Daily Snapshot', desc: 'Full EOD Closing Snapshot History' },
         ].map((tab) => {
           const active = activeSubTab === tab.id;
           const isSnapshot = tab.id === 'snapshot';
@@ -652,9 +606,9 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
       )}
 
       {/* SUB-SCREEN: 📸 Daily Snapshot (Full EOD Snapshot History + Detail) */}
-      {activeSubTab === 'snapshot' && (
+      {/* {activeSubTab === 'snapshot' && (
         <DailySnapshotView lang={lang} onSelectSnapshot={(rec) => setSelectedSnapshotRecord(rec)} />
-      )}
+      )} */}
 
       {!loading && activeSubTab !== 'snapshot' && (
         <>
@@ -1755,224 +1709,10 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
           {activeSubTab === 'udhaari' && udhaariSummary && (
             <UdhaariKarigarView udhaariSummary={udhaariSummary} logBookTimeline={logBookTimeline} />
           )}
-
-          {/* SUB-SCREEN 6: 📈 Daily Profit Engine */}
-          {activeSubTab === 'profit' && profitSummary && (
-            <DailyProfitsView profitSummary={profitSummary} />
-          )}
         </>
       )}
 
-      {/* ======================================================
-          CLOSING RECORD MODAL — EOD Snapshot with All 3 Gaps
-          ====================================================== */}
-      {showClosingModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '1rem', overflowY: 'auto' }}>
-          <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '760px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden', marginTop: '2rem', marginBottom: '2rem' }}>
 
-            {/* Modal Header */}
-            <div style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ color: '#fff', fontWeight: 800, fontSize: '1rem' }}>📊 End-of-Day Closing Record</div>
-                <div style={{ color: '#c4b5fd', fontSize: '0.72rem', marginTop: '2px' }}>{closingRecord?.record_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })}</div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  onClick={async () => {
-                    setClosingHistoryView('history');
-                    try {
-                      const res = await fetch(`${API_BASE}/inventory/closing-records`);
-                      const d = await res.json();
-                      if (d.success) setClosingHistory(d.records || []);
-                    } catch (e) { console.error(e); }
-                  }}
-                  style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '5px 12px', borderRadius: '7px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}
-                >📅 History</button>
-                <button onClick={() => { setShowClosingModal(false); setClosingRecord(null); setClosingHistorySelected(null); }} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer', fontWeight: 800, fontSize: '1rem' }}>×</button>
-              </div>
-            </div>
-
-            <div style={{ padding: '1.25rem', maxHeight: '75vh', overflowY: 'auto' }}>
-              {/* History View */}
-              {closingHistoryView === 'history' && (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-                    <button onClick={() => { setClosingHistoryView('generate'); setClosingHistorySelected(null); }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '7px', padding: '5px 12px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}>← Back</button>
-                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#374151' }}>📅 Past Closing Records</span>
-                  </div>
-                  {closingHistory.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.85rem' }}>No closing records saved yet.</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {closingHistory.map((r: any) => (
-                        <div
-                          key={r.id}
-                          onClick={async () => {
-                            try {
-                              const res = await fetch(`${API_BASE}/inventory/closing-record/${r.record_date}`);
-                              const d = await res.json();
-                              if (d.success) { setClosingHistorySelected(d.record.closing_data); }
-                            } catch (e) { console.error(e); }
-                          }}
-                          style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>{r.record_date}</div>
-                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>Saved: {new Date(r.updated_at || r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
-                          </div>
-                          <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 700 }}>View →</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Show selected historical record */}
-                  {closingHistorySelected && (
-                    <div style={{ marginTop: '1.5rem', borderTop: '2px solid #e2e8f0', paddingTop: '1rem' }}>
-                      <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#374151', marginBottom: '1rem' }}>📋 Viewing: {closingHistorySelected.record_date}</div>
-                      <ClosingRecordBody data={closingHistorySelected} />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Generate / Today's Closing View */}
-              {closingHistoryView === 'generate' && (
-                closingLoading ? (
-                  <div style={{ textAlign: 'center', padding: '3rem', color: '#7c3aed' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
-                    <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Generating EOD Closing Record...</div>
-                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>Aggregating cash, stock, vault & karigar data</div>
-                  </div>
-                ) : closingRecord ? (
-                  <ClosingRecordBody data={closingRecord} />
-                ) : (
-                  <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem', fontSize: '0.85rem' }}>Failed to generate closing record. Please try again.</div>
-                )
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-
-/* ──────────────────────────────────────────────
-   Inline sub-component: renders the closing data
-   ────────────────────────────────────────────── */
-function ClosingRecordBody({ data }: { data: any }) {
-  const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
-  const fmtRs = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-  const card = (title: string, icon: string, children: React.ReactNode, color = '#4f46e5') => (
-    <div style={{ background: '#f8fafc', border: `1.5px solid ${color}22`, borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
-      <div style={{ fontWeight: 800, fontSize: '0.82rem', color, marginBottom: '0.75rem' }}>{icon} {title}</div>
-      {children}
-    </div>
-  );
-  const row = (label: string, value: string, valueColor = '#1e293b') => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.78rem' }}>
-      <span style={{ color: '#475569' }}>{label}</span>
-      <strong style={{ color: valueColor }}>{value}</strong>
-    </div>
-  );
-
-  return (
-    <div>
-      {/* 1. CASH SUMMARY */}
-      {card('Cash Drawer Summary', '💰', <>
-        {row('Cash in Drawer (Closing)', fmtRs(data.cash?.cash_in_drawer), '#166534')}
-        {row('Cash Loaded Today', fmtRs(data.cash?.cash_loaded_today), '#0369a1')}
-        {row('Sales Cash Received', fmtRs(data.cash?.sales_cash_in), '#059669')}
-        {row('Exchange Cash Received', fmtRs(data.cash?.exchange_cash_in), '#059669')}
-        {row('Scrap Purchased (Paid Out)', fmtRs(data.cash?.scrap_purchase_cash_out), '#b91c1c')}
-        {row('Loans Issued (Paid Out)', fmtRs(data.cash?.loans_issued_out), '#b91c1c')}
-        {row('Loans Repaid (Received)', fmtRs(data.cash?.loans_repaid_in), '#059669')}
-        {row('Worker Wages Paid', fmtRs(data.cash?.worker_wages_out), '#b91c1c')}
-        {row('Total Transactions', String(data.cash?.total_transactions || 0))}
-      </>, '#059669')}
-
-      {/* 2. METAL POSITION (Grand Total — Gap 1 + 2 combined) */}
-      {card('Total Metal Position — Where Is My Gold & Silver?', '🥇', <>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#b45309', marginBottom: '6px' }}>🥇 GOLD</div>
-            {row('Showcase (Display)', fmt(data.metal_position?.gold?.showcase_grams) + ' g')}
-            {row('Vault Scrap (Old Gold)', fmt(data.metal_position?.gold?.vault_scrap_grams) + ' g')}
-            {row('Pure Gold in Vault', fmt(data.metal_position?.gold?.vault_pure_grams) + ' g')}
-            {row('At Karigars (Workshop)', fmt(data.metal_position?.gold?.at_karigars_grams) + ' g')}
-            <div style={{ marginTop: '6px', padding: '6px', background: '#fef3c7', borderRadius: '6px', fontWeight: 800, fontSize: '0.82rem', color: '#92400e', textAlign: 'center' }}>
-              Total: {fmt(data.metal_position?.gold?.total_gold_grams)} g
-            </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#475569', marginBottom: '6px' }}>🥈 SILVER</div>
-            {row('Showcase (Display)', fmt(data.metal_position?.silver?.showcase_grams) + ' g')}
-            {row('Vault Scrap (Old Silver)', fmt(data.metal_position?.silver?.vault_scrap_grams) + ' g')}
-            {row('Pure Silver in Vault', fmt(data.metal_position?.silver?.vault_pure_grams) + ' g')}
-            {row('At Karigars (Workshop)', fmt(data.metal_position?.silver?.at_karigars_grams) + ' g')}
-            <div style={{ marginTop: '6px', padding: '6px', background: '#f1f5f9', borderRadius: '6px', fontWeight: 800, fontSize: '0.82rem', color: '#334155', textAlign: 'center' }}>
-              Total: {fmt(data.metal_position?.silver?.total_silver_grams)} g
-            </div>
-          </div>
-        </div>
-      </>, '#b45309')}
-
-      {/* 3. KARIGAR REGISTER — Gap 2 */}
-      {card('Karigar / Workshop Metal Register', '⚒️', <>
-        {(data.karigar_register?.karigars || []).length === 0 ? (
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', padding: '0.5rem' }}>No karigar transactions recorded yet.</div>
-        ) : (
-          (data.karigar_register?.karigars || []).map((k: any, i: number) => (
-            <div key={i} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', marginBottom: '6px' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#374151', marginBottom: '4px' }}>👤 {k.worker_name}</div>
-              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.75rem' }}>
-                <span style={{ color: '#b45309' }}>🥇 Gold: <strong>{fmt(k.gold_grams_with_karigar)}g</strong></span>
-                <span style={{ color: '#475569' }}>🥈 Silver: <strong>{fmt(k.silver_grams_with_karigar)}g</strong></span>
-              </div>
-            </div>
-          ))
-        )}
-        <div style={{ marginTop: '6px', display: 'flex', gap: '1rem', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed' }}>
-          <span>Total Gold at Karigars: {fmt(data.karigar_register?.total_gold_at_karigars)}g</span>
-          <span>Total Silver: {fmt(data.karigar_register?.total_silver_at_karigars)}g</span>
-        </div>
-      </>, '#7c3aed')}
-
-      {/* 4. TODAY'S BILLS SUMMARY — Gap 3 */}
-      {card("Today's Bills & Sales Summary", '🧾', <>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '0.75rem' }}>
-          {[['Sales', data.bills?.sell_count, '#059669'], ['Buys', data.bills?.buy_count, '#b91c1c'], ['Orders', data.bills?.order_count, '#0369a1'], ['Exchange', data.bills?.exchange_count, '#7c3aed']].map(([label, val, color]: any) => (
-            <div key={label} style={{ background: '#fff', border: `1px solid ${color}33`, borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800, color }}>{val || 0}</div>
-              <div style={{ fontSize: '0.65rem', color: '#64748b' }}>{label}</div>
-            </div>
-          ))}
-        </div>
-        {row("Today's Total Sales Amount", fmtRs(data.bills?.total_sales_amount), '#059669')}
-        {row("Today's Scrap Paid Out", fmtRs(data.bills?.total_scrap_paid), '#b91c1c')}
-      </>, '#0369a1')}
-
-      {/* 5. UDHAARI / PENDING */}
-      {card(`Pending Udhaari (${(data.udhaari?.customers || []).length} customers)`, '⚠️', <>
-        <div style={{ marginBottom: '8px', fontWeight: 700, fontSize: '0.85rem', color: '#b91c1c' }}>Total Outstanding: {fmtRs(data.udhaari?.total_due)}</div>
-        {(data.udhaari?.customers || []).slice(0, 10).map((u: any, i: number) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #fef2f2', fontSize: '0.75rem' }}>
-            <div>
-              <span style={{ fontWeight: 600, color: '#1e293b' }}>{u.customer_name}</span>
-              {u.customer_phone && <span style={{ color: '#64748b', marginLeft: '6px' }}>{u.customer_phone}</span>}
-              <span style={{ color: '#94a3b8', marginLeft: '6px', fontSize: '0.65rem' }}>{u.bill_date}</span>
-            </div>
-            <strong style={{ color: '#b91c1c' }}>{fmtRs(u.due_amount)}</strong>
-          </div>
-        ))}
-        {(data.udhaari?.customers || []).length > 10 && (
-          <div style={{ fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center', marginTop: '6px' }}>...and {(data.udhaari?.customers || []).length - 10} more</div>
-        )}
-      </>, '#b91c1c')}
-
-      <div style={{ textAlign: 'center', fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-        Generated: {data.generated_at ? new Date(data.generated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'} | Stored as JSON in daily_closing_records
-      </div>
-    </div>
-  );
-}

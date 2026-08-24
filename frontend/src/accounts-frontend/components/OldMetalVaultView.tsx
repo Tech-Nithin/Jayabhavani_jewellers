@@ -58,7 +58,7 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
     <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
       <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', color: '#0f172a', fontWeight: 800 }}>
         <i className="fa-solid fa-vault" style={{ color: '#d97706', marginRight: '8px' }}></i>
-        Customer Old Metal Purchases & Scrap Vault Ledger
+        Customer Old Metal Purchases & buy Vault Ledger
       </h3>
 
       {/* Top KPI Summary Cards with Average Purity % and Pure Fine Weight */}

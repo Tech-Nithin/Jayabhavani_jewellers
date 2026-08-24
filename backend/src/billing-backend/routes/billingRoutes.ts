@@ -1350,7 +1350,8 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   try {
-    const targetDate = (req.query.date as string) || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const targetDate = (req.query.date as string) || todayIST;
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
     const section = ((req.query.section as string) || 'all').toLowerCase();
@@ -1929,12 +1930,16 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       openingCash = Number(prevCashRow?.current_cash || liveClosingCash);
     }
 
+    const isHistoricalPastDate = targetDate !== 'all' && targetDate !== todayIST;
+    const fallbackGoldGrams = isHistoricalPastDate ? 0 : round3Decimals(currentGoldShowcase + totalGoldWeightSold + goldWorkerOutToday);
+    const fallbackSilverGrams = isHistoricalPastDate ? 0 : round3Decimals(currentSilverShowcase + totalSilverWeightSold + silverWorkerOutToday);
+
     const { getOrInitOpeningRecord } = await import('../../utils/openingRecordHelper');
     const openingRecord = await getOrInitOpeningRecord(
       targetDate,
       {
-        goldGrams: round3Decimals(currentGoldShowcase + totalGoldWeightSold + goldWorkerOutToday),
-        silverGrams: round3Decimals(currentSilverShowcase + totalSilverWeightSold + silverWorkerOutToday),
+        goldGrams: fallbackGoldGrams,
+        silverGrams: fallbackSilverGrams,
         cashAmount: Number(openingCash.toFixed(2))
       },
       { goldGrams: round3Decimals(goldLoadedToday), silverGrams: round3Decimals(silverLoadedToday) }
