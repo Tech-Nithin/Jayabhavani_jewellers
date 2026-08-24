@@ -9,6 +9,7 @@ import { StockMovementView } from './components/StockMovementView';
 import { CashRegisterView } from './components/CashRegisterView';
 import { OldMetalVaultView } from './components/OldMetalVaultView';
 import { UdhaariKarigarView } from './components/UdhaariKarigarView';
+import { UdhaariCustomerDuesView } from './components/UdhaariCustomerDuesView';
 // import { DailyProfitsView } from './components/DailyProfitsView';
 
 interface AccountsModuleProps {
@@ -16,24 +17,143 @@ interface AccountsModuleProps {
   onNavigateToBilling?: (item?: any) => void;
 }
 
-type AccountTab = 'logbook' | 'stock' | 'cash' | 'scrap' | 'udhaari' | 'profit' | 'snapshot';
+type AccountTab = 'logbook' | 'stock' | 'cash' | 'scrap' | 'udhaari' | 'udhaari_dues' | 'profit' | 'snapshot';
 
 const getTodayIST = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+const getYesterdayIST = (): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+};
+
+const getISTDateOnly = (isoString?: string): string => {
+  if (!isoString) return '';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch (e) {
+    return '';
+  }
+};
+
+const formatISTDateTime = (isoString?: string, fallbackTime?: string): string => {
+  if (!isoString) return fallbackTime || '-';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return fallbackTime || '-';
+
+    const dateStr = d.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const timeStr = d.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return `${dateStr}, ${timeStr}`;
+  } catch (e) {
+    return fallbackTime || '-';
+  }
+};
+
+// Helper to read initial state from URL parameters
+const getInitialUrlParams = () => {
+  if (typeof window === 'undefined') return {};
+  const params = new URLSearchParams(window.location.search);
+  return {
+    tab: (params.get('tab') as AccountTab) || 'logbook',
+    dateMode: (params.get('dateMode') as 'TODAY' | 'ALL' | 'CUSTOM' | 'DATE') || 'TODAY',
+    date: params.get('date') || getTodayIST(),
+    startDate: params.get('startDate') || getTodayIST(),
+    endDate: params.get('endDate') || getTodayIST(),
+    kpiFilter: (params.get('kpiFilter') as any) || null,
+    kpiFilter2: (params.get('kpiFilter2') as any) || null,
+    kpiFilter3: (params.get('kpiFilter3') as any) || null,
+  };
+};
+
 export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onNavigateToBilling: _onNavigateToBilling }) => {
   const rates = useMetalRates() as any;
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayIST);
-  const [dateFilterMode, setDateFilterMode] = useState<'TODAY' | 'ALL' | 'CUSTOM' | 'DATE'>('TODAY');
-  const [startDate, setStartDate] = useState<string>(getTodayIST);
-  const [endDate, setEndDate] = useState<string>(getTodayIST);
-  const [activeSubTab, setActiveSubTab] = useState<AccountTab>('logbook');
+  const initialParams = getInitialUrlParams();
+
+  const [selectedDate, setSelectedDate] = useState<string>(initialParams.date || getTodayIST);
+  const [dateFilterMode, setDateFilterMode] = useState<'TODAY' | 'ALL' | 'CUSTOM' | 'DATE'>(initialParams.dateMode || 'TODAY');
+  const [startDate, setStartDate] = useState<string>(initialParams.startDate || getTodayIST);
+  const [endDate, setEndDate] = useState<string>(initialParams.endDate || getTodayIST);
+  const [showCustomDateModal, setShowCustomDateModal] = useState<boolean>(false);
+  const [activeSubTab, setActiveSubTab] = useState<AccountTab>(initialParams.tab || 'logbook');
   const [loading, setLoading] = useState(false);
   const [selectedBillModalItem, setSelectedBillModalItem] = useState<any | null>(null);
-  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
-  const [logBookViewMode, setLogBookViewMode] = useState<'TABLE' | 'CARD'>('TABLE');
-  const [kpiDrillFilter, setKpiDrillFilter] = useState<null | 'ORDER' | 'SELL' | 'BUY' | 'EXCHANGE'>(null);
-  const [kpiDrillFilter2, setKpiDrillFilter2] = useState<null | 'GOLD_STOCK' | 'SILVER_STOCK' | 'CASH_BALANCE'>(null);
-  const [kpiDrillFilter3, setKpiDrillFilter3] = useState<null | 'PERIOD_GOLD' | 'PERIOD_SILVER' | 'PERIOD_CASH' | 'PERIOD_FINANCE'>(null);
+  const [kpiDrillFilter, setKpiDrillFilter] = useState<null | 'ORDER' | 'SELL' | 'BUY' | 'EXCHANGE'>(initialParams.kpiFilter || null);
+  const [kpiDrillFilter2, setKpiDrillFilter2] = useState<null | 'GOLD_STOCK' | 'SILVER_STOCK' | 'CASH_BALANCE'>(initialParams.kpiFilter2 || null);
+  const [kpiDrillFilter3, setKpiDrillFilter3] = useState<null | 'PERIOD_GOLD' | 'PERIOD_SILVER' | 'PERIOD_CASH' | 'PERIOD_FINANCE'>(initialParams.kpiFilter3 || null);
+  const [logSearchTerm, setLogSearchTerm] = useState<string>('');
+
+  // Sync React State changes to URL Query Parameters
+  const isInitialMountRef = React.useRef(true);
+  React.useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+
+    // Ensure top-level module parameter stays set to accounts
+    if (!params.get('module')) {
+      params.set('module', 'accounts');
+    }
+
+    if (activeSubTab) params.set('tab', activeSubTab);
+    if (dateFilterMode) params.set('dateMode', dateFilterMode);
+    if (selectedDate) params.set('date', selectedDate);
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+
+    if (kpiDrillFilter) params.set('kpiFilter', kpiDrillFilter);
+    else params.delete('kpiFilter');
+
+    if (kpiDrillFilter2) params.set('kpiFilter2', kpiDrillFilter2);
+    else params.delete('kpiFilter2');
+
+    if (kpiDrillFilter3) params.set('kpiFilter3', kpiDrillFilter3);
+    else params.delete('kpiFilter3');
+
+    const newSearch = `?${params.toString()}`;
+    if (window.location.search !== newSearch) {
+      window.history.pushState({}, '', `${window.location.pathname}${newSearch}`);
+    }
+  }, [activeSubTab, dateFilterMode, selectedDate, startDate, endDate, kpiDrillFilter, kpiDrillFilter2, kpiDrillFilter3]);
+
+  // Listen to Chrome Back / Forward navigation (popstate)
+  React.useEffect(() => {
+    const handlePopState = () => {
+      const p = getInitialUrlParams();
+      setActiveSubTab(p.tab || 'logbook');
+      setDateFilterMode(p.dateMode || 'TODAY');
+      setSelectedDate(p.date || getTodayIST());
+      setStartDate(p.startDate || getTodayIST());
+      setEndDate(p.endDate || getTodayIST());
+      setKpiDrillFilter(p.kpiFilter);
+      setKpiDrillFilter2(p.kpiFilter2);
+      setKpiDrillFilter3(p.kpiFilter3);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const [stockViewMode, setStockViewMode] = useState<'TOTAL' | 'TODAY'>('TOTAL');
   const [metalCategoryFilter, setMetalCategoryFilter] = useState<'ALL' | 'GOLD' | 'SILVER'>('ALL');
@@ -49,11 +169,54 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
   const [udhaariSummary, setUdhaariSummary] = useState<any>(null);
   const [serverBillingActivity, setServerBillingActivity] = useState<any>(null);
 
-  const sortedTimeline = [...logBookTimeline].sort((a, b) => {
-    const timeA = new Date(a.created_at || 0).getTime();
-    const timeB = new Date(b.created_at || 0).getTime();
-    return sortOrder === 'ASC' ? timeA - timeB : timeB - timeA;
-  });
+  const sortedTimeline = React.useMemo(() => {
+    const seenKeys = new Set<string>();
+    return logBookTimeline
+      .filter((item: any) => {
+        const rawType = (item.type || '').toUpperCase();
+        // Exclude CASH_REGISTER rows from Daily Entry Log Book timeline to prevent duplicate worker cash entries
+        if (rawType === 'CASH_REGISTER' || rawType === 'CASH REGISTER') return false;
+
+        const uniqueKey = String(item.id || `${item.type}_${item.created_at}_${item.amount}`);
+        if (seenKeys.has(uniqueKey)) return false;
+        seenKeys.add(uniqueKey);
+
+        // KPI Card Selection Filter: Show strict exact type matching
+        if (kpiDrillFilter === 'ORDER') return rawType === 'ORDER';
+        if (kpiDrillFilter === 'SELL') return rawType === 'SELL';
+        if (kpiDrillFilter === 'BUY') return rawType === 'BUY';
+        if (kpiDrillFilter === 'EXCHANGE') return rawType === 'EXCHANGE' || rawType === 'TRADEIN' || rawType === 'TRADE-IN';
+
+        return true;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.created_at || 0).getTime();
+        const timeB = new Date(b.created_at || 0).getTime();
+        return timeB - timeA;
+      })
+      .map((item: any, idx: number) => ({
+        ...item,
+        originalSNo: idx + 1,
+      }));
+  }, [logBookTimeline, kpiDrillFilter]);
+
+  const filteredTimeline = React.useMemo(() => {
+    if (!logSearchTerm.trim()) return sortedTimeline;
+    const q = logSearchTerm.toLowerCase().trim();
+
+    return sortedTimeline.filter((item: any) => {
+      // Extract names from all potential name sources (Invoices, Orders, Scrap, Worker Tx, Titles, Details)
+      const nameFromInvoice = String(item.raw_invoice?.customer_name || '');
+      const nameFromOrder = String(item.raw_order?.customer_name || '');
+      const nameFromMetal = String(item.raw_old_metal?.customer_name || '');
+      const nameFromWorker = String(item.raw_worker_txn?.worker_name || item.worker_name || '');
+      const nameFromTitle = String(item.title || '');
+      const nameFromDetails = String(item.details || '');
+
+      const searchHaystack = `${nameFromInvoice} ${nameFromOrder} ${nameFromMetal} ${nameFromWorker} ${nameFromTitle} ${nameFromDetails}`.toLowerCase();
+      return searchHaystack.includes(q);
+    });
+  }, [sortedTimeline, logSearchTerm]);
 
   const kpiMetrics = React.useMemo(() => {
     let localOrderCount = 0;
@@ -233,20 +396,6 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
     };
   }, [logBookTimeline, serverBillingActivity]);
 
-  // KPI Drill-Down filtered entries
-  const kpiDrillItems = React.useMemo(() => {
-    if (!kpiDrillFilter) return [];
-    return logBookTimeline.filter((item: any) => {
-      const type = (item.type || '').toUpperCase();
-      const details = (item.details || '');
-      if (kpiDrillFilter === 'ORDER') return type === 'ORDER';
-      if (kpiDrillFilter === 'SELL') return type === 'SELL' || type === 'EXCHANGE' || type === 'ORDER';
-      if (kpiDrillFilter === 'BUY') return type === 'BUY' || details.includes('Bought:') || details.includes('Scrap') || type === 'EXCHANGE' || type === 'ORDER';
-      if (kpiDrillFilter === 'EXCHANGE') return type === 'EXCHANGE';
-      return false;
-    });
-  }, [logBookTimeline, kpiDrillFilter]);
-
 
 
   // Ref Guard to prevent duplicate network calls
@@ -305,6 +454,30 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
   React.useEffect(() => {
     fetchDayBookData(true);
   }, [selectedDate, dateFilterMode]);
+
+  const handleTabChange = (newTab: AccountTab) => {
+    setActiveSubTab(newTab);
+
+    // Clear KPI card selection filters & search term when switching sub-tabs
+    setKpiDrillFilter(null);
+    setKpiDrillFilter2(null);
+    setKpiDrillFilter3(null);
+    setLogSearchTerm('');
+
+    // Reset local metal category filter & stock view mode
+    setMetalCategoryFilter('ALL');
+    setStockViewMode('TOTAL');
+
+    // Date Filter Reset Logic: Customer Dues defaults to ALL time; all other tabs reset to TODAY
+    if (newTab === 'udhaari_dues') {
+      setDateFilterMode('ALL');
+    } else {
+      setDateFilterMode('TODAY');
+      setSelectedDate(getTodayIST());
+      setStartDate(getTodayIST());
+      setEndDate(getTodayIST());
+    }
+  };
 
   // Calculate ornament-wise stock grouped by Category & Metal (GOLD vs SILVER)
   const ornamentsStockList = React.useMemo(() => {
@@ -379,10 +552,6 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
     fetchDayBookData(true);
   }, [selectedDate, dateFilterMode, startDate, endDate]);
 
-  const handleTabChange = (tab: AccountTab) => {
-    setActiveSubTab(tab);
-  };
-
   // Full-Page Invoice Details View (Exact same component as Purchase History)
   if (selectedBillModalItem) {
     const rawInv = selectedBillModalItem.raw_invoice;
@@ -450,88 +619,79 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
           </p>
         </div>
 
-        {/* Date Selector Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => {
-              setDateFilterMode('TODAY');
-              setSelectedDate(getTodayIST());
+        {/* Date Selector Dropdown Controls */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <select
+            value={
+              dateFilterMode === 'TODAY' && selectedDate === getTodayIST()
+                ? 'TODAY'
+                : selectedDate === getYesterdayIST() && (dateFilterMode === 'DATE' || dateFilterMode === 'TODAY')
+                  ? 'YESTERDAY'
+                  : dateFilterMode === 'CUSTOM'
+                    ? 'CUSTOM'
+                    : dateFilterMode === 'ALL'
+                      ? 'ALL'
+                      : 'DATE'
+            }
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'TODAY') {
+                setDateFilterMode('TODAY');
+                setSelectedDate(getTodayIST());
+                setShowCustomDateModal(false);
+              } else if (val === 'YESTERDAY') {
+                setDateFilterMode('DATE');
+                setSelectedDate(getYesterdayIST());
+                setShowCustomDateModal(false);
+              } else if (val === 'CUSTOM') {
+                setShowCustomDateModal(true);
+              } else if (val === 'ALL') {
+                setDateFilterMode('ALL');
+                setShowCustomDateModal(false);
+              }
             }}
             style={{
-              padding: '4px 10px',
-              borderRadius: '6px',
-              border: dateFilterMode === 'TODAY' ? '1.5px solid #d97706' : '1px solid #cbd5e1',
-              background: dateFilterMode === 'TODAY' ? '#fef3c7' : '#ffffff',
-              color: dateFilterMode === 'TODAY' ? '#b45309' : '#475569',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              border: dateFilterMode === 'CUSTOM' ? '1.5px solid #4f46e5' : '1.5px solid #d97706',
+              fontSize: '0.75rem',
               fontWeight: 800,
-              fontSize: '0.65rem',
+              color: dateFilterMode === 'CUSTOM' ? '#4f46e5' : '#0f172a',
+              background: '#ffffff',
               cursor: 'pointer',
+              outline: 'none',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
             }}
           >
-            Today
-          </button>
+            <option value="TODAY">📅 Today</option>
+            <option value="YESTERDAY">📆 Yesterday</option>
+            <option value="CUSTOM">📊 Custom Date Range</option>
+            <option value="ALL">🌐 All Time</option>
+          </select>
 
-          <button
-            type="button"
-            onClick={() => {
-              setDateFilterMode('ALL');
-            }}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '6px',
-              border: dateFilterMode === 'ALL' ? '1.5px solid #0284c7' : '1px solid #cbd5e1',
-              background: dateFilterMode === 'ALL' ? '#e0f2fe' : '#ffffff',
-              color: dateFilterMode === 'ALL' ? '#0369a1' : '#475569',
-              fontWeight: 800,
-              fontSize: '0.65rem',
-              cursor: 'pointer',
-            }}
-          >
-            🌐 All Time (All Records)
-          </button>
+          {dateFilterMode === 'CUSTOM' && (
+            <span
+              onClick={() => setShowCustomDateModal(!showCustomDateModal)}
+              title="Click to change custom date range"
+              style={{
+                fontSize: '0.70rem',
+                fontWeight: 800,
+                color: '#4f46e5',
+                background: '#eeeffe',
+                border: '1px solid #c7d2fe',
+                padding: '5px 10px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              📅 {startDate} to {endDate} ✏️
+            </span>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setDateFilterMode('CUSTOM')}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '6px',
-              border: dateFilterMode === 'CUSTOM' ? '1.5px solid #7e22ce' : '1px solid #cbd5e1',
-              background: dateFilterMode === 'CUSTOM' ? '#faf5ff' : '#ffffff',
-              color: dateFilterMode === 'CUSTOM' ? '#7e22ce' : '#475569',
-              fontWeight: 800,
-              fontSize: '0.65rem',
-              cursor: 'pointer',
-            }}
-          >
-            📅 Date Range
-          </button>
-
-          {dateFilterMode === 'CUSTOM' ? (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#ffffff', padding: '3px 6px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={{ border: 'none', fontSize: '0.68rem', fontWeight: 700, color: '#0f172a', outline: 'none' }}
-              />
-              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b' }}>to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                style={{ border: 'none', fontSize: '0.68rem', fontWeight: 700, color: '#0f172a', outline: 'none' }}
-              />
-              <button
-                type="button"
-                onClick={() => fetchDayBookData(true)}
-                style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', background: '#7e22ce', color: '#ffffff', fontWeight: 800, fontSize: '0.65rem', cursor: 'pointer' }}
-              >
-                Apply
-              </button>
-            </div>
-          ) : dateFilterMode === 'TODAY' || dateFilterMode === 'DATE' ? (
+          {(dateFilterMode === 'TODAY' || dateFilterMode === 'DATE') && (
             <input
               type="date"
               value={selectedDate}
@@ -540,17 +700,151 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                 setSelectedDate(e.target.value);
               }}
               style={{
-                padding: '4px 8px',
-                borderRadius: '6px',
+                padding: '5px 10px',
+                borderRadius: '8px',
                 border: '1px solid #cbd5e1',
-                fontSize: '0.68rem',
+                fontSize: '0.72rem',
                 fontWeight: 700,
                 color: '#0f172a',
                 outline: 'none',
                 background: '#ffffff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
               }}
             />
-          ) : null}
+          )}
+
+          {/* 📅 Anchored Dropdown Popover Card (Filter Date Range) */}
+          {showCustomDateModal && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                left: 0,
+                zIndex: 10000,
+                background: '#ffffff',
+                borderRadius: '12px',
+                width: '240px',
+                padding: '0.85rem',
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                border: '1.5px solid #cbd5e1',
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+                  Filter Date Range
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomDateModal(false)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#94a3b8',
+                    fontSize: '0.88rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: '1px 4px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* From Date Input */}
+              <div style={{ marginBottom: '0.6rem' }}>
+                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: 800, color: '#334155', marginBottom: '2px' }}>
+                  From Date:
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '5px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    background: '#ffffff',
+                  }}
+                />
+              </div>
+
+              {/* To Date Input */}
+              <div style={{ marginBottom: '0.85rem' }}>
+                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: 800, color: '#334155', marginBottom: '2px' }}>
+                  To Date:
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '5px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    background: '#ffffff',
+                  }}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomDateModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #fecaca',
+                    background: '#fef2f2',
+                    color: '#dc2626',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFilterMode('CUSTOM');
+                    fetchDayBookData(true);
+                    setShowCustomDateModal(false);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: '#4f46e5',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
+                  }}
+                >
+                  Apply Filter
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -558,10 +852,11 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '4px', borderBottom: '1px solid #e2e8f0' }}>
         {[
           { id: 'logbook', label: '📖 Daily Entry Log Book', desc: 'Live Minute-by-Minute Timeline' },
-          { id: 'stock', label: '📦 Stock Movement', desc: 'Opening, Sold & Closing Weight' },
-          { id: 'cash', label: '💵 Cash & Counter Register', desc: 'Cash Drawer Reconciliation' },
-          { id: 'scrap', label: '⚖️ Buy Metal Vault', desc: 'Scrap Gold & Silver Purchases' },
-          { id: 'udhaari', label: '🤝 Udhaari & Karigar', desc: 'Credit Dues & Goldsmith Fine' },
+          { id: 'stock', label: '📦 Metal In & Outs', desc: 'Opening, Sold & Closing Weight' },
+          { id: 'cash', label: '💵 Cash In & Outs', desc: 'Cash Drawer Reconciliation' },
+          { id: 'scrap', label: '⚖️ Buy Metal records', desc: 'Scrap Gold & Silver Purchases' },
+          { id: 'udhaari', label: '🤝 Workers Transactions', desc: 'Credit Dues & Goldsmith Fine' },
+          { id: 'udhaari_dues', label: '📋 Customer Dues', desc: 'Pending Dues from Purchase History' },
           // { id: 'snapshot', label: '📸 Daily Snapshot', desc: 'Full EOD Closing Snapshot History' },
         ].map((tab) => {
           const active = activeSubTab === tab.id;
@@ -637,7 +932,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                       </div>
                       <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#92400e', marginTop: '2px' }}>{kpiMetrics.orderCount} <span style={{ fontSize: '0.62rem', fontWeight: 700 }}>Bills</span></div>
                       <div style={{ fontSize: '0.58rem', color: '#b45309', fontWeight: 700, margin: '2px 0 6px 0' }}>
-                        {kpiMetrics.orderMode ? `${kpiMetrics.orderMode.sellsCount || 0} Sold Ornaments · ${kpiMetrics.orderMode.buysCount || 0} Scrap` : 'Order items'}
+                        {kpiMetrics.orderMode ? `${kpiMetrics.orderMode.sellsCount || 0} Sold Ornaments · ${kpiMetrics.orderMode.buysCount || 0} buy` : 'Order items'}
                       </div>
                     </div>
                     {/* Weight Breakdown */}
@@ -654,7 +949,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                           {(m?.silverSoldGross > 0 || m?.silverBoughtGross > 0) && (
                             <div style={{ color: '#475569', borderTop: (m?.goldSoldGross > 0 || m?.goldBoughtGross > 0) ? '1px dashed #fde68a' : 'none', paddingTop: '2px' }}>
                               {m?.silverSoldGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥈 Silver Sold:</span><strong>{m.silverSoldGross}g → {m.silverSoldPure}g Pure</strong></div>}
-                              {m?.silverBoughtGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥈 Silver Scrap:</span><strong>{m.silverBoughtGross}g → {m.silverBoughtPure}g Pure</strong></div>}
+                              {m?.silverBoughtGross > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🥈 Silver buy:</span><strong>{m.silverBoughtGross}g → {m.silverBoughtPure}g Pure</strong></div>}
                             </div>
                           )}
                           {!m?.goldSoldGross && !m?.goldBoughtGross && !m?.silverSoldGross && !m?.silverBoughtGross && (
@@ -721,7 +1016,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                         <div style={{ background: 'rgba(255,255,255,0.85)', padding: '4px 6px', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '0.56rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           {m?.goldBoughtGross > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#1e40af' }}>
-                              <span>🥇 Gold Scrap:</span>
+                              <span>🥇 Gold buy:</span>
                               <strong>{m.goldBoughtGross}g → {m.goldBoughtPure}g Pure</strong>
                             </div>
                           )}
@@ -831,7 +1126,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                           <div style={{ background: '#fefce8', border: '1px solid #fef08a', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <span style={{ fontSize: '0.64rem' }}>⚖️</span>
-                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#854d0e' }}>Gold Scrap In:</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#854d0e' }}>Gold buy:</span>
                               <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#713f12' }}>{goldBoughtGross}g (Item Wt)</span>
                             </div>
                             <span style={{ fontSize: '0.60rem', fontWeight: 800, color: '#047857', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px' }}>
@@ -855,7 +1150,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '5px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <span style={{ fontSize: '0.64rem' }}>🥈</span>
-                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#475569' }}>Silver Scrap In:</span>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#475569' }}>Silver buy:</span>
                               <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#334155' }}>{silverBoughtGross}g (Item Wt)</span>
                             </div>
                             <span style={{ fontSize: '0.60rem', fontWeight: 800, color: '#047857', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px' }}>
@@ -1014,111 +1309,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
 
               </div>
 
-              {/* KPI DRILL-DOWN PANEL */}
-              {kpiDrillFilter && (
-                <div style={{
-                  background: '#ffffff',
-                  borderRadius: '16px',
-                  border: `2px solid ${kpiDrillFilter === 'ORDER' ? '#fde68a' :
-                    kpiDrillFilter === 'SELL' ? '#bbf7d0' :
-                      kpiDrillFilter === 'BUY' ? '#bfdbfe' : '#e9d5ff'
-                    }`,
-                  padding: '1.15rem',
-                  marginBottom: '1.25rem',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.06)',
-                  animation: 'slideDown 0.2s ease',
-                }}>
-                  {/* Panel Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        fontSize: '0.72rem', fontWeight: 800, padding: '3px 10px', borderRadius: '6px',
-                        background: kpiDrillFilter === 'ORDER' ? '#fffbe6' : kpiDrillFilter === 'SELL' ? '#f0fdf4' : kpiDrillFilter === 'BUY' ? '#eff6ff' : '#faf5ff',
-                        color: kpiDrillFilter === 'ORDER' ? '#b45309' : kpiDrillFilter === 'SELL' ? '#15803d' : kpiDrillFilter === 'BUY' ? '#1d4ed8' : '#7e22ce',
-                        border: `1px solid ${kpiDrillFilter === 'ORDER' ? '#fde68a' : kpiDrillFilter === 'SELL' ? '#bbf7d0' : kpiDrillFilter === 'BUY' ? '#bfdbfe' : '#e9d5ff'}`,
-                        textTransform: 'uppercase', letterSpacing: '0.5px',
-                      }}>
-                        {
-                          kpiDrillFilter === 'ORDER' ? '🛍️ Orders' :
-                            kpiDrillFilter === 'SELL' ? '🟢 Sells & Trade-ins' :
-                              kpiDrillFilter === 'BUY' ? '🔵 Scrap Buys (Orders + Buys + Trade-ins)' :
-                                '🟣 Exchanges / Trade-ins'
-                        }
-                      </span>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#64748b' }}>
-                        {kpiDrillItems.length} record{kpiDrillItems.length !== 1 ? 's' : ''} found
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setKpiDrillFilter(null)}
-                      style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '5px 10px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}
-                    >
-                      <i className="fa-solid fa-xmark" /> Close
-                    </button>
-                  </div>
 
-                  {/* Drill-down Table */}
-                  {kpiDrillItems.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 700 }}>
-                      <i className="fa-solid fa-inbox" style={{ fontSize: '1.5rem', display: 'block', marginBottom: '8px' }} />
-                      No records found for this filter in the selected date range.
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                        <thead>
-                          <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>#</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>Time</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>JBJ-Type</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, color: '#475569' }}>Customer / Details</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>Weight</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>Amount</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>Paid</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...kpiDrillItems].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()).map((item: any, idx: number) => {
-                            const itype = (item.type || '').toUpperCase();
-                            let typeBg = '#f8fafc', typeColor = '#475569';
-                            if (itype === 'ORDER') { typeBg = '#fffbe6'; typeColor = '#b45309'; }
-                            else if (itype === 'SELL') { typeBg = '#f0fdf4'; typeColor = '#15803d'; }
-                            else if (itype === 'BUY') { typeBg = '#eff6ff'; typeColor = '#1d4ed8'; }
-                            else if (itype === 'EXCHANGE') { typeBg = '#faf5ff'; typeColor = '#7e22ce'; }
-                            return (
-                              <tr
-                                key={item.id || idx}
-                                onClick={() => setSelectedBillModalItem(item)}
-                                style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}
-                              >
-                                <td style={{ padding: '8px 10px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
-                                <td style={{ padding: '8px 10px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{item.time}</td>
-                                <td style={{ padding: '8px 10px' }}>
-                                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 7px', borderRadius: '4px', background: typeBg, color: typeColor }}>{itype}</span>
-                                </td>
-                                <td style={{ padding: '8px 10px' }}>
-                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{item.title}</div>
-                                  <div style={{ fontSize: '0.73rem', color: '#64748b', marginTop: '1px' }}>{item.details}</div>
-                                </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>
-                                  {item.weight_grams > 0 ? `${item.weight_grams}g` : '-'}
-                                </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                                  {item.amount > 0 ? `₹${Number(item.amount).toLocaleString('en-IN')}` : '-'}
-                                </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#15803d', whiteSpace: 'nowrap' }}>
-                                  {item.paid_amount > 0 ? `₹${Number(item.paid_amount).toLocaleString('en-IN')}` : '-'}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* CARD 2 DRILL-DOWN: Inventory Stock List */}
               {kpiDrillFilter2 && (() => {
@@ -1268,9 +1459,9 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                               let typeBg = '#f8fafc', typeColor = '#475569';
                               if (itype === 'INVENTORY') { typeBg = '#fff7ed'; typeColor = '#c2410c'; }
                               else if (itype === 'FINANCE') { typeBg = '#ccfbf1'; typeColor = '#0f766e'; }
-                              else if (itype === 'SELL') { typeBg = '#f0fdf4'; typeColor = '#15803d'; }
+                              const isClickableBill = itype === 'ORDER' || itype === 'SELL' || itype === 'BUY' || itype === 'EXCHANGE' || itype === 'TRADEIN' || itype === 'TRADE-IN';
                               return (
-                                <tr key={item.id || idx} onClick={() => setSelectedBillModalItem(item)} style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                                <tr key={item.id || idx} onClick={() => { if (isClickableBill) setSelectedBillModalItem(item); }} style={{ borderBottom: '1px solid #f1f5f9', cursor: isClickableBill ? 'pointer' : 'default', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
                                   <td style={{ padding: '8px 10px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
                                   <td style={{ padding: '8px 10px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{item.time}</td>
                                   <td style={{ padding: '8px 10px' }}><span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 7px', borderRadius: '4px', background: typeBg, color: typeColor }}>{itype}</span></td>
@@ -1296,86 +1487,87 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
               <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
                 {/* Log Book Controls Bar */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center' }}>
-                    <i className="fa-solid fa-clock-rotate-left" style={{ color: '#0284c7', marginRight: '8px' }}></i>
-                    Chronological Daily Entry Log ({logBookTimeline.length} Entries)
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <i className="fa-solid fa-clock-rotate-left" style={{ color: '#0284c7' }}></i>
+                    Chronological Daily Entry Log ({filteredTimeline.length} Entries)
+                    {kpiDrillFilter && (
+                      <span
+                        onClick={() => setKpiDrillFilter(null)}
+                        title="Click to clear filter"
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          padding: '3px 9px',
+                          borderRadius: '6px',
+                          background: kpiDrillFilter === 'ORDER' ? '#fef3c7' : kpiDrillFilter === 'SELL' ? '#dcfce7' : kpiDrillFilter === 'BUY' ? '#dbeafe' : '#ede9fe',
+                          color: kpiDrillFilter === 'ORDER' ? '#b45309' : kpiDrillFilter === 'SELL' ? '#15803d' : kpiDrillFilter === 'BUY' ? '#1d4ed8' : '#7e22ce',
+                          border: '1px solid currentColor',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        }}
+                      >
+                        Filter: {kpiDrillFilter === 'ORDER' ? '🛍️ Orders' : kpiDrillFilter === 'SELL' ? '🟢 Sells' : kpiDrillFilter === 'BUY' ? '🔵 Buys' : '🟣 Trade-ins'} ✕
+                      </span>
+                    )}
                   </h3>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    {/* View Mode Toggle Switcher */}
-                    <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                      <button
-                        type="button"
-                        onClick={() => setLogBookViewMode('TABLE')}
+                    {/* Live Search Bar for Chronological Log Book */}
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        placeholder="Search by Name..."
+                        value={logSearchTerm}
+                        onChange={(e) => setLogSearchTerm(e.target.value)}
                         style={{
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          background: logBookViewMode === 'TABLE' ? '#ffffff' : 'transparent',
-                          color: logBookViewMode === 'TABLE' ? '#0f172a' : '#64748b',
-                          fontWeight: 800,
-                          fontSize: '0.78rem',
-                          cursor: 'pointer',
-                          boxShadow: logBookViewMode === 'TABLE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                          padding: '6px 12px 6px 30px',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          outline: 'none',
+                          width: '260px',
+                          background: '#ffffff',
                         }}
-                      >
-                        <i className="fa-solid fa-table-list" style={{ marginRight: '5px', color: '#0284c7' }}></i>
-                        Table View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLogBookViewMode('CARD')}
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          background: logBookViewMode === 'CARD' ? '#ffffff' : 'transparent',
-                          color: logBookViewMode === 'CARD' ? '#0f172a' : '#64748b',
-                          fontWeight: 800,
-                          fontSize: '0.78rem',
-                          cursor: 'pointer',
-                          boxShadow: logBookViewMode === 'CARD' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                        }}
-                      >
-                        <i className="fa-solid fa-address-card" style={{ marginRight: '5px', color: '#d97706' }}></i>
-                        Cards View
-                      </button>
+                      />
+                      <i className="fa-solid fa-magnifying-glass" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.72rem' }} />
+                      {logSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setLogSearchTerm('')}
+                          style={{
+                            position: 'absolute',
+                            right: '8px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#94a3b8',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setSortOrder((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'))}
-                      style={{
-                        padding: '5px 11px',
-                        borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        background: '#f8fafc',
-                        color: '#0f172a',
-                        fontWeight: 700,
-                        fontSize: '0.78rem',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      }}
-                    >
-                      <i className={`fa-solid ${sortOrder === 'ASC' ? 'fa-arrow-up-wide-short' : 'fa-arrow-down-wide-short'}`} style={{ color: '#d97706' }}></i>
-                      {sortOrder === 'ASC' ? '↑ Oldest First' : '↓ Newest First'}
-                    </button>
                     <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>Date: {selectedDate}</span>
                   </div>
                 </div>
 
-                {sortedTimeline.length === 0 ? (
-                  <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No transaction entries recorded for this date yet.</p>
-                ) : logBookViewMode === 'TABLE' ? (
+                {filteredTimeline.length === 0 ? (
+                  <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No transaction entries found for the active search/date filter.</p>
+                ) : (
                   <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                     <table className="table-responsive-font" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
                           <th style={{ padding: '12px 10px', fontWeight: 800 }}>S.No</th>
-                          <th style={{ padding: '12px 10px', fontWeight: 800 }}>Time</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800 }}>Date & Time (IST)</th>
                           <th style={{ padding: '12px 10px', fontWeight: 800 }}>JBJ-Type</th>
                           <th style={{ padding: '12px 10px', fontWeight: 800 }}>Customer / Details</th>
                           <th style={{ padding: '12px 10px', fontWeight: 800, textAlign: 'right' }}>Net Weight</th>
@@ -1385,7 +1577,11 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedTimeline.map((item, idx) => {
+                        {filteredTimeline.map((item, idx) => {
+                          const itemDateStr = getISTDateOnly(item.created_at);
+                          const isMultiDateRangeMode = dateFilterMode === 'ALL' || dateFilterMode === 'CUSTOM';
+                          const showDateDivider = isMultiDateRangeMode && Boolean(itemDateStr && (idx === 0 || getISTDateOnly(filteredTimeline[idx - 1]?.created_at) !== itemDateStr));
+
                           const rawItemType = (item.type || '').toUpperCase();
                           const isOrder = rawItemType === 'ORDER';
                           const isSell = rawItemType === 'SELL';
@@ -1414,267 +1610,95 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                           const inHandCash = Number(item.paid_amount || (isFinance ? item.amount : 0));
                           const totalBillVal = Number(item.amount || item.paid_amount || 0);
 
+                          const isClickableBill = isOrder || isSell || isBuy || isExchange;
+
                           return (
-                            <tr
-                              key={item.id}
-                              onClick={() => setSelectedBillModalItem(item)}
-                              style={{
-                                borderBottom: '1px solid #f1f5f9',
-                                cursor: 'pointer',
-                                background: idx % 2 === 0 ? '#ffffff' : '#fcfcfd',
-                              }}
-                            >
-                              <td style={{ padding: '8px 10px', fontWeight: 800, color: '#64748b' }}>#{idx + 1}</td>
-                              <td style={{ padding: '8px 10px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{item.time}</td>
-                              <td style={{ padding: '8px 10px' }}>
-                                <span style={{ fontSize: '0.58rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: typeBg, color: typeColor, whiteSpace: 'nowrap' }}>
-                                  {displayItemType}
-                                </span>
-                              </td>
-                              <td style={{ padding: '8px 10px' }}>
-                                <div style={{ fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                                  {item.title}
-                                  {isKarigar && item.category && (() => {
-                                    const cat = (item.category || '').toUpperCase();
-                                    const isGold = cat.includes('GOLD');
-                                    const isSilver = cat.includes('SILVER');
-                                    const isCash = cat.includes('CASH');
-                                    const isCatOrder = cat.includes('ORDER');
-                                    const cashLink = (item.cash_metal_link || '').toUpperCase();
-                                    const label = isGold ? '🥇 Gold' : isSilver ? '🥈 Silver'
-                                      : isCash ? `💵 Cash${cashLink === 'FOR_GOLD' ? ' · For Gold' : cashLink === 'FOR_SILVER' ? ' · For Silver' : cashLink === 'GENERAL_CASH' ? ' · General' : ''}`
-                                        : isCatOrder ? 'Order Assigned' : cat;
-                                    const bg = isGold ? '#fffbe6' : isSilver ? '#f8fafc' : isCatOrder ? '#dcfce7' : '#f0fdf4';
-                                    const color = isGold ? '#b45309' : isSilver ? '#334155' : isCatOrder ? '#15803d' : '#15803d';
-                                    const border = isGold ? '#fde68a' : isSilver ? '#cbd5e1' : isCatOrder ? '#bbf7d0' : '#bbf7d0';
-                                    return (
-                                      <span style={{ fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: bg, color, border: `1px solid ${border}` }}>
-                                        {label}
-                                      </span>
-                                    );
-                                  })()}
-                                </div>
-                                <div style={{ fontSize: '0.62rem', color: '#64748b' }}>{item.details}</div>
-                              </td>
-                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#334155' }}>
-                                {item.weight_grams > 0 ? `${item.weight_grams}g` : '-'}
-                              </td>
-                              {/* In Hand (₹) Column */}
-                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: isBuy || isFinance ? '#b91c1c' : '#15803d' }}>
-                                {inHandCash > 0 ? `${isBuy || isFinance ? '-' : ''}₹${inHandCash.toLocaleString('en-IN')}` : '-'}
-                              </td>
-                              {/* Total Amount (₹) & Due Breakdown Column */}
-                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
-                                {totalBillVal > 0 ? `₹${totalBillVal.toLocaleString('en-IN')}` : '-'}
-                                {item.due_amount > 0 && (
-                                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#b91c1c', marginTop: '1px' }}>
-                                    Due: ₹{item.due_amount.toLocaleString('en-IN')}
+                            <React.Fragment key={item.id || idx}>
+                              {showDateDivider && (
+                                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #cbd5e1', borderBottom: '2px solid #cbd5e1' }}>
+                                  <td colSpan={8} style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 800, color: '#334155', fontSize: '0.78rem', letterSpacing: '0.5px' }}>
+                                    📅 {itemDateStr}
+                                  </td>
+                                </tr>
+                              )}
+                              <tr
+                                onClick={() => {
+                                  if (isClickableBill) {
+                                    setSelectedBillModalItem(item);
+                                  }
+                                }}
+                                style={{
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: isClickableBill ? 'pointer' : 'default',
+                                  background: idx % 2 === 0 ? '#ffffff' : '#fcfcfd',
+                                }}
+                              >
+                                <td style={{ padding: '8px 10px', fontWeight: 800, color: '#64748b' }}>#{item.originalSNo || idx + 1}</td>
+                                <td style={{ padding: '8px 10px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{formatISTDateTime(item.created_at, item.time)}</td>
+                                <td style={{ padding: '8px 10px' }}>
+                                  <span style={{ fontSize: '0.58rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: typeBg, color: typeColor, whiteSpace: 'nowrap' }}>
+                                    {displayItemType}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 10px' }}>
+                                  <div style={{ fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                    {item.title}
+                                    {isKarigar && item.category && (() => {
+                                      const cat = (item.category || '').toUpperCase();
+                                      const isGold = cat.includes('GOLD');
+                                      const isSilver = cat.includes('SILVER');
+                                      const isCash = cat.includes('CASH');
+                                      const isCatOrder = cat.includes('ORDER');
+                                      const cashLink = (item.cash_metal_link || '').toUpperCase();
+                                      const label = isGold ? '🥇 Gold' : isSilver ? '🥈 Silver'
+                                        : isCash ? `💵 Cash${cashLink === 'FOR_GOLD' ? ' · For Gold' : cashLink === 'FOR_SILVER' ? ' · For Silver' : cashLink === 'GENERAL_CASH' ? ' · General' : ''}`
+                                          : isCatOrder ? 'Order Assigned' : cat;
+                                      const bg = isGold ? '#fffbe6' : isSilver ? '#f8fafc' : isCatOrder ? '#dcfce7' : '#f0fdf4';
+                                      const color = isGold ? '#b45309' : isSilver ? '#334155' : isCatOrder ? '#15803d' : '#15803d';
+                                      const border = isGold ? '#fde68a' : isSilver ? '#cbd5e1' : isCatOrder ? '#bbf7d0' : '#bbf7d0';
+                                      return (
+                                        <span style={{ fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: bg, color, border: `1px solid ${border}` }}>
+                                          {label}
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
-                                )}
-                              </td>
-                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                {isInventory ? null : isFinance ? (
-                                  <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#0f766e', background: '#ccfbf1', border: '1px solid #99f6e4', padding: '1px 6px', borderRadius: '4px' }}>
-                                    DEBT
-                                  </span>
-                                ) : isKarigar ? (
-                                  <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#475569', background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px' }}>
-                                    WEIGHT ACC
-                                  </span>
-                                ) : item.due_amount > 0 ? (
-                                  <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', padding: '1px 6px', borderRadius: '4px' }}>
-                                    PARTIAL PAID
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#15803d', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1px 6px', borderRadius: '4px' }}>
-                                    FULL PAID
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
+                                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>{item.details}</div>
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>
+                                  {item.weight_grams > 0 ? `${item.weight_grams}g` : '-'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: isBuy || isFinance ? '#b91c1c' : '#15803d', whiteSpace: 'nowrap' }}>
+                                  {inHandCash > 0 ? `${isBuy || isFinance ? '-' : ''}₹${inHandCash.toLocaleString('en-IN')}` : '-'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                                  {totalBillVal > 0 ? `₹${totalBillVal.toLocaleString('en-IN')}` : '-'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                  {isInventory ? null : isFinance ? (
+                                    <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#0f766e', background: '#ccfbf1', border: '1px solid #99f6e4', padding: '1px 6px', borderRadius: '4px' }}>
+                                      DEBT
+                                    </span>
+                                  ) : isKarigar ? (
+                                    <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#475569', background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px' }}>
+                                      WEIGHT ACC
+                                    </span>
+                                  ) : item.due_amount > 0 ? (
+                                    <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', padding: '1px 6px', borderRadius: '4px' }}>
+                                      PARTIAL PAID
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#15803d', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1px 6px', borderRadius: '4px' }}>
+                                      FULL PAID
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
                     </table>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                    {sortedTimeline.map((item, idx) => {
-                      const rawItemType = (item.type || '').toUpperCase();
-                      const isOrder = rawItemType === 'ORDER';
-                      const isSell = rawItemType === 'SELL';
-                      const isBuy = rawItemType === 'BUY';
-                      const isExchange = rawItemType === 'EXCHANGE';
-                      const isInventory = rawItemType === 'INVENTORY';
-                      const isFinance = rawItemType === 'FINANCE';
-                      const isCashLoad = rawItemType === 'CASH LOAD' || rawItemType === 'CASH_LOAD';
-                      const isKarigar = rawItemType === 'KARIGAR' || rawItemType === 'WORK ASSIGN' || rawItemType === 'WORKER TX';
-                      const isWorkAssign = rawItemType === 'WORK ASSIGN' || (isKarigar && (item.category === 'ORDER' || item.raw_worker_txn?.order_id || (item.details && item.details.includes('Order #'))));
-                      const isWorkerTx = isKarigar && !isWorkAssign;
-
-                      const displayItemType = isWorkAssign ? 'WORK ASSIGN' : isWorkerTx ? 'WORKER TX' : rawItemType;
-
-                      // Mode badge styling
-                      let badgeBg = '#f8fafc';
-                      let badgeColor = '#475569';
-                      let badgeBorder = '#cbd5e1';
-
-                      if (isOrder) {
-                        badgeBg = '#fffbe6';
-                        badgeColor = '#b45309';
-                        badgeBorder = '#fde68a';
-                      } else if (isSell) {
-                        badgeBg = '#f0fdf4';
-                        badgeColor = '#15803d';
-                        badgeBorder = '#bbf7d0';
-                      } else if (isBuy) {
-                        badgeBg = '#eff6ff';
-                        badgeColor = '#1d4ed8';
-                        badgeBorder = '#bfdbfe';
-                      } else if (isExchange) {
-                        badgeBg = '#faf5ff';
-                        badgeColor = '#7e22ce';
-                        badgeBorder = '#e9d5ff';
-                      } else if (isInventory) {
-                        badgeBg = '#fff7ed';
-                        badgeColor = '#c2410c';
-                        badgeBorder = '#ffedd5';
-                      } else if (isFinance) {
-                        badgeBg = '#ccfbf1';
-                        badgeColor = '#0f766e';
-                        badgeBorder = '#99f6e4';
-                      } else if (isCashLoad) {
-                        badgeBg = '#d1fae5';
-                        badgeColor = '#047857';
-                        badgeBorder = '#a7f3d0';
-                      } else if (isWorkAssign) {
-                        badgeBg = '#ecfdf5';
-                        badgeColor = '#047857';
-                        badgeBorder = '#a7f3d0';
-                      } else if (isWorkerTx) {
-                        badgeBg = '#f1f5f9';
-                        badgeColor = '#334155';
-                        badgeBorder = '#cbd5e1';
-                      }
-
-                      const inHandCash = Number(item.paid_amount || (isFinance ? item.amount : 0));
-                      const totalBillVal = Number(item.amount || item.paid_amount || 0);
-
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => setSelectedBillModalItem(item)}
-                          title="Click to view Tax Invoice Bill Receipt"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '8px 12px',
-                            borderRadius: '10px',
-                            background: isOrder ? '#fffdf5' : isSell ? '#f0fdf4' : isBuy ? '#eff6ff' : '#f8fafc',
-                            border: isOrder ? '1px solid #fef3c7' : isSell ? '1px solid #dcfce7' : isBuy ? '1px solid #dbeafe' : '1px solid #e2e8f0',
-                            flexWrap: 'wrap',
-                            gap: '0.5rem',
-                            boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
-                            cursor: 'pointer',
-                            transition: 'transform 0.15s ease, boxShadow 0.15s ease',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {/* S.No Badge */}
-                            <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#64748b', background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px', minWidth: '26px', textAlign: 'center' }}>
-                              #{idx + 1}
-                            </span>
-
-                            {/* Mode Badge (ORDER, SELL, BUY, WORK ASSIGN, WORKER TX) */}
-                            <span style={{ fontSize: '0.58rem', fontWeight: 800, color: badgeColor, background: badgeBg, padding: '3px 8px', borderRadius: '4px', border: `1px solid ${badgeBorder}`, letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
-                              {displayItemType}
-                            </span>
-
-                            {/* Time */}
-                            <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#b45309', background: '#ffffff', padding: '3px 6px', borderRadius: '4px', border: '1px solid #fef3c7', minWidth: '55px', textAlign: 'center' }}>
-                              {item.time}
-                            </span>
-
-                            <div>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                                {item.title}
-                                {isKarigar && item.category && (() => {
-                                  const cat = (item.category || '').toUpperCase();
-                                  const isGold = cat.includes('GOLD');
-                                  const isSilver = cat.includes('SILVER');
-                                  const isCash = cat.includes('CASH');
-                                  const isCatOrder = cat.includes('ORDER');
-                                  const cashLink = (item.cash_metal_link || '').toUpperCase();
-                                  const label = isGold ? '🥇 Gold' : isSilver ? '🥈 Silver'
-                                    : isCash ? `💵 Cash${cashLink === 'FOR_GOLD' ? ' · For Gold' : cashLink === 'FOR_SILVER' ? ' · For Silver' : cashLink === 'GENERAL_CASH' ? ' · General' : ''}`
-                                      : isCatOrder ? 'Order Assigned' : cat;
-                                  const bg = isGold ? '#fffbe6' : isSilver ? '#f8fafc' : isCatOrder ? '#dcfce7' : '#f0fdf4';
-                                  const color = isGold ? '#b45309' : isSilver ? '#334155' : isCatOrder ? '#15803d' : '#15803d';
-                                  const border = isGold ? '#fde68a' : isSilver ? '#cbd5e1' : isCatOrder ? '#bbf7d0' : '#bbf7d0';
-                                  return (
-                                    <span style={{ fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: bg, color, border: `1px solid ${border}` }}>
-                                      {label}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                              <div style={{ fontSize: '0.62rem', color: '#64748b' }}>{item.details}</div>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
-                            {/* Weight Pill */}
-                            {item.weight_grams > 0 && (
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.55rem', color: '#64748b', fontWeight: 700 }}>Weight</div>
-                                <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#334155' }}>{item.weight_grams}g</div>
-                              </div>
-                            )}
-
-                            {/* In Hand Cash Paid */}
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: '0.55rem', color: '#64748b', fontWeight: 700 }}>In Hand (₹)</div>
-                              <div style={{ fontSize: '0.75rem', fontWeight: 900, color: isBuy || isFinance ? '#b91c1c' : '#15803d' }}>
-                                {inHandCash > 0 ? `${isBuy || isFinance ? '-' : ''}₹${inHandCash.toLocaleString('en-IN')}` : '-'}
-                              </div>
-                            </div>
-
-                            {/* Total Bill Value & Due Pill */}
-                            <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                              <div style={{ fontSize: '0.55rem', color: '#64748b', fontWeight: 700 }}>Total Value</div>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0f172a' }}>
-                                {totalBillVal > 0 ? `₹${totalBillVal.toLocaleString('en-IN')}` : '-'}
-                              </div>
-                              {item.due_amount > 0 && (
-                                <div style={{ fontSize: '0.55rem', fontWeight: 800, color: '#b91c1c', marginTop: '1px' }}>
-                                  Due: ₹{item.due_amount.toLocaleString('en-IN')}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Status Tag */}
-                            {isInventory ? null : isFinance ? (
-                              <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#0f766e', background: '#ccfbf1', border: '1px solid #99f6e4', padding: '1px 6px', borderRadius: '4px' }}>
-                                DEBT
-                              </span>
-                            ) : isKarigar ? (
-                              <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#475569', background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px' }}>
-                                WEIGHT ACC
-                              </span>
-                            ) : item.due_amount > 0 ? (
-                              <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', padding: '1px 6px', borderRadius: '4px' }}>
-                                PARTIAL PAID
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: '0.56rem', fontWeight: 800, color: '#15803d', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1px 6px', borderRadius: '4px' }}>
-                                FULL PAID
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 )}
               </div>
@@ -1708,6 +1732,16 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
           {/* SUB-SCREEN 5: 🤝 Udhaari & Karigar Account */}
           {activeSubTab === 'udhaari' && udhaariSummary && (
             <UdhaariKarigarView udhaariSummary={udhaariSummary} logBookTimeline={logBookTimeline} />
+          )}
+
+          {/* SUB-SCREEN 6: 📋 Customer Purchase Dues & Udhaari */}
+          {activeSubTab === 'udhaari_dues' && (
+            <UdhaariCustomerDuesView
+              logBookTimeline={logBookTimeline}
+              onSelectBill={(item) => setSelectedBillModalItem(item)}
+              selectedDate={selectedDate}
+              formatISTDateTime={formatISTDateTime}
+            />
           )}
         </>
       )}

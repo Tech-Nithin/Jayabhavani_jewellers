@@ -1739,7 +1739,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         const isRepayment = isFlowIn || (tx.item_type || '').toLowerCase().includes('payment') || (tx.item_type || '').toLowerCase().includes('repay') || (tx.notes || '').toLowerCase().includes('received');
         if (isRepayment) {
           logBookTimeline.push({
-            id: `log-fin-repay-${tx.cash_history_uuid || tx.id || Math.random()}`,
+            id: `log-fin-repay-${tx.id || tx.uuid || tx.cash_history_uuid || Math.random()}`,
             time: formattedTime,
             created_at: tx.created_at || new Date().toISOString(),
             type: 'FINANCE_REPAYMENT',
@@ -1858,10 +1858,21 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       });
     });
 
-    // Sort timeline by created_at ascending and assign S.No + Payment Status Badges
-    logBookTimeline.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    // Deduplicate logBookTimeline by unique ID
+    const seenTimelineIds = new Set<string>();
+    const deduplicatedTimeline: any[] = [];
+    logBookTimeline.forEach((item: any) => {
+      const dedupKey = String(item.id || `${item.type}_${item.created_at}_${item.amount}`);
+      if (!seenTimelineIds.has(dedupKey)) {
+        seenTimelineIds.add(dedupKey);
+        deduplicatedTimeline.push(item);
+      }
+    });
 
-    logBookTimeline.forEach((item, index) => {
+    // Sort timeline by created_at ascending and assign S.No + Payment Status Badges
+    deduplicatedTimeline.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    deduplicatedTimeline.forEach((item, index) => {
       item.sNo = index + 1;
       item.payment_status = item.due_amount > 0 ? 'PARTIAL' : 'FULL';
     });
@@ -2043,7 +2054,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       success: true,
       date: targetDate,
       section,
-      logBookTimeline,
+      logBookTimeline: deduplicatedTimeline,
       stockSummary,
       cashSummary,
       cashLedgerRecords: cashLedgerToday || [],

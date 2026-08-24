@@ -96,11 +96,19 @@ export const CashRegisterView: React.FC<CashRegisterProps> = ({ cashSummary, cas
                 <td style={{ padding: '10px 12px', fontWeight: 700, color: '#94a3b8' }}>-</td>
               </tr>
 
-              {/* Transactions in Ascending Order with Running Balance */}
-              {processedRows.map((tx: any, idx: number) => {
+              {/* Transactions in Descending Order (Most Recent First) with Running Balance */}
+              {[...processedRows].reverse().map((tx: any, idx: number) => {
                 const txType = (tx.transaction_type || 'GENERAL').toUpperCase();
                 const createdStr = tx.created_at
-                  ? new Date(tx.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, month: 'short', day: 'numeric' })
+                  ? new Date(tx.created_at).toLocaleString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })
                   : '-';
 
                 // const partyName = tx.customer_name || tx.notes?.split('·')[0] || tx.item_type || 'Walk-in Customer';

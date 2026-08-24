@@ -155,9 +155,9 @@ export const UdhaariKarigarView: React.FC<UdhaariKarigarProps> = ({ udhaariSumma
     return true;
   });
 
-  // 3. Sort events chronologically in ASCENDING ORDER
+  // 3. Sort events in DESCENDING ORDER (most recent first)
   const sortedKarigarEvents = [...karigarEvents].sort(
-    (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
   );
 
   let totalGoldIssuedGrossGrams = 0;
@@ -479,7 +479,7 @@ export const UdhaariKarigarView: React.FC<UdhaariKarigarProps> = ({ udhaariSumma
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
                 <th style={{ padding: '14px 12px' }}>S.No</th>
-                <th style={{ padding: '14px 12px' }}>Date</th>
+                <th style={{ padding: '14px 12px' }}>Date & Time (IST)</th>
                 <th style={{ padding: '14px 12px' }}>Transfer Direction</th>
                 <th style={{ padding: '14px 12px', textAlign: 'right' }}>Gross Wt (g)</th>
                 <th style={{ padding: '14px 12px', textAlign: 'right' }}>Purity %</th>
@@ -497,7 +497,17 @@ export const UdhaariKarigarView: React.FC<UdhaariKarigarProps> = ({ udhaariSumma
                 </tr>
               ) : (
                 processedEvents.map((entry: any, idx: number) => {
-                  const createdStr = entry.time || (entry.created_at ? new Date(entry.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-');
+                  const createdStr = entry.created_at
+                    ? new Date(entry.created_at).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                    : entry.time || '-';
                   const isGiven = entry.isAdminToWorker;
                   const amt = entry.amt;
 

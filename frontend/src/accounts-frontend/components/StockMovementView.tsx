@@ -312,7 +312,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1', color: '#475569', textAlign: 'left' }}>
                 <th style={{ padding: '14px 12px', width: '40px' }}></th>
                 <th style={{ padding: '14px 12px' }}>S.No</th>
-                <th style={{ padding: '14px 12px' }}>Date / Time</th>
+                <th style={{ padding: '14px 12px' }}>Date / Time (IST)</th>
                 <th style={{ padding: '14px 12px' }}>Customer / Party</th>
                 <th style={{ padding: '14px 12px' }}>Transaction Type</th>
                 <th style={{ padding: '14px 12px' }}>Flow</th>
@@ -328,7 +328,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 <td style={{ padding: '14px 12px', textAlign: 'center' }}>📌</td>
                 <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>#0</td>
                 <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Opening (9:00 AM)</td>
-                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Shop Opening Balance</td>
+                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Showcase Vault Opening</td>
                 <td style={{ padding: '14px 12px' }}>
                   <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
                     OPENING STOCK
@@ -351,7 +351,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 <td style={{ padding: '14px 12px', color: '#b45309', fontWeight: 700 }}>Starting Showcase Stock Weight</td>
               </tr>
 
-              {/* Dynamic Accordion Transactions Rows */}
+              {/* Dynamic Accordion Transactions Rows (Descending Order - Most Recent First) */}
               {processedStockRows.length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
@@ -359,9 +359,19 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                   </td>
                 </tr>
               ) : (
-                processedStockRows.map((entry: any, idx: number) => {
+                [...processedStockRows].reverse().map((entry: any, idx: number) => {
                   const txType = entry.rawType;
-                  const createdStr = entry.time || (entry.created_at ? new Date(entry.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-');
+                  const createdStr = entry.created_at
+                    ? new Date(entry.created_at).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                    : entry.time || '-';
                   const itemMetal = (entry.metalCategory || 'GOLD').toUpperCase();
                   const isExpanded = expandedRowId === entry.id;
 

@@ -47,12 +47,18 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
   const pureGoldWeight = totalGoldPure > 0 ? totalGoldPure : (scrapSummary.oldGoldBoughtWeight * (avgGoldPurity / 100));
   const pureSilverWeight = totalSilverPure > 0 ? totalSilverPure : (scrapSummary.oldSilverBoughtWeight * (avgSilverPurity / 100));
 
-  const filteredScrapItems = oldMetalVaultItems.filter((sc) => {
-    const metalType = (sc.metal_type || sc.category || 'GOLD').toUpperCase();
-    if (metalFilter === 'GOLD') return metalType.includes('GOLD');
-    if (metalFilter === 'SILVER') return metalType.includes('SILVER');
-    return true;
-  });
+  const filteredScrapItems = oldMetalVaultItems
+    .filter((sc) => {
+      const metalType = (sc.metal_type || sc.category || 'GOLD').toUpperCase();
+      if (metalFilter === 'GOLD') return metalType.includes('GOLD');
+      if (metalFilter === 'SILVER') return metalType.includes('SILVER');
+      return true;
+    })
+    .sort((a: any, b: any) => {
+      const timeA = new Date(a.created_at || a.date || 0).getTime();
+      const timeB = new Date(b.created_at || b.date || 0).getTime();
+      return timeB - timeA;
+    });
 
   return (
     <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
@@ -88,25 +94,24 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
         </div>
 
         {/* Total Payout Paid to Customers Card */}
-        {/* <div style={{ padding: '14px 16px', background: '#f0fdf4', borderRadius: '14px', border: '1px solid #dcfce7' }}>
-          <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 700 }}>💵 Total Payout Paid to Customers</span>
-          <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#166534', marginTop: '4px' }}>
+        <div style={{ padding: '14px 16px', background: '#fef2f2', borderRadius: '14px', border: '1px solid #fecaca' }}>
+          <span style={{ fontSize: '0.78rem', color: '#991b1b', fontWeight: 700 }}>💵 Total Scrap Cash Paid</span>
+          <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#dc2626', marginTop: '4px' }}>
             ₹{scrapSummary.totalScrapPayout.toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#15803d', marginTop: '6px', fontWeight: 700 }}>
-            Total Items Bought: <strong>{oldMetalVaultItems.length} items</strong>
+          <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '6px', fontWeight: 800 }}>
+            Scrap Buy Vault Accounts Ledger
           </div>
-        </div> */}
+        </div>
       </div>
 
-      {/* Detailed Customer Scrap Items Table & Category Toggle Switch */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
-        <h4 style={{ margin: 0, fontSize: '0.92rem', color: '#0f172a', fontWeight: 800 }}>
-          📑 Customer Scrap Metal Audit Trail ({filteredScrapItems.length} items)
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <h4 style={{ margin: 0, fontSize: '0.92rem', color: '#334155', fontWeight: 800 }}>
+          Scrap Metal Receipts ({filteredScrapItems.length} items)
         </h4>
 
-        {/* Metal Category Filter Switch (ALL | GOLD | SILVER) */}
-        <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
           <button
             type="button"
             onClick={() => setMetalFilter('ALL')}
@@ -114,7 +119,7 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
               padding: '5px 12px',
               borderRadius: '6px',
               border: 'none',
-              background: metalFilter === 'ALL' ? '#0f172a' : 'transparent',
+              background: metalFilter === 'ALL' ? '#0f172a' : '#f1f5f9',
               color: metalFilter === 'ALL' ? '#ffffff' : '#64748b',
               fontWeight: 800,
               fontSize: '0.78rem',
@@ -135,7 +140,7 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
               padding: '5px 12px',
               borderRadius: '6px',
               border: 'none',
-              background: metalFilter === 'GOLD' ? '#d97706' : 'transparent',
+              background: metalFilter === 'GOLD' ? '#d97706' : '#f1f5f9',
               color: metalFilter === 'GOLD' ? '#ffffff' : '#64748b',
               fontWeight: 800,
               fontSize: '0.78rem',
@@ -156,7 +161,7 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
               padding: '5px 12px',
               borderRadius: '6px',
               border: 'none',
-              background: metalFilter === 'SILVER' ? '#0284c7' : 'transparent',
+              background: metalFilter === 'SILVER' ? '#0284c7' : '#f1f5f9',
               color: metalFilter === 'SILVER' ? '#ffffff' : '#64748b',
               fontWeight: 800,
               fontSize: '0.78rem',
@@ -182,6 +187,7 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
                 <th style={{ padding: '14px 12px' }}>S.No</th>
+                <th style={{ padding: '14px 12px' }}>Date & Time (IST)</th>
                 <th style={{ padding: '14px 12px' }}>Customer Name</th>
                 <th style={{ padding: '14px 12px' }}>Phone</th>
                 <th style={{ padding: '14px 12px' }}>Metal</th>
@@ -195,10 +201,22 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
               {filteredScrapItems.map((sc, idx) => {
                 const metalType = (sc.metal_type || sc.category || 'GOLD').toUpperCase();
                 const isGold = metalType.includes('GOLD');
+                const createdStr = sc.created_at || sc.date
+                  ? new Date(sc.created_at || sc.date).toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true,
+                  })
+                  : '-';
 
                 return (
                   <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
                     <td style={{ padding: '14px 12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
+                    <td style={{ padding: '14px 12px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{createdStr}</td>
                     <td style={{ padding: '14px 12px', fontWeight: 800, color: '#0f172a' }}>{sc.customer_name}</td>
                     <td style={{ padding: '14px 12px', color: '#475569' }}>{sc.customer_phone || '-'}</td>
                     <td style={{ padding: '14px 12px' }}>
