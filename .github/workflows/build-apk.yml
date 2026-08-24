@@ -50,7 +50,6 @@ jobs:
       - name: Add & Sync Capacitor Android
         run: |
           cd worker-frontend
-          npm install @capacitor/android
           npx @capacitor/cli add android || true
           npx @capacitor/cli sync android
 
@@ -130,7 +129,6 @@ jobs:
       - name: Add & Sync Capacitor Android
         run: |
           cd frontend
-          npm install @capacitor/android
           npx @capacitor/cli add android || true
           npx @capacitor/cli sync android
 
