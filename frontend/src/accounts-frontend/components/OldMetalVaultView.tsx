@@ -178,17 +178,17 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
         </p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+          <table className="table-responsive-font" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
-                <th style={{ padding: '10px 12px' }}>S.No</th>
-                <th style={{ padding: '10px 12px' }}>Customer Name</th>
-                <th style={{ padding: '10px 12px' }}>Phone</th>
-                <th style={{ padding: '10px 12px' }}>Metal</th>
-                <th style={{ padding: '10px 12px' }}>Scrap Item</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Gross Weight</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Purity %</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', color: '#166534', background: '#f0fdf4' }}>Pure Metal Wt</th>
+                <th style={{ padding: '14px 12px' }}>S.No</th>
+                <th style={{ padding: '14px 12px' }}>Customer Name</th>
+                <th style={{ padding: '14px 12px' }}>Phone</th>
+                <th style={{ padding: '14px 12px' }}>Metal</th>
+                <th style={{ padding: '14px 12px' }}>Scrap Item</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right' }}>Gross Weight</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right' }}>Purity %</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right', color: '#166534', background: '#f0fdf4' }}>Pure Metal Wt</th>
               </tr>
             </thead>
             <tbody>
@@ -198,24 +198,24 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
 
                 return (
                   <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                    <td style={{ padding: '12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
-                    <td style={{ padding: '12px', fontWeight: 800, color: '#0f172a' }}>{sc.customer_name}</td>
-                    <td style={{ padding: '12px', color: '#475569' }}>{sc.customer_phone || '-'}</td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{ fontSize: '0.70rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: isGold ? '#fffbe6' : '#f0f9ff', color: isGold ? '#b45309' : '#0284c7', border: `1px solid ${isGold ? '#fde68a' : '#bae6fd'}` }}>
+                    <td style={{ padding: '14px 12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
+                    <td style={{ padding: '14px 12px', fontWeight: 800, color: '#0f172a' }}>{sc.customer_name}</td>
+                    <td style={{ padding: '14px 12px', color: '#475569' }}>{sc.customer_phone || '-'}</td>
+                    <td style={{ padding: '14px 12px' }}>
+                      <span style={{ fontSize: '0.70rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: isGold ? '#fffbe6' : '#f0f9ff', color: isGold ? '#b45309' : '#0284c7', border: `1px solid ${isGold ? '#fde68a' : '#bae6fd'}` }}>
                         {isGold ? '🥇 Gold' : '🥈 Silver'}
                       </span>
                     </td>
-                    <td style={{ padding: '12px', fontWeight: 700, color: isGold ? '#b45309' : '#0369a1' }}>
+                    <td style={{ padding: '14px 12px', fontWeight: 700, color: isGold ? '#b45309' : '#0369a1' }}>
                       {sc.item_name}
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>
                       {Number(sc.gross_weight || 0).toFixed(3)} g
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap' }}>
                       {Number(sc.purity_percentage || 0).toFixed(1)}%
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 800, color: '#166534', background: '#f0fdf4', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 800, color: '#166534', background: '#f0fdf4', whiteSpace: 'nowrap' }}>
                       {Number(sc.pure_weight || 0).toFixed(3)} g
                     </td>
                   </tr>

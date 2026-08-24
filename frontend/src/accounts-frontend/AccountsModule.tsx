@@ -627,7 +627,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.65rem' }}>
                   {/* 1. ORDERS CARD */}
                   <div onClick={() => setKpiDrillFilter(kpiDrillFilter === 'ORDER' ? null : 'ORDER')} style={{ background: kpiDrillFilter === 'ORDER' ? '#fef3c7' : '#fffbe6', border: `1.5px solid ${kpiDrillFilter === 'ORDER' ? '#f59e0b' : '#fde68a'}`, borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', boxShadow: kpiDrillFilter === 'ORDER' ? '0 0 0 2px rgba(245,158,11,0.2)' : 'none', transition: 'all 0.15s ease', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
@@ -779,7 +779,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
               </div>
 
               {/* ── 2. BELOW 3-COLUMN BALANCED ROW: METAL PURITY (4 ROWS), STORE STOCK & PERIOD FLOW ── */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
 
                 {/* ── SECTION 1: METAL TURNOVER & PURITY FLOW (4 ROWS) ── */}
                 <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #fefce8 100%)', borderRadius: '14px', border: '1px solid #fde68a', padding: '0.85rem 1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -1371,17 +1371,17 @@ export const AccountsModule: React.FC<AccountsModuleProps> = ({ lang = 'EN', onN
                   <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No transaction entries recorded for this date yet.</p>
                 ) : logBookViewMode === 'TABLE' ? (
                   <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', textAlign: 'left' }}>
+                    <table className="table-responsive-font" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-                          <th style={{ padding: '8px 10px', fontWeight: 800 }}>S.No</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800 }}>Time</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800 }}>JBJ-Type</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800 }}>Customer / Details</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'right' }}>Net Weight</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'right', color: '#15803d' }}>In Hand (₹)</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'right' }}>Total Amount (₹)</th>
-                          <th style={{ padding: '8px 10px', fontWeight: 800, textAlign: 'center' }}>Status</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800 }}>S.No</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800 }}>Time</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800 }}>JBJ-Type</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800 }}>Customer / Details</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800, textAlign: 'right' }}>Net Weight</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800, textAlign: 'right', color: '#15803d' }}>In Hand (₹)</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800, textAlign: 'right' }}>Total Amount (₹)</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 800, textAlign: 'center' }}>Status</th>
                         </tr>
                       </thead>
                       <tbody>

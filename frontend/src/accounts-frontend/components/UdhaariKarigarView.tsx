@@ -475,23 +475,23 @@ export const UdhaariKarigarView: React.FC<UdhaariKarigarProps> = ({ udhaariSumma
         </div>
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <table className="table-responsive-font" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
-                <th style={{ padding: '10px 12px' }}>S.No</th>
-                <th style={{ padding: '10px 12px' }}>Date</th>
-                <th style={{ padding: '10px 12px' }}>Transfer Direction</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Gross Wt (g)</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Purity %</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', color: '#b45309', background: '#fffbeb' }}>Pure Fine Wt (99.9)</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Labor Cash / Wage (₹)</th>
-                <th style={{ padding: '10px 12px' }}>Category & Details</th>
+                <th style={{ padding: '14px 12px' }}>S.No</th>
+                <th style={{ padding: '14px 12px' }}>Date</th>
+                <th style={{ padding: '14px 12px' }}>Transfer Direction</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right' }}>Gross Wt (g)</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right' }}>Purity %</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right', color: '#b45309', background: '#fffbeb' }}>Pure Fine Wt (99.9)</th>
+                <th style={{ padding: '14px 12px', textAlign: 'right' }}>Labor Cash / Wage (₹)</th>
+                <th style={{ padding: '14px 12px' }}>Category & Details</th>
               </tr>
             </thead>
             <tbody>
               {processedEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                  <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                     No {metalFilter === 'ALL' ? 'Goldsmith / Karigar' : metalFilter} transactions recorded today.
                   </td>
                 </tr>
@@ -503,20 +503,20 @@ export const UdhaariKarigarView: React.FC<UdhaariKarigarProps> = ({ udhaariSumma
 
                   return (
                     <tr key={entry.id || idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>{createdStr}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', background: isGiven ? '#fffbe6' : '#f0fdf4', color: isGiven ? '#b45309' : '#15803d', border: `1px solid ${isGiven ? '#fde68a' : '#bbf7d0'}` }}>
+                      <td style={{ padding: '14px 12px', fontWeight: 800, color: '#94a3b8' }}>#{idx + 1}</td>
+                      <td style={{ padding: '14px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>{createdStr}</td>
+                      <td style={{ padding: '14px 12px' }}>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: isGiven ? '#fffbe6' : '#f0fdf4', color: isGiven ? '#b45309' : '#15803d', border: `1px solid ${isGiven ? '#fde68a' : '#bbf7d0'}` }}>
                           {isGiven ? `⬆ To ${entry.cleanWorkerName}` : `⬇ From ${entry.cleanWorkerName}`}
                         </span>
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>
                         {entry.wt > 0 ? `${entry.wt.toFixed(3)} g` : '-'}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: isGiven ? '#b45309' : '#15803d', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: isGiven ? '#b45309' : '#15803d', whiteSpace: 'nowrap' }}>
                         {entry.fineWt > 0 ? `${entry.touch}%` : '-'}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: isGiven ? '#b45309' : '#15803d', background: '#fffbeb', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: isGiven ? '#b45309' : '#15803d', background: '#fffbeb', whiteSpace: 'nowrap' }}>
                         {entry.displayFineWt > 0 ? `${entry.displayFineWt.toFixed(3)} g` : '-'}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#334155', whiteSpace: 'nowrap' }}>

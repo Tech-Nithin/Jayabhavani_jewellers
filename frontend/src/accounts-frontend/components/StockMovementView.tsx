@@ -307,7 +307,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
         {/* EXPANDABLE ACCORDION TABLE (IN vs OUT)                        */}
         {/* ============================================================ */}
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <table className="table-responsive-font" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1', color: '#475569', textAlign: 'left' }}>
                 <th style={{ padding: '14px 12px', width: '40px' }}></th>
@@ -330,19 +330,19 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Opening (9:00 AM)</td>
                 <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Shop Opening Balance</td>
                 <td style={{ padding: '14px 12px' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                  <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
                     OPENING STOCK
                   </span>
                 </td>
                 <td style={{ padding: '14px 12px' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#ffffff', color: '#b45309', border: '1px solid #fde68a' }}>
+                  <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#ffffff', color: '#b45309', border: '1px solid #fde68a' }}>
                     START
                   </span>
                 </td>
                 <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 800, color: '#94a3b8' }}>
                   {openingStockWeight.toFixed(3)} g
                 </td>
-                <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: '#b45309', fontSize: '0.9rem' }}>
+                <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: '#b45309' }}>
                   {openingStockWeight.toFixed(3)} g
                 </td>
                 <td style={{ padding: '14px 12px', fontWeight: 700, color: '#b45309' }}>
@@ -387,7 +387,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                         }}
                       >
                         {/* Expand Icon Chevron */}
-                        <td style={{ padding: '14px 12px', textAlign: 'center', color: '#0284c7', fontWeight: 800, fontSize: '0.8rem' }}>
+                        <td style={{ padding: '14px 12px', textAlign: 'center', color: '#0284c7', fontWeight: 800 }}>
                           <span style={{ padding: '2px 6px', borderRadius: '6px', background: isExpanded ? '#e0f2fe' : '#f1f5f9' }}>
                             {isExpanded ? '▲' : '▼'}
                           </span>
@@ -396,12 +396,12 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                         <td style={{ padding: '14px 12px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{createdStr}</td>
                         <td style={{ padding: '14px 12px', fontWeight: 800, color: '#0f172a' }}>{entry.partyName || 'Customer'}</td>
                         <td style={{ padding: '14px 12px' }}>
-                          <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: typeBg, color: typeColor, border: `1px solid ${typeBorder}` }}>
+                          <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: typeBg, color: typeColor, border: `1px solid ${typeBorder}` }}>
                             Jb-{txType}
                           </span>
                         </td>
                         <td style={{ padding: '14px 12px' }}>
-                          <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: entry.isInflow ? '#f0fdf4' : '#fef2f2', color: entry.isInflow ? '#15803d' : '#b91c1c', border: `1px solid ${entry.isInflow ? '#bbf7d0' : '#fecaca'}` }}>
+                          <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: entry.isInflow ? '#f0fdf4' : '#fef2f2', color: entry.isInflow ? '#15803d' : '#b91c1c', border: `1px solid ${entry.isInflow ? '#bbf7d0' : '#fecaca'}` }}>
                             {entry.isInflow ? '⬇ IN' : '⬆ OUT'}
                           </span>
                         </td>
@@ -412,7 +412,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                           {entry.afterTxStockWt.toFixed(3)} g
                         </td>
                         <td style={{ padding: '14px 12px' }}>
-                          <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 6px', borderRadius: '6px', background: itemMetal.includes('SILVER') ? '#f0f9ff' : '#fffbe6', color: itemMetal.includes('SILVER') ? '#0369a1' : '#b45309', border: `1px solid ${itemMetal.includes('SILVER') ? '#bae6fd' : '#fde68a'}` }}>
+                          <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 6px', borderRadius: '6px', background: itemMetal.includes('SILVER') ? '#f0f9ff' : '#fffbe6', color: itemMetal.includes('SILVER') ? '#0369a1' : '#b45309', border: `1px solid ${itemMetal.includes('SILVER') ? '#bae6fd' : '#fde68a'}` }}>
                             {itemMetal.includes('SILVER') ? '🥈 SILVER' : '🥇 GOLD'}
                           </span>
                         </td>
