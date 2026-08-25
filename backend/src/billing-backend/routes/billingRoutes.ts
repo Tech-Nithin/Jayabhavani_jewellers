@@ -2099,8 +2099,8 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       }
     });
 
-    // Sort timeline by created_at ascending and assign S.No + Payment Status Badges
-    deduplicatedTimeline.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    // Sort timeline by created_at descending (latest first) and assign S.No + Payment Status Badges
+    deduplicatedTimeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     deduplicatedTimeline.forEach((item, index) => {
       item.sNo = index + 1;

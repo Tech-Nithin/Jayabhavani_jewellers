@@ -79,6 +79,9 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
   // Selected Bill item state for modal
   const [selectedBillModalItem, setSelectedBillModalItem] = useState<any | null>(null);
 
+  // Loading State for Fetching Accounts Data
+  const [loading, setLoading] = useState<boolean>(true);
+
   // Raw Server Data State
   const [logBookTimeline, setLogBookTimeline] = useState<any[]>([]);
   const [scrapSummary, setScrapSummary] = useState<any | null>(null);
@@ -146,6 +149,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
   const fetchDayBookData = async (force: boolean = false) => {
     if (isFetchingRef.current && !force) return;
     try {
+      setLoading(true);
       let queryUrl = `${API_BASE}/billing/accounts/day-book?section=all`;
       if (dateFilterMode === 'ALL') {
         queryUrl += `&date=all`;
@@ -179,6 +183,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
     } catch (err) {
       console.error('Failed to fetch Day Book Accounts:', err);
     } finally {
+      setLoading(false);
       isFetchingRef.current = false;
     }
   };
@@ -428,7 +433,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
       });
     }
 
-    return result;
+    return [...result].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   }, [logBookTimeline, kpiDrillFilter, logSearchTerm]);
 
   const pillTabs = [
@@ -530,87 +535,104 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
       </div>
 
       {/* Main Content Areas */}
-      {activeSubTab === 'logbook' && (
-        <>
-          {/* Top 4 Transaction Activity KPI Cards */}
-          <TransactionActivityKpiCards
-            kpiMetrics={kpiMetrics}
-            kpiDrillFilter={kpiDrillFilter}
-            setKpiDrillFilter={setKpiDrillFilter}
-          />
-
-          {/* 3 Grid Analytics Section */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-            <MetalTurnoverPurityView kpiMetrics={kpiMetrics} />
-            <WorkerTransactionsKpiView kpiMetrics={kpiMetrics} />
-            <PeriodMovementFlowView
-              kpiMetrics={kpiMetrics}
-              cashSummary={cashSummary}
-              dateFilterMode={dateFilterMode}
-            />
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '380px', gap: '12px' }}>
+          <style>{`@keyframes accountsSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          <div style={{ width: '42px', height: '42px', border: '3.5px solid #fef3c7', borderTop: '3.5px solid #d97706', borderRadius: '50%', animation: 'accountsSpin 0.75s linear infinite' }} />
+          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <i className="fa-solid fa-calculator" style={{ color: '#d97706' }} />
+            Loading Accounts & EOD Day Book...
           </div>
+          <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600 }}>
+            Fetching transactions, scrap vault, worker accounts & cash flow
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* SUB-SCREEN 1: 💻 Daily Entry Log Book */}
+          {activeSubTab === 'logbook' && (
+            <>
+              {/* Top 4 Transaction Activity KPI Cards */}
+              <TransactionActivityKpiCards
+                kpiMetrics={kpiMetrics}
+                kpiDrillFilter={kpiDrillFilter}
+                setKpiDrillFilter={setKpiDrillFilter}
+              />
 
-          {/* Chronological Daily Entry Log Table */}
-          <ChronologicalLogBookTable
-            filteredTimeline={filteredTimeline}
-            kpiDrillFilter={kpiDrillFilter}
-            setKpiDrillFilter={setKpiDrillFilter}
-            logSearchTerm={logSearchTerm}
-            setLogSearchTerm={setLogSearchTerm}
-            selectedDate={selectedDate}
-            dateFilterMode={dateFilterMode}
-            getISTDateOnly={getISTDateOnly}
-            formatISTDateTime={formatISTDateTime}
-            setSelectedBillModalItem={setSelectedBillModalItem}
-          />
+              {/* 3 Grid Analytics Section */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                <MetalTurnoverPurityView kpiMetrics={kpiMetrics} />
+                <WorkerTransactionsKpiView kpiMetrics={kpiMetrics} />
+                <PeriodMovementFlowView
+                  kpiMetrics={kpiMetrics}
+                  cashSummary={cashSummary}
+                  dateFilterMode={dateFilterMode}
+                />
+              </div>
+
+              {/* Chronological Daily Entry Log Table */}
+              <ChronologicalLogBookTable
+                filteredTimeline={filteredTimeline}
+                kpiDrillFilter={kpiDrillFilter}
+                setKpiDrillFilter={setKpiDrillFilter}
+                logSearchTerm={logSearchTerm}
+                setLogSearchTerm={setLogSearchTerm}
+                selectedDate={selectedDate}
+                dateFilterMode={dateFilterMode}
+                getISTDateOnly={getISTDateOnly}
+                formatISTDateTime={formatISTDateTime}
+                setSelectedBillModalItem={setSelectedBillModalItem}
+              />
+            </>
+          )}
+
+          {/* SUB-SCREEN 2: 📦 Metal In & Outs (StockMovementView) */}
+          {activeSubTab === 'stock' && (
+            <StockMovementView
+              stockViewMode={stockViewMode === 'ALL' ? 'ALL' : 'TODAY'}
+              setStockViewMode={(mode) => setStockViewMode(mode === 'ALL' ? 'ALL' : 'TODAY')}
+              metalCategoryFilter={metalCategoryFilter}
+              setMetalCategoryFilter={setMetalCategoryFilter}
+              ornamentsStockList={ornamentsStockList}
+              eodReorderList={eodReorderList}
+              logBookTimeline={logBookTimeline}
+              dayBookStockSummary={dayBookStockSummary}
+            />
+          )}
+
+          {/* SUB-SCREEN 3: 💵 Cash In & Outs (CashRegisterView) */}
+          {activeSubTab === 'cash' && cashSummary && (
+            <CashRegisterView
+              cashSummary={cashSummary}
+              cashLedgerRecords={cashLedgerRecords}
+            />
+          )}
+
+          {/* SUB-SCREEN 4: ⚖️ Buy Metal records (OldMetalVaultView) */}
+          {activeSubTab === 'scrap' && (
+            <OldMetalVaultView
+              scrapSummary={scrapSummary}
+              oldMetalVaultItems={oldMetalVaultItems}
+            />
+          )}
+
+          {/* SUB-SCREEN 5: 📋 Customer Purchase Dues & Udhaari */}
+          {activeSubTab === 'udhaari_dues' && (
+            <UdhaariCustomerDuesView
+              logBookTimeline={logBookTimeline}
+              onSelectBill={(item) => setSelectedBillModalItem(item)}
+              formatISTDateTime={formatISTDateTime}
+            />
+          )}
+
+          {/* SUB-SCREEN 6: 🤝 Workers Transactions (UdhaariKarigarView) */}
+          {activeSubTab === 'udhaari' && (
+            <UdhaariKarigarView
+              udhaariSummary={udhaariSummary}
+              logBookTimeline={logBookTimeline}
+            />
+          )}
         </>
-      )}
-
-      {/* SUB-SCREEN 2: 📦 Metal In & Outs (StockMovementView) */}
-      {activeSubTab === 'stock' && (
-        <StockMovementView
-          stockViewMode={stockViewMode === 'ALL' ? 'ALL' : 'TODAY'}
-          setStockViewMode={(mode) => setStockViewMode(mode === 'ALL' ? 'ALL' : 'TODAY')}
-          metalCategoryFilter={metalCategoryFilter}
-          setMetalCategoryFilter={setMetalCategoryFilter}
-          ornamentsStockList={ornamentsStockList}
-          eodReorderList={eodReorderList}
-          logBookTimeline={logBookTimeline}
-          dayBookStockSummary={dayBookStockSummary}
-        />
-      )}
-
-      {/* SUB-SCREEN 3: 💵 Cash In & Outs (CashRegisterView) */}
-      {activeSubTab === 'cash' && cashSummary && (
-        <CashRegisterView
-          cashSummary={cashSummary}
-          cashLedgerRecords={cashLedgerRecords}
-        />
-      )}
-
-      {/* SUB-SCREEN 4: ⚖️ Buy Metal records (OldMetalVaultView) */}
-      {activeSubTab === 'scrap' && (
-        <OldMetalVaultView
-          scrapSummary={scrapSummary}
-          oldMetalVaultItems={oldMetalVaultItems}
-        />
-      )}
-
-      {/* SUB-SCREEN 5: 📋 Customer Purchase Dues & Udhaari */}
-      {activeSubTab === 'udhaari_dues' && (
-        <UdhaariCustomerDuesView
-          logBookTimeline={logBookTimeline}
-          onSelectBill={(item) => setSelectedBillModalItem(item)}
-          formatISTDateTime={formatISTDateTime}
-        />
-      )}
-
-      {/* SUB-SCREEN 6: 🤝 Workers Transactions (UdhaariKarigarView) */}
-      {activeSubTab === 'udhaari' && (
-        <UdhaariKarigarView
-          udhaariSummary={udhaariSummary}
-          logBookTimeline={logBookTimeline}
-        />
       )}
 
       {/* Modals */}

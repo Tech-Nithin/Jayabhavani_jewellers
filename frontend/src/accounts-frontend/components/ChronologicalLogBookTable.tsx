@@ -25,6 +25,23 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
   formatISTDateTime,
   setSelectedBillModalItem,
 }) => {
+  const formatDateDDMMYYYY = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.trim().split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    try {
+      const d = new Date(dateStr);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
     <div style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '0.9rem 1.1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
       {/* Log Book Controls Bar */}
@@ -97,7 +114,7 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
               </button>
             )}
           </div>
-          <span style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 600 }}>Date: {selectedDate}</span>
+          <span style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 600 }}>Date: {formatDateDDMMYYYY(selectedDate)}</span>
         </div>
       </div>
 
@@ -159,7 +176,7 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
                     {showDateDivider && (
                       <tr style={{ background: '#f1f5f9', borderTop: '2px solid #cbd5e1', borderBottom: '2px solid #cbd5e1' }}>
                         <td colSpan={8} style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 800, color: '#334155', fontSize: '0.72rem', letterSpacing: '0.5px' }}>
-                          📅 {itemDateStr}
+                          📅 {formatDateDDMMYYYY(itemDateStr)}
                         </td>
                       </tr>
                     )}
