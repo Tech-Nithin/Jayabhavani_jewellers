@@ -39,6 +39,7 @@ export interface OrderItem {
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED';
   sold_status?: 'DUE' | 'SOLD';
   submitted?: 'yes' | 'no';
+  item_submitted_at?: string | null;
   paid_amount?: number;
   due_amount?: number;
   applied_rate_per_gram?: number;
@@ -529,6 +530,7 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
       assigned_at: assignedAtVal,
     }).eq('id', id);
 
+    memoryCache.deletePattern('orders');
     if (dbErr) {
       console.error('❌ Supabase Update Error (assign):', dbErr);
       return res.status(500).json({
@@ -650,6 +652,7 @@ router.put('/orders/:id/status', async (req: Request, res: Response) => {
 
     try {
       await supabase.from('orders').update({ status: newStatus }).eq('id', id);
+      memoryCache.deletePattern('orders');
     } catch (e) { }
 
     res.json({
@@ -688,6 +691,7 @@ router.put('/orders/:id/return-status', async (req: Request, res: Response) => {
       if (return_pure_gold !== undefined) updateData.return_pure_gold = Number(return_pure_gold);
 
       await supabase.from('orders').update(updateData).eq('id', id);
+      memoryCache.deletePattern('orders');
     } catch (e) { }
 
     res.json({
@@ -789,12 +793,17 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
 
     let invoicePersisted = false;
 
-    // 1. Always update Supabase orders table with latest paid_amount, due_amount, and receipt_json_data
+    const submittedTimestamp = newSubmitted === 'yes'
+      ? (order.item_submitted_at || new Date().toISOString())
+      : null;
+
+    // 1. Always update Supabase orders table with latest paid_amount, due_amount, item_submitted_at, and receipt_json_data
     try {
       await supabase
         .from('orders')
         .update({
           submitted: newSubmitted,
+          item_submitted_at: submittedTimestamp,
           sold_status: newSoldStatus,
           status: order.status,
           paid_amount: order.paid_amount,
@@ -803,9 +812,26 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
           updated_at: new Date().toISOString(),
         })
         .eq('id', order.id);
+
+      order.item_submitted_at = submittedTimestamp;
+
+      // 1b. Simultaneously update billing_sell_buy_records for line items of this order
+      const orderIdStr = String(order.id);
+      const isSub = newSubmitted === 'yes';
+      const subTime = isSub ? (submittedTimestamp || new Date().toISOString()) : null;
+
+      await supabase
+        .from('billing_sell_buy_records')
+        .update({
+          is_item_submitted: isSub ? 'yes' : 'no',
+          item_submitted_at: subTime,
+        })
+        .or(`customer_billing_uuid.eq.${orderIdStr},billing_id.eq.${orderIdStr}`)
+        .eq('transaction_type', 'SELL');
     } catch (e) {
       console.warn('Supabase orders table update notice:', e);
     }
+    memoryCache.deletePattern('orders');
 
     // 2. When submitted === 'yes' or marked SOLD, also insert into billing_invoices & customer_metal_transactions!
     if (newSubmitted === 'yes' || newSoldStatus === 'SOLD') {
@@ -822,7 +848,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
             paid_amount: Number(order.paid_amount || 0),
             due_amount: Number(order.due_amount || 0),
             receipt_json_data: updatedReceiptJSON,
-            created_at: new Date().toISOString(),
+            created_at: order.created_at || new Date().toISOString(),
             metal_type: order.metal_type,
             weight_grams: Number(order.net_weight_grams || order.gross_weight_grams) || 0,
             product_name: order.item_name,

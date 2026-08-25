@@ -153,18 +153,28 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
     const rawType = entry.rawType;
     const wt = Number(entry.weight_grams || 0);
 
-    if (entry.isInflow) {
-      runningStockWt += wt;
-      totalMetalIn += wt;
-    } else {
-      runningStockWt -= wt;
-      totalMetalOut += wt;
+    const isOrderType = rawType === 'ORDER' || rawType === 'ORDER - SELL';
+    const rawSubmitted = (entry.rawEntry?.submitted || entry.rawEntry?.raw_invoice?.submitted || 'no').toLowerCase();
+    const isSubmitted = rawSubmitted === 'yes' || entry.rawEntry?.stock_debited === true;
+    // Metal inflow (scrap bought) is ALWAYS processed immediately. Metal outflow (sold item) is deferred until submitted = 'yes'.
+    const skipStockDebit = isOrderType && !entry.isInflow && !isSubmitted;
+
+    if (!skipStockDebit) {
+      if (entry.isInflow) {
+        runningStockWt += wt;
+        totalMetalIn += wt;
+      } else {
+        runningStockWt -= wt;
+        totalMetalOut += wt;
+      }
     }
 
     return {
       ...entry,
       rawType,
       wt,
+      skipStockDebit,
+      isSubmitted,
       afterTxStockWt: runningStockWt,
     };
   });
@@ -411,12 +421,18 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                           </span>
                         </td>
                         <td style={{ padding: '14px 12px' }}>
-                          <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: entry.isInflow ? '#f0fdf4' : '#fef2f2', color: entry.isInflow ? '#15803d' : '#b91c1c', border: `1px solid ${entry.isInflow ? '#bbf7d0' : '#fecaca'}` }}>
-                            {entry.isInflow ? '⬇ IN' : '⬆ OUT'}
-                          </span>
+                          {entry.skipStockDebit ? (
+                            <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#fffbe6', color: '#b45309', border: '1px solid #fde68a' }}>
+                              ⏳ PENDING DELIVERY
+                            </span>
+                          ) : (
+                            <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: entry.isInflow ? '#f0fdf4' : '#fef2f2', color: entry.isInflow ? '#15803d' : '#b91c1c', border: `1px solid ${entry.isInflow ? '#bbf7d0' : '#fecaca'}` }}>
+                              {entry.isInflow ? '⬇ IN' : '⬆ OUT'}
+                            </span>
+                          )}
                         </td>
-                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: entry.isInflow ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
-                          {entry.isInflow ? '+' : '-'}{entry.wt.toFixed(3)} g
+                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: entry.skipStockDebit ? '#94a3b8' : entry.isInflow ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                          {entry.skipStockDebit ? '0.000 g (Pending)' : `${entry.isInflow ? '+' : '-'}${entry.wt.toFixed(3)} g`}
                         </td>
                         <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: '#0f172a', background: '#f8fafc', whiteSpace: 'nowrap' }}>
                           {entry.afterTxStockWt.toFixed(3)} g

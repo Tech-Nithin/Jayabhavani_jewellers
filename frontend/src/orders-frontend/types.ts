@@ -31,6 +31,7 @@ export interface OrderItem {
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED';
   sold_status?: 'DUE' | 'SOLD';
   submitted?: 'yes' | 'no';
+  item_submitted_at?: string | null;
   paid_amount?: number;
   due_amount?: number;
   assigned_worker_id: string | null;
@@ -39,6 +40,7 @@ export interface OrderItem {
   returned_from_worker?: 'yes' | 'no';
   returned_at?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface WorkerItem {

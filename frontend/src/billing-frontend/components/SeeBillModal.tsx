@@ -155,6 +155,7 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
           paymentHistory={storedPayload?.payment_history || []}
           createdDate={inv?.created_at}
           updatedDate={inv?.updated_at || storedPayload?.updated_at}
+          itemSubmittedAt={(inv as any)?.item_submitted_at || storedPayload?.item_submitted_at || (((inv as any)?.submitted || storedPayload?.submitted) === 'yes' ? (inv?.updated_at || storedPayload?.updated_at) : undefined)}
           onDownloadPNG={() => downloadReceiptAsPNG('see-bill-modal-receipt', customer.name)}
         />
       </div>

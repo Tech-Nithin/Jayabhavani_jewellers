@@ -257,9 +257,9 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       if (debouncedSearchTerm) queryParams.set('search', debouncedSearchTerm);
       if (dateRange && dateRange !== 'ALL') queryParams.set('dateRange', dateRange);
       if (dateRange === 'CUSTOM' && customStartDate) queryParams.set('startDate', customStartDate);
-      if (dateRange === 'CUSTOM' && customEndDate) queryParams.set('endDate', customEndDate);
+      queryParams.set('t', String(Date.now()));
 
-      const res = await fetch(`${API_BASE}/work-assignment/orders?${queryParams.toString()}`);
+      const res = await fetch(`${API_BASE}/work-assignment/orders?${queryParams.toString()}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
         setOrders(data.orders);
@@ -461,11 +461,8 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
   };
 
   const handleToggleReturnStatus = async (order: OrderItem, newStatus: 'yes' | 'no', customDateTime?: string | null) => {
-    if (newStatus === 'yes' && order.status !== 'COMPLETED') {
-      alert("Item is not returned from worker yet, or mark 'status' as 'Completed' first!");
-      return;
-    }
     const returnTimestamp = newStatus === 'yes' ? (customDateTime || new Date().toISOString()) : null;
+    const targetStatus = newStatus === 'yes' ? 'COMPLETED' : (order.assigned_worker_id ? 'ASSIGNED' : 'PENDING');
     try {
       const res = await fetch(`${API_BASE}/work-assignment/orders/${order.id}/return-status`, {
         method: 'PUT',
@@ -484,6 +481,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
                 ...o,
                 returned_from_worker: newStatus,
                 returned_at: returnTimestamp,
+                status: targetStatus,
               }
               : o
           )
@@ -630,6 +628,8 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
             balanceDueAmount={billPayload?.balanceDueAmount ?? selectedOrder.due_amount ?? 0}
             paymentHistory={billPayload?.payment_history || []}
             createdDate={selectedOrder.created_at}
+            updatedDate={selectedOrder.updated_at}
+            itemSubmittedAt={selectedOrder.item_submitted_at || (selectedOrder.submitted === 'yes' ? selectedOrder.updated_at : undefined)}
             lang={lang}
             onDownloadPNG={() => downloadReceiptAsPNG(`see-bill-receipt-${selectedOrder.id}`, selectedOrder.customer_name)}
           />

@@ -23,6 +23,7 @@ interface ReceiptPreviewProps {
   netPayable: number;
   createdDate?: string;
   updatedDate?: string;
+  itemSubmittedAt?: string;
   billType?: 'SALE_DONE' | 'ESTIMATION';
   paymentType?: 'FULL' | 'PARTIAL';
   advancePaidAmount?: number;
@@ -242,6 +243,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   totalBuyCredit,
   createdDate,
   updatedDate,
+  itemSubmittedAt,
   billType = 'SALE_DONE',
   paymentType = 'FULL',
   advancePaidAmount,
@@ -393,8 +395,17 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         </div>
 
         <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#475569', fontWeight: 700, marginBottom: '0.85rem' }}>
-          <div>{t.dateLabel} {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}</div>
-          {updatedDate && (
+          <div>
+            <span style={{ color: '#0f172a' }}>{mode === 'ORDER' ? 'ORDER BOOKED DATE:' : t.dateLabel}</span>{' '}
+            {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
+          </div>
+          {mode === 'ORDER' && itemSubmittedAt && (
+            <div style={{ color: '#15803d', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <i className="fa-solid fa-circle-check" style={{ fontSize: '0.6rem' }}></i>
+              DELIVERED ON: {formatReceiptDateTime(itemSubmittedAt)}
+            </div>
+          )}
+          {updatedDate && updatedDate !== createdDate && !itemSubmittedAt && (
             <div style={{ color: '#d97706', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-pen-to-square" style={{ fontSize: '0.6rem' }}></i>
               {t.lastUpdated} {formatReceiptDateTime(updatedDate)}

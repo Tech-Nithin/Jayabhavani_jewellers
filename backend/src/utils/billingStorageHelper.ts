@@ -119,9 +119,10 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
 
     if (existingMaster) {
       customerBillingUuid = existingMaster.customer_billing_uuid;
+      const { created_at: _omitCreatedAt, ...updatePayload } = masterPayload;
       await supabase
         .from('customer_billing')
-        .update(masterPayload)
+        .update(updatePayload)
         .eq('customer_billing_uuid', customerBillingUuid);
     } else {
       const { data: newMaster, error: masterErr } = await supabase
@@ -177,11 +178,16 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         const itemNotes = it.notes || it.item_notes || input.notes || receiptData.notes || null;
 
         const resolvedBillingMode = cleanBillType === 'EXCHANGE' ? 'TRADE_IN' : cleanBillType;
+        const isOrderSell = resolvedBillingMode === 'ORDER' && itemType === 'SELL';
+        const isSubmittedVal = !isOrderSell;
+        const submittedTimeVal = isSubmittedVal ? createdAt : null;
 
         lineRecordsToInsert.push({
           customer_billing_uuid: customerBillingUuid,
           billing_mode: resolvedBillingMode,
           transaction_type: itemType,
+          is_item_submitted: isSubmittedVal ? 'yes' : 'no',
+          item_submitted_at: submittedTimeVal,
           metal_type: metalType,
           metal_rate: metalRate,
           item_name: it.product_name || it.item_name || it.name || `${metalType} ${itemType} Item`,
@@ -217,11 +223,16 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       const fallbackAddCharges = input.additional_charges || receiptData.additional_charges || receiptData.additional_charges_name || receiptData.additional_charge_name || null;
       const fallbackAddCost = Number(input.additional_cost ?? receiptData.additional_cost ?? receiptData.additional_charges_amount ?? receiptData.additional_charge_value ?? 0);
       const resolvedBillingMode = cleanBillType === 'EXCHANGE' ? 'TRADE_IN' : cleanBillType;
+      const isOrderSellSingle = resolvedBillingMode === 'ORDER' && singleType === 'SELL';
+      const isSubmittedSingle = !isOrderSellSingle;
+      const submittedTimeSingle = isSubmittedSingle ? createdAt : null;
 
       lineRecordsToInsert.push({
         customer_billing_uuid: customerBillingUuid,
         billing_mode: resolvedBillingMode,
         transaction_type: singleType,
+        is_item_submitted: isSubmittedSingle ? 'yes' : 'no',
+        item_submitted_at: submittedTimeSingle,
         metal_type: singleMetal,
         metal_rate: Number(input.metal_rate || receiptData.applied_rate_per_gram || 0),
         item_name: input.product_name || receiptData.product_name || receiptData.item_name || `${singleMetal} ${singleType} Item`,

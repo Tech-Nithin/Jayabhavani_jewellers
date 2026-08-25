@@ -1367,9 +1367,24 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
     formattedDbInvoices.forEach((inv: any) => combinedInvoicesMap.set(String(inv.id), inv));
     invoicesList.forEach((inv: any) => combinedInvoicesMap.set(String(inv.id), inv));
 
-    const invoices = Array.from(combinedInvoicesMap.values()).filter((inv) =>
-      matchesDateFilterIST(inv.created_at, targetDate, startDate, endDate)
-    );
+    // Fetch Orders table from Supabase to check submitted status ('yes' / 'no') and item_submitted_at delivery timestamp
+    const { data: dbOrdersList } = await supabase
+      .from('orders')
+      .select('*');
+
+    const invoices = Array.from(combinedInvoicesMap.values()).filter((inv) => {
+      const orderKey = String(inv.id || inv.receipt_json_data?.order_id || '').toLowerCase();
+      const matchedOrd = (dbOrdersList || []).find((o: any) => String(o.id || o.order_id || '').toLowerCase() === orderKey);
+      const isOrderType = (inv.receipt_json_data?.transaction_type || inv.transaction_type || '').toUpperCase() === 'ORDER';
+      const isSubmitted = (matchedOrd?.submitted || inv.submitted || 'no').toLowerCase() === 'yes';
+
+      // Delivered custom orders filter by item_submitted_at (or updated_at); pending orders/direct sales filter by created_at
+      const effectiveDate = isOrderType && isSubmitted && (matchedOrd?.item_submitted_at || matchedOrd?.updated_at)
+        ? (matchedOrd.item_submitted_at || matchedOrd.updated_at)
+        : inv.created_at;
+
+      return matchesDateFilterIST(effectiveDate, targetDate, startDate, endDate);
+    });
 
     // 3. Fetch Workers table & Worker Transactions for targetDate
     const { data: dbWorkers } = await supabase.from('workers').select('id, name');
@@ -1419,7 +1434,27 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
     ]);
 
     const matchedCustomerBills = (dbCustomerBills || []).filter((b) => matchesDateFilterIST(b.created_at, targetDate, startDate, endDate));
-    const matchedBillingRecords = (dbBillingRecords || []).filter((r) => matchesDateFilterIST(r.created_at, targetDate, startDate, endDate));
+    const matchedBillingRecords = (dbBillingRecords || []).filter((r) => {
+      const mode = (r.billing_mode || '').toUpperCase();
+      const txType = (r.transaction_type || '').toUpperCase();
+      
+      let isSub = true;
+      let effectiveDate = r.created_at;
+
+      if (mode === 'ORDER' && txType === 'SELL') {
+        if (r.is_item_submitted !== undefined && r.is_item_submitted !== null && String(r.is_item_submitted).trim() !== '') {
+          isSub = String(r.is_item_submitted).toLowerCase() === 'yes';
+        } else {
+          const orderKey = String(r.customer_billing_uuid || r.billing_id || '').toLowerCase();
+          const matchedOrd = (dbOrdersList || []).find((o: any) => String(o.id || o.order_id || '').toLowerCase() === orderKey);
+          isSub = (matchedOrd?.submitted || 'no').toLowerCase() === 'yes';
+          effectiveDate = matchedOrd?.item_submitted_at || matchedOrd?.updated_at || r.created_at;
+        }
+      }
+
+      if (!isSub) return false;
+      return matchesDateFilterIST(effectiveDate, targetDate, startDate, endDate);
+    });
 
     const billTypeMap = new Map<string, string>();
     let customerBillsOrderCount = 0;
@@ -1438,12 +1473,28 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       else if (type === 'EXCHANGE' || type === 'TRADE_IN') customerBillsTradeInCount++;
     });
 
-    // 1. Group records strictly by customer_billing_uuid
+    // 1. Group records strictly by customer_billing_uuid / billing_id
+    const uuidToBillingIdMap = new Map<string, string>();
+    matchedCustomerBills.forEach((b: any) => {
+      const u = String(b.customer_billing_uuid || '').toLowerCase();
+      const idStr = String(b.billing_id || b.id || '').toLowerCase();
+      if (u && idStr) {
+        uuidToBillingIdMap.set(u, idStr);
+        uuidToBillingIdMap.set(idStr, u);
+      }
+    });
+
+    const getCanonicalKey = (rawId: string) => {
+      const lower = String(rawId || '').toLowerCase();
+      return uuidToBillingIdMap.get(lower) || lower;
+    };
+
     const billMap = new Map<string, { mode: string; items: any[] }>();
 
     matchedBillingRecords.forEach((r: any) => {
-      const uuid = String(r.customer_billing_uuid || r.billing_id || r.id || '');
-      if (!uuid) return;
+      const rawUuid = String(r.customer_billing_uuid || r.billing_id || r.id || '');
+      if (!rawUuid) return;
+      const uuid = getCanonicalKey(rawUuid);
       let mode = (r.billing_mode || (r.customer_billing_uuid ? billTypeMap.get(r.customer_billing_uuid) : '') || 'SELL').toUpperCase();
       if (mode === 'EXCHANGE') mode = 'TRADE_IN';
 
@@ -1453,15 +1504,90 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       billMap.get(uuid)!.items.push(r);
     });
 
-    // Include any customer_billing bills without line items
+    // Include any customer_billing bills without line items, extracting items/buy_records from receipt_json_data or dbOrdersList
     matchedCustomerBills.forEach((b: any) => {
-      const uuid = String(b.customer_billing_uuid || b.billing_id || '');
-      if (!uuid) return;
+      const rawUuid = String(b.customer_billing_uuid || b.billing_id || b.id || '');
+      if (!rawUuid) return;
+      const uuid = getCanonicalKey(rawUuid);
       let mode = (b.bill_type || 'SELL').toUpperCase();
       if (mode === 'EXCHANGE') mode = 'TRADE_IN';
 
       if (!billMap.has(uuid)) {
         billMap.set(uuid, { mode, items: [] });
+      }
+
+      const existingEntry = billMap.get(uuid)!;
+      if (existingEntry.items.length === 0) {
+        if (b.receipt_json_data) {
+          const jsonItems = b.receipt_json_data.items || b.receipt_json_data.line_items || [];
+          const jsonBuyRecords = b.receipt_json_data.buy_records || b.receipt_json_data.old_metal || [];
+
+          jsonItems.forEach((it: any) => {
+            existingEntry.items.push({
+              transaction_type: (it.item_type || 'SELL').toUpperCase(),
+              metal_type: (it.metal_type || b.metal_type || 'GOLD').toUpperCase(),
+              item_weight: Number(it.weight_grams || it.item_weight || 0),
+              only_metal_weight: Number(it.net_weight_grams || it.weight_grams || 0),
+              pure_metal_weight: Number(it.fine_weight_grams || it.weight_grams || 0),
+            });
+          });
+
+          jsonBuyRecords.forEach((it: any) => {
+            existingEntry.items.push({
+              transaction_type: (it.item_type || 'BUY').toUpperCase(),
+              metal_type: (it.metal_type || 'GOLD').toUpperCase(),
+              item_weight: Number(it.weight_grams || it.item_weight || 0),
+              only_metal_weight: Number(it.net_weight_grams || it.weight_grams || 0),
+              pure_metal_weight: Number(it.fine_weight_grams || it.weight_grams || 0),
+            });
+          });
+        }
+      }
+
+      // Ensure SELL ornament item is extracted if mode === 'ORDER' and not present in items yet
+      const hasSellItem = existingEntry.items.some((it: any) => (it.transaction_type || it.item_type || '').toUpperCase() === 'SELL');
+      if (!hasSellItem && mode === 'ORDER') {
+        if (b.receipt_json_data && Array.isArray(b.receipt_json_data.items)) {
+          const sellJsonItems = b.receipt_json_data.items.filter((it: any) => (it.item_type || 'SELL').toUpperCase() === 'SELL');
+          sellJsonItems.forEach((it: any) => {
+            existingEntry.items.push({
+              transaction_type: 'SELL',
+              metal_type: (it.metal_type || b.metal_type || 'GOLD').toUpperCase(),
+              item_weight: Number(it.weight_grams || it.item_weight || 0),
+              only_metal_weight: Number(it.net_weight_grams || it.weight_grams || 0),
+              pure_metal_weight: Number(it.fine_weight_grams || it.weight_grams || 0),
+            });
+          });
+        }
+
+        const stillHasSellItem = existingEntry.items.some((it: any) => (it.transaction_type || it.item_type || '').toUpperCase() === 'SELL');
+        if (!stillHasSellItem) {
+          const bUuid = String(b.customer_billing_uuid || '').toLowerCase();
+          const bId = String(b.billing_id || b.id || '').toLowerCase();
+          const rawUuid = String(uuid).toLowerCase();
+
+          const matchedOrd = (dbOrdersList || []).find((o: any) => {
+            const oId = String(o.id || o.order_id || '').toLowerCase();
+            const oUuid = String(o.customer_billing_uuid || '').toLowerCase();
+
+            return (
+              (oUuid && (oUuid === bUuid || oUuid === rawUuid)) ||
+              (oId && (oId === bId || oId === rawUuid)) ||
+              (o.customer_name && b.customer_name && o.customer_name.trim().toLowerCase() === b.customer_name.trim().toLowerCase() && Math.abs(new Date(o.created_at).getTime() - new Date(b.created_at).getTime()) < 86400000)
+            );
+          });
+
+          if (matchedOrd) {
+            const ordAny = matchedOrd as any;
+            existingEntry.items.push({
+              transaction_type: 'SELL',
+              metal_type: (ordAny.metal_type || 'GOLD').toUpperCase(),
+              item_weight: Number(ordAny.gross_weight_grams || ordAny.net_weight_grams || ordAny.weight_grams || 0),
+              only_metal_weight: Number(ordAny.net_weight_grams || ordAny.gross_weight_grams || ordAny.weight_grams || 0),
+              pure_metal_weight: Number(ordAny.fine_weight_grams || ordAny.net_weight_grams || 0),
+            });
+          }
+        }
       }
     });
 
@@ -1488,11 +1614,11 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
     const tradeInTracker = createDetailedWeightTracker();
 
     const recordItemToTracker = (r: any, tracker: any) => {
-      const txType = (r.transaction_type || '').toUpperCase();
+      const txType = (r.transaction_type || r.item_type || '').toUpperCase();
       const metal = (r.metal_type || 'GOLD').toUpperCase();
-      const gross = Number(r.item_weight) || 0;
-      const net = Number(r.only_metal_weight ?? Math.max(0, gross - (Number(r.deduction_weight) || 0)));
-      const pure = Number(r.pure_metal_weight) || net;
+      const gross = Number(r.item_weight || r.weight_grams || r.gross_weight_grams || 0) || 0;
+      const net = Number(r.only_metal_weight ?? r.net_weight_grams ?? Math.max(0, gross - (Number(r.deduction_weight) || 0)));
+      const pure = Number(r.pure_metal_weight ?? r.fine_weight_grams) || net;
 
       if (txType === 'SELL') {
         tracker.sellsCount++;
@@ -1524,10 +1650,30 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
     let finalBuyCount = 0;
     let finalTradeInCount = 0;
 
-    billMap.forEach(({ mode, items }) => {
+    billMap.forEach(({ mode, items }, uuid) => {
       if (mode === 'ORDER') {
         finalOrderCount++;
-        items.forEach((it) => recordItemToTracker(it, orderTracker));
+        const matchedOrd = (dbOrdersList || []).find((o: any) => {
+          const oId = String(o.id || o.order_id || '').toLowerCase();
+          const oUuid = String(o.customer_billing_uuid || '').toLowerCase();
+          const rawUuid = String(uuid).toLowerCase();
+          return (
+            (oUuid && oUuid === rawUuid) ||
+            (oId && oId === rawUuid)
+          );
+        });
+        const isSubmitted = matchedOrd ? (matchedOrd.submitted || 'no').toLowerCase() === 'yes' : true;
+
+        items.forEach((it) => {
+          const itemType = (it.item_type || it.transaction_type || '').toUpperCase();
+          // Scrap/Old Metal bought from customer in ORDER is ALWAYS counted immediately on registration date!
+          if (itemType === 'BUY' || itemType === 'EXCHANGE_BUY') {
+            recordItemToTracker(it, orderTracker);
+          } else if (itemType === 'SELL' && isSubmitted) {
+            // Sold item in custom order is counted ONLY when submitted = 'yes'
+            recordItemToTracker(it, orderTracker);
+          }
+        });
       } else if (mode === 'SELL') {
         finalSellCount++;
         items.forEach((it) => recordItemToTracker(it, sellTracker));
@@ -1599,6 +1745,74 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       }
     };
 
+    // --- All-Time Overall Stock & Cash Flow Calculation (Unfiltered by date) ---
+    const allTimeOrderTracker = createDetailedWeightTracker();
+    const allTimeSellTracker = createDetailedWeightTracker();
+    const allTimeBuyTracker = createDetailedWeightTracker();
+    const allTimeTradeInTracker = createDetailedWeightTracker();
+
+    (dbBillingRecords || []).forEach((r: any) => {
+      const mode = (r.billing_mode || '').toUpperCase();
+      let tracker = allTimeSellTracker;
+      if (mode === 'ORDER') tracker = allTimeOrderTracker;
+      else if (mode === 'BUY') tracker = allTimeBuyTracker;
+      else if (mode === 'TRADE_IN' || mode === 'EXCHANGE') tracker = allTimeTradeInTracker;
+      recordItemToTracker(r, tracker);
+    });
+
+    const allTimeGoldSold = round3Decimals(allTimeOrderTracker.goldSoldGross + allTimeSellTracker.goldSoldGross + allTimeBuyTracker.goldSoldGross + allTimeTradeInTracker.goldSoldGross);
+    const allTimeGoldBought = round3Decimals(allTimeOrderTracker.goldBoughtGross + allTimeSellTracker.goldBoughtGross + allTimeBuyTracker.goldBoughtGross + allTimeTradeInTracker.goldBoughtGross);
+    const allTimeSilverSold = round3Decimals(allTimeOrderTracker.silverSoldGross + allTimeSellTracker.silverSoldGross + allTimeBuyTracker.silverSoldGross + allTimeTradeInTracker.silverSoldGross);
+    const allTimeSilverBought = round3Decimals(allTimeOrderTracker.silverBoughtGross + allTimeSellTracker.silverBoughtGross + allTimeBuyTracker.silverBoughtGross + allTimeTradeInTracker.silverBoughtGross);
+
+    let allTimeCashIn = 0;
+    let allTimeCashOut = 0;
+    let allTimeFinanceIssued = 0;
+    let allTimeFinanceClearedCount = 0;
+    let allTimeFinanceTakenCount = 0;
+
+    (dbCustomerBills || []).forEach((b: any) => {
+      allTimeCashIn += Number(b.paid_amount || b.final_amount || 0);
+    });
+
+    (dbLoans || []).forEach((fl: any) => {
+      const isRepayment = (fl.status || '').toUpperCase() === 'CLEARED' || (fl.type || '').toUpperCase() === 'REPAYMENT';
+      const amt = Number(fl.amount || fl.principal_amount || 0);
+      if (isRepayment) {
+        allTimeCashIn += amt;
+        allTimeFinanceClearedCount++;
+      } else {
+        allTimeCashOut += amt;
+        allTimeFinanceIssued += amt;
+        allTimeFinanceTakenCount++;
+      }
+    });
+
+    const allTimeSummary = {
+      cashFlow: {
+        totalCashCollected: round3Decimals(allTimeCashIn - allTimeCashOut),
+        cashIn: round3Decimals(allTimeCashIn),
+        cashOut: round3Decimals(allTimeCashOut),
+      },
+      finance: {
+        totalFinanceIssued: round3Decimals(allTimeFinanceIssued),
+        financeClearedCount: allTimeFinanceClearedCount,
+        financeTakenCount: allTimeFinanceTakenCount,
+        cashIn: round3Decimals(allTimeCashIn),
+        cashOut: round3Decimals(allTimeCashOut),
+      },
+      goldFlow: {
+        goldIn: allTimeGoldBought,
+        goldOut: allTimeGoldSold,
+        goldNetFlow: round3Decimals(allTimeGoldBought - allTimeGoldSold),
+      },
+      silverFlow: {
+        silverIn: allTimeSilverBought,
+        silverOut: allTimeSilverSold,
+        silverNetFlow: round3Decimals(allTimeSilverBought - allTimeSilverSold),
+      },
+    };
+
     const billingActivitySummary = {
       totalTransactionsCount,
       orderMode: { count: finalOrderCount, ...roundDetailedTracker(orderTracker) },
@@ -1606,6 +1820,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       buyMode: { count: finalBuyCount, ...roundDetailedTracker(buyTracker) },
       tradeInMode: { count: finalTradeInCount, ...roundDetailedTracker(tradeInTracker) },
       overallMetalPuritySummary,
+      allTimeSummary,
       activityCounts: {
         orderCount: finalOrderCount,
         sellCount: finalSellCount,
@@ -1790,7 +2005,13 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       const paidAmount = Number(inv.paid_amount || inv.receipt_json_data?.advancePaidAmount || netAmount);
       const dueAmount = Number(inv.due_amount || inv.receipt_json_data?.balanceDueAmount || 0);
 
-      const isSell = jsonMode === 'SELL' || jsonMode === 'EXCHANGE' || jsonMode === 'TRADE_IN' || jsonMode === 'ORDER';
+      const orderKey = String(inv.id || inv.receipt_json_data?.order_id || '').toLowerCase();
+      const matchedDbOrder = (dbOrdersList || []).find((o: any) => String(o.id || o.order_id || '').toLowerCase() === orderKey);
+      const isSubmitted = (matchedDbOrder?.submitted || inv.submitted || inv.receipt_json_data?.submitted || 'no').toLowerCase() === 'yes';
+      const isOrderType = jsonMode === 'ORDER';
+      const isStockDebited = !isOrderType || isSubmitted; // Custom orders debit stock ONLY when submitted = 'yes'
+
+      const isSell = jsonMode === 'SELL' || jsonMode === 'EXCHANGE' || jsonMode === 'TRADE_IN' || isOrderType;
 
       if (isSell) {
         totalSalesValue += netAmount;
@@ -1807,8 +2028,10 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         const isGold = (item.metal_type || '').toUpperCase() !== 'SILVER';
 
         if (item.item_type === 'SELL') {
-          if (isGold) totalGoldWeightSold += wt;
-          else totalSilverWeightSold += wt;
+          if (isStockDebited) {
+            if (isGold) totalGoldWeightSold += wt;
+            else totalSilverWeightSold += wt;
+          }
           makingChargesProfit += Number(item.making_charges_per_gram || 0) * wt;
         } else if (item.item_type === 'BUY' || item.item_type === 'EXCHANGE_BUY') {
           if (isGold) totalGoldWeightBought += wt;
@@ -1825,9 +2048,9 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
         const buyStr = buyItems.map((i: any) => `${i.product_name || 'Scrap'} (${i.weight_grams || 0}g)`).join(', ');
         detailsText = `📦 Sold: ${sellStr} | ⚖️ Bought: ${buyStr}`;
-      } else if (sellItems.length > 0 && jsonMode === 'ORDER') {
+      } else if (sellItems.length > 0 && isOrderType) {
         const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
-        detailsText = `📦 Sold: ${sellStr}`;
+        detailsText = `📦 Custom Order: ${sellStr}${isSubmitted ? ' (Delivered to Customer)' : ' (Pending Delivery)'}`;
       }
 
       const totalBuyCredit = Number(inv.total_buy_credit || inv.receipt_json_data?.totalBuyCredit || inv.receipt_json_data?.total_buy_credit || 0);
@@ -1838,10 +2061,15 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         Boolean(inv.shop_pays_customer || inv.receipt_json_data?.shop_pays_customer) ||
         (totalBuyCredit > totalSellValue && totalBuyCredit > 0);
 
+      // Deduction timestamp: Use item_submitted_at (or updated_at) timestamp when submitted = 'yes', otherwise creation date
+      const effectiveCreatedAt = isOrderType && isSubmitted && (matchedDbOrder?.item_submitted_at || matchedDbOrder?.updated_at)
+        ? (matchedDbOrder.item_submitted_at || matchedDbOrder.updated_at)
+        : inv.created_at;
+
       logBookTimeline.push({
         id: `log-inv-${inv.id}`,
         time: formattedTime,
-        created_at: inv.created_at,
+        created_at: effectiveCreatedAt,
         type: jsonMode === 'TRADE_IN' ? 'EXCHANGE' : jsonMode,
         title: inv.customer_name || 'Walk-in Customer',
         details: detailsText,
@@ -1850,6 +2078,8 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
         amount: netAmount,
         paid_amount: paidAmount,
         due_amount: dueAmount,
+        submitted: isSubmitted ? 'yes' : 'no',
+        stock_debited: isStockDebited,
         payment_mode: inv.receipt_json_data?.paymentType || (dueAmount === 0 ? 'FULL' : 'PARTIAL'),
         customer_phone: inv.customer_phone,
         flow_type: isOutflow ? 'OUT' : 'IN',
@@ -1983,6 +2213,7 @@ router.get('/accounts/day-book', async (req: Request, res: Response) => {
       scrapPayout: totalScrapPayout,
       dailyExpenses: 0,
       expectedClosingCash: Number(liveClosingCash.toFixed(2)),
+      current_cash: Number(liveClosingCash.toFixed(2)),
       upiCollected: totalSalesUPI,
       cardCollected: totalSalesCard,
     };

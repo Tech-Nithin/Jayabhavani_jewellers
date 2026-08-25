@@ -393,6 +393,8 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
               balanceDueAmount={billPayload.balanceDueAmount ?? order.due_amount ?? 0}
               paymentHistory={billPayload.payment_history || []}
               createdDate={order.created_at}
+              updatedDate={order.updated_at}
+              itemSubmittedAt={order.item_submitted_at || (order.submitted === 'yes' ? order.updated_at : undefined)}
               onDownloadPNG={() => downloadReceiptAsPNG(`order-bill-receipt-${order.id}`, order.customer_name)}
             />
           </div>
