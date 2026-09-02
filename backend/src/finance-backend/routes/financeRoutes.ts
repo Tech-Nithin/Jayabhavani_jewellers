@@ -256,8 +256,8 @@ router.get('/overview', async (_req: Request, res: Response) => {
 
       return {
         ...loan,
-        loan_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
-        debt_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        loan_date: loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        debt_date: loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
         customer_id: loan.customer_id || null,
         current_interest_due: interest.interestDue,
         months_elapsed: interest.months,
@@ -318,8 +318,8 @@ router.get('/:uuid', async (req: Request, res: Response) => {
       success: true,
       loan: {
         ...loan,
-        loan_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
-        debt_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        loan_date: loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        debt_date: loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
         customer_id: loan.customer_id || null,
         current_interest_due: interest.interestDue,
         months_elapsed: interest.months,
