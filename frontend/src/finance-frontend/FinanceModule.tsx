@@ -339,7 +339,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
 
   const isRecordOverdue = (rec: LoanRecord) => {
     if (rec.payment_status === 'CLOSED' || rec.status === 'CLOSED') return false;
-    const loanDateStr = rec.interest_start_from || rec.debt_date || rec.loan_date || new Date().toISOString().split('T')[0];
+    const loanDateStr = rec.debt_date || rec.loan_date || new Date().toISOString().split('T')[0];
     const diffDays = Math.max(0, Math.floor((new Date().getTime() - new Date(loanDateStr).getTime()) / (1000 * 60 * 60 * 24)));
     return (diffDays / 30 > (rec.timeline_months || 1));
   };
@@ -379,11 +379,11 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       rec.customer_address?.toLowerCase().includes(term) ||
       rec.item_name?.toLowerCase().includes(term) ||
       String((rec.current_principal ?? rec.customer_debt_money ?? rec.amount) || '').includes(term) ||
-      String((rec.current_interest_due ?? rec.month_wise_interest) || '').includes(term) ||
+      String(rec.current_interest_due ?? rec.month_wise_interest).includes(term) ||
       String(rec.item_total_value || '').includes(term) ||
-      String(rec.interest_start_from || rec.debt_date || rec.loan_date || '').toLowerCase().includes(term);
+      String(rec.debt_date || rec.loan_date || '').toLowerCase().includes(term);
 
-    const loanDateStr = rec.interest_start_from || rec.debt_date || rec.loan_date || '';
+    const loanDateStr = rec.debt_date || rec.loan_date || '';
     const d = loanDateStr ? new Date(loanDateStr) : new Date();
     if (startDate && d < new Date(startDate)) return false;
     if (endDate && d > new Date(endDate)) return false;
@@ -405,8 +405,8 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
 
   // ── Pagination derived ──────────────────────────────────────────────────
   const sortedFilteredLedger = [...filteredLedger].sort((a, b) => {
-    const dateA = a.interest_start_from || a.debt_date || a.loan_date || '';
-    const dateB = b.interest_start_from || b.debt_date || b.loan_date || '';
+    const dateA = a.debt_date || a.loan_date || '';
+    const dateB = b.debt_date || b.loan_date || '';
     return new Date(dateB).getTime() - new Date(dateA).getTime();
   });
   const totalPages = Math.max(1, Math.ceil(sortedFilteredLedger.length / pageSize));
@@ -1223,7 +1223,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                       <tr key={rec.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '10px 12px', fontWeight: 700, color: '#6366f1', fontSize: '0.78rem' }}>{index + 1}</td>
                         <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: '0.72rem', color: '#0f172a', whiteSpace: 'nowrap' }}>
-                          {formatDDMMYYYY(rec.interest_start_from || rec.debt_date || rec.loan_date || rec.created_at)}
+                          {formatDDMMYYYY(rec.debt_date || rec.loan_date || rec.created_at)}
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <div style={{ fontWeight: 600, color: '#0f172a' }}>{rec.customer_name} {rec.customer_surname}</div>
