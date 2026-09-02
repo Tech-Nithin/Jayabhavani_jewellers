@@ -126,6 +126,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
   // Live Webcam States
   const [showWebcam, setShowWebcam] = useState(false);
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -196,45 +197,69 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
     }
   };
 
-  const startWebcam = async () => {
+  const startWebcam = async (facing: 'environment' | 'user' = cameraFacingMode) => {
+    setCameraFacingMode(facing);
+    if (webcamStream) {
+      webcamStream.getTracks().forEach((track) => track.stop());
+      setWebcamStream(null);
+    }
+    setShowWebcam(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Fallback to generic video stream if facingMode constraint fails (e.g. desktop webcam)
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       setWebcamStream(stream);
-      setShowWebcam(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch((err) => console.warn('Video play warning:', err));
+        };
       }
-    } catch {
-      alert('Unable to access camera. Please check permissions.');
+    } catch (err) {
+      console.error('Camera access error:', err);
+      alert('Unable to access camera. Please check camera permissions in your browser or device settings.');
+      setShowWebcam(false);
     }
   };
 
   const stopWebcam = () => {
     if (webcamStream) {
-      webcamStream.getTracks().forEach(track => track.stop());
+      webcamStream.getTracks().forEach((track) => track.stop());
       setWebcamStream(null);
     }
     setShowWebcam(false);
   };
 
   const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const capturedFile = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
-            setSelectedFile(capturedFile);
-            stopWebcam();
-            processImageToWebP(capturedFile);
-          }
-        }, 'image/jpeg', 0.85);
-      }
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = canvasRef.current || document.createElement('canvas');
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, w, h);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const capturedFile = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+          setSelectedFile(capturedFile);
+          stopWebcam();
+          processImageToWebP(capturedFile);
+        }
+      }, 'image/jpeg', 0.90);
     }
   };
 
@@ -294,6 +319,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
         setImageUploading(false);
       }
       const payload = {
+        customer_id: editingRecord?.customer_id || undefined,
         customer_name: toStartCase(form.customer_name.trim()),
         customer_phone: form.customer_phone.trim(),
         customer_address: toStartCase(form.customer_address.trim()),
@@ -617,17 +643,24 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
 
                 <button
                   type="button"
-                  onClick={startWebcam}
-                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #818cf8', background: '#eef2ff', color: '#4338ca', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => startWebcam('environment')}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #818cf8', background: '#eef2ff', color: '#4338ca', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  📷 Take Live Photo
+                  <i className="fa-solid fa-camera" style={{ color: '#4338ca' }} /> Back Camera
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startWebcam('user')}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #c084fc', background: '#faf5ff', color: '#7e22ce', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <i className="fa-solid fa-camera-rotate" style={{ color: '#7e22ce' }} /> Front Camera
                 </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  📁 Upload Photo
+                  <i className="fa-solid fa-arrow-up-from-bracket" style={{ color: '#64748b' }} /> Upload Photo
                 </button>
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} style={{ display: 'none' }} />
@@ -791,16 +824,101 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
         </div>
       </div>
 
-      {/* Live Webcam Modal */}
+      {/* Live Webcam Modal with Camera Switcher & Reliable Callback Ref */}
       {showWebcam && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#fff', borderRadius: '20px', padding: '1rem', maxWidth: '640px', width: '100%', textAlign: 'center' }}>
-            <h4 style={{ margin: '0 0 0.5rem 0' }}>📷 Live Camera Capture</h4>
-            <video ref={videoRef} autoPlay playsInline style={{ width: '100%', maxHeight: '60vh', borderRadius: '12px', background: '#000' }} />
+          <div style={{ background: '#fff', borderRadius: '20px', padding: '1.25rem', maxWidth: '640px', width: '100%', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-video" style={{ color: '#4f46e5' }} /> Live Camera Capture
+              </h4>
+              {/* Front / Back Camera Switch Toggle */}
+              <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => startWebcam('environment')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: cameraFacingMode === 'environment' ? '#4f46e5' : 'transparent',
+                    color: cameraFacingMode === 'environment' ? '#fff' : '#64748b',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <i className="fa-solid fa-camera" /> Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startWebcam('user')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: cameraFacingMode === 'user' ? '#4f46e5' : 'transparent',
+                    color: cameraFacingMode === 'user' ? '#fff' : '#64748b',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <i className="fa-solid fa-camera-rotate" /> Front
+                </button>
+              </div>
+            </div>
+
+            <div style={{ position: 'relative', width: '100%', borderRadius: '12px', overflow: 'hidden', background: '#000' }}>
+              <video
+                ref={(el) => {
+                  (videoRef as any).current = el;
+                  if (el && webcamStream && el.srcObject !== webcamStream) {
+                    el.srcObject = webcamStream;
+                    el.onloadedmetadata = () => {
+                      el.play().catch((err) => console.warn('Video play error:', err));
+                    };
+                  }
+                }}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  width: '100%',
+                  maxHeight: '55vh',
+                  display: 'block',
+                  borderRadius: '12px',
+                  background: '#000',
+                  objectFit: 'cover',
+                  transform: cameraFacingMode === 'user' ? 'scaleX(-1)' : 'none',
+                }}
+              />
+            </div>
             <canvas ref={canvasRef} style={{ display: 'none' }} />
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1rem' }}>
-              <button type="button" onClick={stopWebcam} style={{ padding: '8px 18px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
-              <button type="button" onClick={capturePhoto} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', background: '#4f46e5', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>📸 Take Photo</button>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1.25rem' }}>
+              <button
+                type="button"
+                onClick={stopWebcam}
+                style={{ padding: '9px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                style={{ padding: '9px 24px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)', color: '#fff', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.35)' }}
+              >
+                <i className="fa-solid fa-circle-dot" /> Take Photo
+              </button>
             </div>
           </div>
         </div>

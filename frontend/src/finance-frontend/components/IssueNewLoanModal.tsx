@@ -60,6 +60,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
   // Live Webcam Modal State
   const [showWebcam, setShowWebcam] = useState(false);
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -110,19 +111,30 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
     }
   }, [isOpen, editingRecord]);
 
-  const startWebcam = async () => {
+  const startWebcam = async (facing: 'environment' | 'user' = cameraFacingMode) => {
+    setCameraFacingMode(facing);
+    if (webcamStream) {
+      webcamStream.getTracks().forEach((track) => track.stop());
+      setWebcamStream(null);
+    }
+    setShowWebcam(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       setWebcamStream(stream);
-      setShowWebcam(true);
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }, 100);
-    } catch (err) {
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch((err) => console.warn('Video play error:', err));
+        };
+      }
+    } catch {
       // If live webcam fails or denied, fallback to native camera file input
       cameraInputRef.current?.click();
     }
@@ -212,6 +224,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
 
       const payload = {
         ...form,
+        customer_id: undefined,
         item_name: isCash ? (form.item_name || 'Cash') : form.item_name,
         item_weight_grams: isCash ? 0 : Number(form.item_weight_grams),
         item_deduction_name: isCash ? '' : (form.item_deduction_name || ''),
@@ -264,6 +277,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
         setImageUploading(false);
       }
       const payload = {
+        customer_id: editingRecord.customer_id || undefined,
         loan_date: form.loan_date,
         customer_name: form.customer_name,
         customer_surname: form.customer_surname,
@@ -560,10 +574,17 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={startWebcam}
-                        style={{ padding: '8px 16px', background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(14, 165, 233, 0.3)' }}
+                        onClick={() => startWebcam('environment')}
+                        style={{ padding: '8px 14px', background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(14, 165, 233, 0.3)' }}
                       >
-                        <i className="fa-solid fa-camera" /> {t.liveCameraBtn}
+                        <i className="fa-solid fa-camera" /> Back Camera
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startWebcam('user')}
+                        style={{ padding: '8px 14px', background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', color: '#ffffff', border: 'none', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)' }}
+                      >
+                        <i className="fa-solid fa-camera-rotate" /> Front Camera
                       </button>
                     </div>
                   </div>
@@ -926,14 +947,77 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
               <h4 style={{ margin: 0, color: '#f8fafc', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="fa-solid fa-camera" style={{ color: '#38bdf8' }} /> Camera Viewfinder
               </h4>
-              <button type="button" onClick={stopWebcam} style={{ background: '#334155', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer' }}>
-                <i className="fa-solid fa-xmark" />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Front / Back switch buttons */}
+                <div style={{ display: 'flex', gap: '4px', background: '#1e293b', padding: '3px', borderRadius: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => startWebcam('environment')}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: cameraFacingMode === 'environment' ? '#0ea5e9' : 'transparent',
+                      color: cameraFacingMode === 'environment' ? '#fff' : '#94a3b8',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <i className="fa-solid fa-camera" /> Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startWebcam('user')}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: cameraFacingMode === 'user' ? '#0ea5e9' : 'transparent',
+                      color: cameraFacingMode === 'user' ? '#fff' : '#94a3b8',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <i className="fa-solid fa-camera-rotate" /> Front
+                  </button>
+                </div>
+                <button type="button" onClick={stopWebcam} style={{ background: '#334155', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer' }}>
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              </div>
             </div>
 
-            {/* Live Video Preview */}
+            {/* Live Video Preview with Callback Ref and Autoplay support */}
             <div style={{ position: 'relative', width: '100%', background: '#000', borderRadius: '12px', overflow: 'hidden', minHeight: '260px' }}>
-              <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', maxHeight: '360px', objectFit: 'cover' }} />
+              <video
+                ref={(el) => {
+                  (videoRef as any).current = el;
+                  if (el && webcamStream && el.srcObject !== webcamStream) {
+                    el.srcObject = webcamStream;
+                    el.onloadedmetadata = () => {
+                      el.play().catch((err) => console.warn('Video play error:', err));
+                    };
+                  }
+                }}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  maxHeight: '360px',
+                  objectFit: 'cover',
+                  transform: cameraFacingMode === 'user' ? 'scaleX(-1)' : 'none',
+                }}
+              />
               <canvas ref={canvasRef} style={{ display: 'none' }} />
             </div>
 
