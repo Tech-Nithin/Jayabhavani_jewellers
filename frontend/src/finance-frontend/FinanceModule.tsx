@@ -359,6 +359,24 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
   const overdueMetalCount = metalFilteredLedger.filter(r => isRecordOverdue(r) && r.record_action !== 'deleted').length;
   const deletedMetalCount = metalFilteredLedger.filter(r => r.record_action === 'deleted').length;
 
+  // Live metal counts across full active ledger
+  const activeLedgerForCounts = ledger.filter(r => r.record_action !== 'deleted');
+  const allMetalsCount = activeLedgerForCounts.length;
+  const goldCount = activeLedgerForCounts.filter(r => {
+    const mType = (r.debt_category || r.item_metal_type || 'GOLD').toLowerCase();
+    const isCash = mType === 'cash' || r.item_name?.toLowerCase() === 'cash';
+    return mType === 'gold' && !isCash;
+  }).length;
+  const silverCount = activeLedgerForCounts.filter(r => {
+    const mType = (r.debt_category || r.item_metal_type || '').toLowerCase();
+    const isCash = mType === 'cash' || r.item_name?.toLowerCase() === 'cash';
+    return mType === 'silver' && !isCash;
+  }).length;
+  const cashCount = activeLedgerForCounts.filter(r => {
+    const mType = (r.debt_category || r.item_metal_type || '').toLowerCase();
+    return mType === 'cash' || r.item_name?.toLowerCase() === 'cash';
+  }).length;
+
   const filteredLedger = metalFilteredLedger.filter(rec => {
     if (statusFilter === 'deleted') {
       if (rec.record_action !== 'deleted') return false;
@@ -1089,7 +1107,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-border-all" /> {t.allMetals} ({ledger.length})
+              <i className="fa-solid fa-border-all" /> {t.allMetals} ({allMetalsCount})
             </button>
 
             <button
@@ -1113,7 +1131,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-coins" /> {t.goldCategory} ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'gold' && r.item_name?.toLowerCase() !== 'cash').length})
+              <i className="fa-solid fa-coins" /> {t.goldCategory} ({goldCount})
             </button>
 
             <button
@@ -1137,7 +1155,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-gem" /> {t.silverCategory} ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'silver' && r.item_name?.toLowerCase() !== 'cash').length})
+              <i className="fa-solid fa-gem" /> {t.silverCategory} ({silverCount})
             </button>
 
             <button
@@ -1161,7 +1179,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
                 gap: '4px',
               }}
             >
-              <i className="fa-solid fa-money-bill-wave" /> {t.cashCategory} ({ledger.filter(r => r.item_metal_type?.toLowerCase() === 'cash' || r.item_name?.toLowerCase() === 'cash').length})
+              <i className="fa-solid fa-money-bill-wave" /> {t.cashCategory} ({cashCount})
             </button>
           </div>
         </div>
