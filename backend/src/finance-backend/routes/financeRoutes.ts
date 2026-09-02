@@ -162,6 +162,66 @@ router.get('/metal-rates', async (_req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Sequential Customer ID Helpers (CUST-01, CUST-02, ...)
+// ─────────────────────────────────────────────────────────────────────────────
+async function getNextCustomerId(): Promise<string> {
+  const { data } = await supabase
+    .from('finance')
+    .select('customer_id');
+
+  let maxNum = 0;
+  (data || []).forEach((row: any) => {
+    if (row.customer_id) {
+      const match = String(row.customer_id).trim().match(/^CUST-(\d+)$/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  });
+
+  const nextNum = maxNum + 1;
+  const padded = nextNum < 10 ? `0${nextNum}` : String(nextNum);
+  return `CUST-${padded}`;
+}
+
+async function syncSequentialCustomerIds(loans: any[]) {
+  if (!loans || loans.length === 0) return;
+  const sorted = [...loans].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  let currentMax = 0;
+  sorted.forEach((l) => {
+    const match = String(l.customer_id || '').trim().match(/^CUST-(\d+)$/i);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (n > currentMax) currentMax = n;
+    }
+  });
+
+  for (const loan of sorted) {
+    const isSequential = /^CUST-\d+$/i.test(String(loan.customer_id || '').trim());
+    if (!isSequential) {
+      currentMax += 1;
+      const padded = currentMax < 10 ? `0${currentMax}` : String(currentMax);
+      const newCustId = `CUST-${padded}`;
+      loan.customer_id = newCustId;
+      const original = loans.find((x) => x.finance_uuid === loan.finance_uuid);
+      if (original) original.customer_id = newCustId;
+      try {
+        await supabase
+          .from('finance')
+          .update({ customer_id: newCustId })
+          .eq('finance_uuid', loan.finance_uuid);
+      } catch (err: any) {
+        console.warn('Customer ID backfill warning:', err?.message);
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/finance/overview — List all loans with live interest
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/overview', async (_req: Request, res: Response) => {
@@ -179,6 +239,9 @@ router.get('/overview', async (_req: Request, res: Response) => {
       .from('finance_payment_history')
       .select('*');
 
+    // Ensure all loans have sequential CUST-01, CUST-02...
+    await syncSequentialCustomerIds(loans);
+
     const ledger = (loans || []).map((loan: any) => {
       const loanPayments = (history || []).filter((h: any) => h.finance_uuid === loan.finance_uuid);
       const totIntPaid = loanPayments.reduce((sum: number, p: any) => sum + Number(p.interest_paying_amount || p.interest_component || 0), 0);
@@ -193,6 +256,9 @@ router.get('/overview', async (_req: Request, res: Response) => {
 
       return {
         ...loan,
+        loan_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        debt_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        customer_id: loan.customer_id || null,
         current_interest_due: interest.interestDue,
         months_elapsed: interest.months,
         days_elapsed: interest.days,
@@ -252,6 +318,9 @@ router.get('/:uuid', async (req: Request, res: Response) => {
       success: true,
       loan: {
         ...loan,
+        loan_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        debt_date: loan.interest_start_from || loan.debt_date || loan.loan_date || (loan.created_at ? loan.created_at.split('T')[0] : ''),
+        customer_id: loan.customer_id || null,
         current_interest_due: interest.interestDue,
         months_elapsed: interest.months,
         total_payable_now: Number((Number(loan.current_principal) + interest.interestDue).toFixed(2)),
@@ -266,15 +335,15 @@ router.get('/:uuid', async (req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/finance/create — Issue new pledge loan
+// POST /api/finance/create & /api/finance/debt/create — Issue new pledge loan
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/create', async (req: Request, res: Response) => {
+const handleCreateLoan = async (req: Request, res: Response) => {
   const {
-    customer_name, customer_phone, customer_address,
+    customer_id, customer_name, customer_phone, customer_address,
     debt_category,
     item_name, item_weight, item_deduction_name, item_deduction_weight,
     touch, pure_metal_weight, metal_value_per_gram, total_value_of_item, item_image_url,
-    customer_debt_money, interest_rate_percent, timeline_months, debt_date,
+    customer_debt_money, interest_rate_percent, timeline_months, debt_date, loan_date: inputLoanDate,
   } = req.body;
 
   if (!customer_name || !customer_phone || !customer_debt_money || !interest_rate_percent || !timeline_months) {
@@ -282,9 +351,14 @@ router.post('/create', async (req: Request, res: Response) => {
   }
 
   const principal = Number(customer_debt_money);
-  const loanDate = debt_date || new Date().toISOString().split('T')[0];
+  const loanDate = debt_date || inputLoanDate || new Date().toISOString().split('T')[0];
+  let assignedCustomerId = (customer_id && String(customer_id).trim()) || '';
+  if (!assignedCustomerId || !/^CUST-\d+$/i.test(assignedCustomerId)) {
+    assignedCustomerId = await getNextCustomerId();
+  }
 
   const payload: any = {
+    customer_id: assignedCustomerId,
     customer_name: String(customer_name).trim(),
     customer_phone: String(customer_phone).trim(),
     customer_address: customer_address ? String(customer_address).trim() : null,
@@ -345,7 +419,10 @@ router.post('/create', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
-});
+};
+
+router.post('/create', handleCreateLoan);
+router.post('/debt/create', handleCreateLoan);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/finance/:uuid/pay — Record installment payment
@@ -519,7 +596,7 @@ router.post('/:uuid/pay', async (req: Request, res: Response) => {
 router.patch('/:uuid/update', async (req: Request, res: Response) => {
   const { uuid } = req.params;
   const allowed = [
-    'customer_name', 'customer_phone', 'customer_address',
+    'customer_id', 'customer_name', 'customer_phone', 'customer_address',
     'item_name', 'item_weight', 'item_deduction_name', 'item_deduction_weight',
     'touch', 'pure_metal_weight', 'metal_value_per_gram', 'total_value_of_item',
     'item_image_url', 'interest_rate_percent', 'timeline_months', 'debt_date', 'debt_category',
