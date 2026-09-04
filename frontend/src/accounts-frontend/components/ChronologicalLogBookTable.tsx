@@ -9,7 +9,7 @@ interface ChronologicalLogBookTableProps {
   selectedDate: string;
   dateFilterMode: string;
   getISTDateOnly: (dateStr: string) => string;
-  formatISTDateTime: (dateStr?: string, fallbackTime?: string) => string;
+  formatISTDateTime: (dateStr?: string, fallbackTime?: string, billDateStr?: string) => string;
   setSelectedBillModalItem: (item: any) => void;
 }
 
@@ -137,9 +137,10 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
             </thead>
             <tbody>
               {filteredTimeline.map((item, idx) => {
-                const itemDateStr = getISTDateOnly(item.created_at);
+                const itemDateStr = item.bill_date ? String(item.bill_date).split('T')[0] : getISTDateOnly(item.created_at);
+                const prevItemDateStr = filteredTimeline[idx - 1]?.bill_date ? String(filteredTimeline[idx - 1].bill_date).split('T')[0] : getISTDateOnly(filteredTimeline[idx - 1]?.created_at);
                 const isMultiDateRangeMode = dateFilterMode === 'ALL' || dateFilterMode === 'CUSTOM';
-                const showDateDivider = isMultiDateRangeMode && Boolean(itemDateStr && (idx === 0 || getISTDateOnly(filteredTimeline[idx - 1]?.created_at) !== itemDateStr));
+                const showDateDivider = isMultiDateRangeMode && Boolean(itemDateStr && (idx === 0 || prevItemDateStr !== itemDateStr));
 
                 const rawItemType = (item.type || '').toUpperCase();
                 const isOrder = rawItemType === 'ORDER';
@@ -196,7 +197,7 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
                       }}
                     >
                       <td style={{ padding: '6px 8px', fontWeight: 800, color: '#64748b' }}>#{item.originalSNo || idx + 1}</td>
-                      <td style={{ padding: '6px 8px', fontWeight: 700, fontSize: '0.7rem', color: '#b45309', whiteSpace: 'nowrap' }}>{formatISTDateTime(item.created_at, item.time)}</td>
+                      <td style={{ padding: '6px 8px', fontWeight: 700, fontSize: '0.7rem', color: '#b45309', whiteSpace: 'nowrap' }}>{formatISTDateTime(item.created_at, item.time, item.bill_date)}</td>
                       <td style={{ padding: '6px 8px' }}>
                         <span style={{ fontSize: '0.54rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: typeBg, color: typeColor, whiteSpace: 'nowrap' }}>
                           {displayItemType}

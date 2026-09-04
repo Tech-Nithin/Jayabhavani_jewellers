@@ -7,6 +7,8 @@ import { saveFcmToken } from '../../utils/fcmTokenStore';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 import { triggerFcmPushNotification } from '../../utils/pushService';
 import { memoryCache } from '../../config/memoryCache';
+import { getNowISTISO, getTodayIST, toISTTimestamp, toISTDateOnly } from '../../utils/dateHelper';
+import { storeBillingTransaction, recordAdditionalPayment } from '../../utils/billingStorageHelper';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -91,7 +93,7 @@ let mockWorkers: WorkerItem[] = [];
 let mockTransactions: WorkerTransactionItem[] = [];
 
 // Helper to generate IDs
-const generateOrderId = () => `ORD-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+const generateOrderId = () => `ORD-${getTodayIST().replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
 // Helper to generate unique Worker ID
 
@@ -151,31 +153,34 @@ router.get('/orders', async (req: Request, res: Response) => {
     }
 
     if (dateRange && dateRange !== 'ALL') {
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const todayIST = getTodayIST();
 
       if (dateRange === 'TODAY') {
-        query = query.gte('created_at', todayStart);
+        query = query.gte('created_at', `${todayIST} 00:00:00`).lte('created_at', `${todayIST} 23:59:59.999`);
       } else if (dateRange === 'YESTERDAY') {
-        const yestStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
-        query = query.gte('created_at', yestStart).lt('created_at', todayStart);
+        const yest = new Date();
+        yest.setDate(yest.getDate() - 1);
+        const yestIST = toISTDateOnly(yest);
+        query = query.gte('created_at', `${yestIST} 00:00:00`).lte('created_at', `${yestIST} 23:59:59.999`);
       } else if (dateRange === 'THIS_WEEK') {
+        const now = new Date();
         const dayOfWeek = now.getDay();
-        const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).toISOString();
-        query = query.gte('created_at', weekStart);
+        const weekStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+        const weekStartIST = toISTDateOnly(weekStartDate);
+        query = query.gte('created_at', `${weekStartIST} 00:00:00`);
       } else if (dateRange === 'THIS_MONTH') {
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        query = query.gte('created_at', monthStart);
+        const now = new Date();
+        const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthStartIST = toISTDateOnly(monthStartDate);
+        query = query.gte('created_at', `${monthStartIST} 00:00:00`);
       } else if (dateRange === 'LAST_30_DAYS') {
-        const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toISOString();
-        query = query.gte('created_at', thirtyDaysAgo);
+        const now = new Date();
+        const thirtyDaysAgoDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+        const thirtyDaysAgoIST = toISTDateOnly(thirtyDaysAgoDate);
+        query = query.gte('created_at', `${thirtyDaysAgoIST} 00:00:00`);
       } else if (dateRange === 'CUSTOM') {
-        if (startDate) query = query.gte('created_at', new Date(startDate).toISOString());
-        if (endDate) {
-          const e = new Date(endDate);
-          e.setHours(23, 59, 59, 999);
-          query = query.lte('created_at', e.toISOString());
-        }
+        if (startDate) query = query.gte('created_at', `${startDate} 00:00:00`);
+        if (endDate) query = query.lte('created_at', `${endDate} 23:59:59.999`);
       }
     }
 
@@ -284,9 +289,8 @@ router.post('/orders', async (req: Request, res: Response) => {
     const finalImageUrl = image_url || receipt_json_data?.image_url || receipt_json_data?.items?.[0]?.image_url || '';
 
     const rawOrderBillDate = req.body.bill_date || req.body.billDate || req.body.date || receipt_json_data?.bill_date || receipt_json_data?.billDate;
-    const nowTime = new Date().toISOString().split('T')[1] || '12:00:00.000Z';
-    const orderCreatedAt = req.body.created_at || (rawOrderBillDate ? `${rawOrderBillDate}T${nowTime}` : new Date().toISOString());
-    const resolvedOrderBillDate = rawOrderBillDate || orderCreatedAt.split('T')[0];
+    const orderCreatedAt = req.body.created_at ? toISTTimestamp(req.body.created_at) : (rawOrderBillDate ? getNowISTISO(`${rawOrderBillDate}T${getNowISTISO().split('T')[1]}`) : getNowISTISO());
+    const resolvedOrderBillDate = rawOrderBillDate || toISTDateOnly(orderCreatedAt);
 
     const newOrder: any = {
       id: generateOrderId(),
@@ -303,7 +307,7 @@ router.post('/orders', async (req: Request, res: Response) => {
       touch_percentage: touch,
       fine_weight_grams: fine,
       making_charges: Number(making_charges) || 0,
-      estimated_delivery_date: estimated_delivery_date || new Date().toISOString().split('T')[0],
+      estimated_delivery_date: estimated_delivery_date || getTodayIST(),
       notes: notes || '',
       hmw_percentage: hmwPct,
       hmw_weight: hmwW,
@@ -408,7 +412,7 @@ router.post('/orders', async (req: Request, res: Response) => {
                   weight_grams: scrapWeight,
                   amount: Number(it.lineTotal || it.line_total || it.metalVal || 0),
                   purity_percentage: Number(it.purity_percentage) || 100,
-                  created_at: new Date().toISOString(),
+                  created_at: getNowISTISO(),
                 }]);
 
                 await supabase.from('inventory_stock_logs').insert([{
@@ -420,7 +424,7 @@ router.post('/orders', async (req: Request, res: Response) => {
                   previous_stock: 0,
                   new_stock: 0,
                   notes: `Scrap ${cleanMetal} received towards Order #${newOrder.id} from ${newOrder.customer_name}`,
-                  created_at: new Date().toISOString(),
+                  created_at: getNowISTISO(),
                 }]);
               }
             }
@@ -521,7 +525,7 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
     const workerIdVal = worker_id || null;
     const workerNameVal = worker_name || null;
     const statusVal = workerIdVal ? 'ASSIGNED' : 'PENDING';
-    const assignedAtVal = workerIdVal ? new Date().toISOString() : null;
+    const assignedAtVal = workerIdVal ? getNowISTISO() : null;
 
     if (order) {
       order.assigned_worker_id = workerIdVal;
@@ -603,7 +607,7 @@ router.put('/orders/:id/assign', async (req: Request, res: Response) => {
             is_seen: 'NO',
             read_at: null,
             seen_at: null,
-            created_at: new Date().toISOString(),
+            created_at: getNowISTISO(),
           };
 
           mockTransactions.push(newTxn);
@@ -679,7 +683,7 @@ router.put('/orders/:id/return-status', async (req: Request, res: Response) => {
     const { returned_from_worker, returned_at, return_purity_percentage, return_pure_gold } = req.body;
 
     const returnVal = returned_from_worker === 'yes' ? 'yes' : 'no';
-    const returnAtVal = returnVal === 'yes' ? (returned_at || new Date().toISOString()) : null;
+    const returnAtVal = returnVal === 'yes' ? (returned_at ? toISTTimestamp(returned_at) : getNowISTISO()) : null;
 
     let order = mockOrders.find((o) => o.id === id);
     if (order) {
@@ -766,7 +770,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       const initialDue = Math.max(0, finalAmt - initialPaid);
       if (initialPaid > 0) {
         historyList.push({
-          date: order.created_at || new Date().toISOString(),
+          date: order.created_at || getNowISTISO(),
           amount: initialPaid,
           due_after: initialDue,
           type: 'Advance Payment',
@@ -802,7 +806,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
     let invoicePersisted = false;
 
     const submittedTimestamp = newSubmitted === 'yes'
-      ? (order.item_submitted_at || new Date().toISOString())
+      ? (order.item_submitted_at || getNowISTISO())
       : null;
 
     // 1. Always update Supabase orders table with latest paid_amount, due_amount, item_submitted_at, and receipt_json_data
@@ -817,7 +821,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
           paid_amount: order.paid_amount,
           due_amount: order.due_amount,
           receipt_json_data: updatedReceiptJSON,
-          updated_at: new Date().toISOString(),
+          updated_at: getNowISTISO(),
         })
         .eq('id', order.id);
 
@@ -826,16 +830,24 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       // 1b. Simultaneously update billing_sell_buy_records for line items of this order
       const orderIdStr = String(order.id);
       const isSub = newSubmitted === 'yes';
-      const subTime = isSub ? (submittedTimestamp || new Date().toISOString()) : null;
+      const subTime = isSub ? (submittedTimestamp || getNowISTISO()) : null;
 
-      await supabase
-        .from('billing_sell_buy_records')
-        .update({
-          is_item_submitted: isSub ? 'yes' : 'no',
-          item_submitted_at: subTime,
-        })
-        .or(`customer_billing_uuid.eq.${orderIdStr},billing_id.eq.${orderIdStr}`)
-        .eq('transaction_type', 'SELL');
+      const { data: cbRow } = await supabase
+        .from('customer_billing')
+        .select('customer_billing_uuid')
+        .eq('billing_id', orderIdStr)
+        .maybeSingle();
+
+      if (cbRow?.customer_billing_uuid) {
+        await supabase
+          .from('billing_sell_buy_records')
+          .update({
+            is_item_submitted: isSub ? 'yes' : 'no',
+            item_submitted_at: subTime,
+          })
+          .eq('customer_billing_uuid', cbRow.customer_billing_uuid)
+          .eq('transaction_type', 'SELL');
+      }
     } catch (e) {
       console.warn('Supabase orders table update notice:', e);
     }
@@ -875,7 +887,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
             paid_amount: Number(order.paid_amount || 0),
             due_amount: Number(order.due_amount || 0),
             receipt_json_data: updatedReceiptJSON,
-            created_at: order.created_at || new Date().toISOString(),
+            created_at: order.created_at || getNowISTISO(),
             metal_type: order.metal_type,
             weight_grams: Number(order.net_weight_grams || order.gross_weight_grams) || 0,
             product_name: order.item_name,
@@ -934,6 +946,7 @@ router.put('/orders/:id', async (req: Request, res: Response) => {
       final_amount,
       bill_date,
       image_url,
+      receipt_json_data,
     } = req.body;
 
     const gross = Number(gross_weight_grams) || 0;
@@ -944,9 +957,12 @@ router.put('/orders/:id', async (req: Request, res: Response) => {
     const hmwW = Number(hmw_weight) || Number(((gross * hmwPct) / 100).toFixed(3));
     const retPurity = Number(return_purity_percentage) || 0;
     const retPureG = Number(return_pure_gold) || Number(((net * retPurity) / 100).toFixed(3));
+    const effFinalAmt = Number(final_amount ?? req.body.total_amount ?? req.body.total_sell_value ?? req.body.netPayable ?? 0);
+    const effPaidAmt = paid_amount !== undefined ? Number(paid_amount) : undefined;
+    const effDueAmt = due_amount !== undefined ? Number(due_amount) : (effFinalAmt && effPaidAmt !== undefined ? Math.max(0, effFinalAmt - effPaidAmt) : undefined);
 
     const updatePayload: any = {
-      updated_at: new Date().toISOString(),
+      updated_at: getNowISTISO(),
     };
 
     if (customer_name !== undefined) updatePayload.customer_name = customer_name;
@@ -973,11 +989,12 @@ router.put('/orders/:id', async (req: Request, res: Response) => {
     if (pure_metal_weight !== undefined) updatePayload.pure_metal_weight = Number(pure_metal_weight);
     if (metal_value !== undefined) updatePayload.metal_value = Number(metal_value);
     if (gst_amount !== undefined) updatePayload.gst_amount = Number(gst_amount);
-    if (final_amount !== undefined) updatePayload.final_amount = Number(final_amount);
-    if (paid_amount !== undefined) updatePayload.paid_amount = Number(paid_amount);
-    if (due_amount !== undefined) updatePayload.due_amount = Number(due_amount);
+    if (effFinalAmt > 0) updatePayload.final_amount = effFinalAmt;
+    if (effPaidAmt !== undefined) updatePayload.paid_amount = effPaidAmt;
+    if (effDueAmt !== undefined) updatePayload.due_amount = effDueAmt;
     if (bill_date !== undefined) updatePayload.bill_date = bill_date;
     if (image_url !== undefined) updatePayload.image_url = image_url;
+    if (receipt_json_data !== undefined) updatePayload.receipt_json_data = receipt_json_data;
 
     // Update in Supabase orders
     const { data: updatedDbOrder, error: updateErr } = await supabase
@@ -988,7 +1005,7 @@ router.put('/orders/:id', async (req: Request, res: Response) => {
       .single();
 
     if (updateErr) {
-      console.error('❌ Error updating order:', updateErr);
+      console.error('❌ Error updating order in orders table:', updateErr);
       return res.status(500).json({ success: false, message: updateErr.message });
     }
 
@@ -998,59 +1015,59 @@ router.put('/orders/:id', async (req: Request, res: Response) => {
       mockOrders[mockIdx] = { ...mockOrders[mockIdx], ...updatePayload };
     }
 
-    // Sync into customer_billing and billing_sell_buy_records if present
+    // Sync into customer_billing, billing_sell_buy_records, billing_payment_history, cash_transaction_ledger
     try {
       const orderIdStr = String(id);
-      await supabase
-        .from('customer_billing')
-        .update({
-          customer_name: updatePayload.customer_name,
-          customer_phone: updatePayload.customer_phone,
-          customer_address: updatePayload.customer_address,
-          total_amount: updatePayload.final_amount,
-          paid_amount: updatePayload.paid_amount,
-          due_amount: updatePayload.due_amount,
-          bill_date: updatePayload.bill_date,
-          updated_at: new Date().toISOString(),
-        })
-        .or(`billing_id.eq.${orderIdStr},customer_billing_uuid.eq.${orderIdStr}`);
+      const effReceipt = receipt_json_data || (updatedDbOrder ? updatedDbOrder.receipt_json_data : null) || {};
 
-      await supabase
-        .from('billing_sell_buy_records')
-        .update({
-          customer_name: updatePayload.customer_name,
-          product_name: updatePayload.item_name,
-          weight_grams: updatePayload.gross_weight_grams,
-          net_weight_grams: updatePayload.net_weight_grams,
-          bill_date: updatePayload.bill_date,
-          updated_at: new Date().toISOString(),
-        })
-        .or(`billing_id.eq.${orderIdStr},customer_billing_uuid.eq.${orderIdStr}`);
+      await storeBillingTransaction({
+        billing_id: orderIdStr,
+        bill_type: 'ORDER',
+        customer_name: updatePayload.customer_name || updatedDbOrder?.customer_name,
+        customer_phone: updatePayload.customer_phone || updatedDbOrder?.customer_phone,
+        customer_address: updatePayload.customer_address || updatedDbOrder?.customer_address,
+        total_amount: effFinalAmt || Number(updatedDbOrder?.final_amount || 0),
+        final_amount: effFinalAmt || Number(updatedDbOrder?.final_amount || 0),
+        paid_amount: effPaidAmt !== undefined ? effPaidAmt : Number(updatedDbOrder?.paid_amount || 0),
+        due_amount: effDueAmt !== undefined ? effDueAmt : Number(updatedDbOrder?.due_amount || 0),
+        receipt_json_data: effReceipt,
+        bill_date: updatePayload.bill_date || updatedDbOrder?.bill_date,
+        created_at: updatedDbOrder?.created_at,
+        metal_type: updatePayload.metal_type || updatedDbOrder?.metal_type,
+        metal_rate: Number(req.body.applied_rate_per_gram || updatedDbOrder?.applied_rate_per_gram || 0),
+        weight_grams: Number(updatePayload.gross_weight_grams || updatedDbOrder?.gross_weight_grams || 0),
+        product_name: updatePayload.item_name || updatedDbOrder?.item_name,
+        making_charges: Number(updatePayload.making_charges || updatedDbOrder?.making_charges || 0),
+        additional_charges: updatePayload.additional_charge_name || updatedDbOrder?.additional_charge_name,
+        additional_cost: Number(updatePayload.additional_charge_value || updatedDbOrder?.additional_charge_value || 0),
+        hallmark_percentage: Number(updatePayload.hmw_percentage || updatedDbOrder?.hmw_percentage || 0),
+        item_quality_percentage: Number(updatePayload.touch_percentage || updatedDbOrder?.touch_percentage || 0),
+        quantity_unit: updatePayload.quantity_unit || updatedDbOrder?.quantity_unit || 'PIECES',
+        item_length_inches: updatePayload.item_length_inches || updatedDbOrder?.item_length_inches,
+        image_url: updatePayload.image_url || updatedDbOrder?.image_url,
+        notes: updatePayload.notes || updatedDbOrder?.notes,
+      });
 
-      // Sync billing_payment_history installment #1 based on customer_billing_uuid
-      const { data: matchedBill } = await supabase
-        .from('customer_billing')
-        .select('customer_billing_uuid')
-        .or(`billing_id.eq.${orderIdStr},customer_billing_uuid.eq.${orderIdStr}`)
-        .maybeSingle();
-
-      if (matchedBill?.customer_billing_uuid) {
-        const orderPaid = Number(updatePayload.paid_amount || 0);
-        const orderDue = Number(updatePayload.due_amount || 0);
-        const { error: paySyncErr } = await supabase
-          .from('billing_payment_history')
-          .update({
-            amount_paid: orderPaid,
-            remaining_due: orderDue,
-            payment_status: orderDue <= 0 ? 'FULL' : 'PARTIAL',
-            bill_date: updatePayload.bill_date,
-          })
-          .eq('customer_billing_uuid', matchedBill.customer_billing_uuid)
-          .eq('installment_number', 1);
-
-        if (paySyncErr) {
-          console.warn('⚠️ billing_payment_history order update notice:', paySyncErr.message);
-        }
+      // Also sync scrap metal intake into customer_metal_transactions if any BUY items exist
+      const itemsList: any[] = Array.isArray(effReceipt?.items) ? effReceipt.items : [];
+      const scrapItems = itemsList.filter((i: any) => (i.item_type || '').toUpperCase() === 'BUY');
+      if (scrapItems.length > 0) {
+        await supabase.from('customer_metal_transactions').delete().eq('invoice_id', orderIdStr);
+        const metalRecords = scrapItems.map((it: any) => ({
+          invoice_id: orderIdStr,
+          customer_id: updatePayload.customer_phone || updatedDbOrder?.customer_phone || null,
+          customer_phone: updatePayload.customer_phone || updatedDbOrder?.customer_phone,
+          customer_name: updatePayload.customer_name || updatedDbOrder?.customer_name,
+          transaction_type: 'ORDER',
+          metal_type: (it.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
+          item_type: 'BUY',
+          product_name: it.product_name || `Scrap Metal Intake`,
+          weight_grams: Number(it.weight_grams || it.gross_weight_grams || 0),
+          amount: Number(it.lineTotal || it.line_total || it.metalVal || 0),
+          purity_percentage: Number(it.purity_percentage) || 100,
+          created_at: updatedDbOrder?.created_at || getNowISTISO(),
+        }));
+        await supabase.from('customer_metal_transactions').insert(metalRecords);
       }
     } catch (syncErr) {
       console.warn('⚠️ Syncing order edit to billing tables notice:', syncErr);
@@ -1112,7 +1129,7 @@ router.delete('/orders/:id', async (req: Request, res: Response) => {
         is_seen: 'NO',
         read_at: null,
         seen_at: null,
-        created_at: new Date().toISOString(),
+        created_at: getNowISTISO(),
       };
 
       try {
@@ -1282,7 +1299,7 @@ router.post('/workers', async (req: Request, res: Response) => {
       photo_url: photo_url || '',
       notes: notes || '',
       status: 'ACTIVE',
-      created_at: new Date().toISOString(),
+      created_at: getNowISTISO(),
     };
 
     const { data: insertedRow, error: dbErr } = await supabase
@@ -1556,9 +1573,9 @@ router.get('/worker-transactions', async (req: Request, res: Response) => {
       const startDate = new Date(cutoffDate.getTime() - daysCount * 24 * 60 * 60 * 1000);
 
       if (beforeDate) {
-        query = query.lt('created_at', cutoffDate.toISOString());
+        query = query.lt('created_at', toISTTimestamp(cutoffDate));
       } else {
-        query = query.gte('created_at', startDate.toISOString());
+        query = query.gte('created_at', toISTTimestamp(startDate));
       }
     }
 
@@ -1613,7 +1630,7 @@ router.put('/worker-transactions/mark-read', async (req: Request, res: Response)
       return res.status(400).json({ success: false, message: 'worker_id is required to mark messages as read' });
     }
 
-    const nowIso = new Date().toISOString();
+    const nowIso = getNowISTISO();
     const targetDirection = direction ? String(direction).toUpperCase() : null;
 
     // 1. Update Supabase PostgreSQL
@@ -1766,7 +1783,7 @@ router.post('/worker-transactions', upload.array('files'), async (req: Request, 
       is_seen: 'NO',
       read_at: null,
       seen_at: null,
-      created_at: new Date().toISOString(),
+      created_at: getNowISTISO(),
     };
 
     // 1. Add to in-memory fallback list
@@ -1936,7 +1953,7 @@ router.put('/worker-transactions/:id', async (req: Request, res: Response) => {
       cashMetalLink,
       appliedRatePerGram,
     } = req.body;
-    const editTimestamp = new Date().toISOString();
+    const editTimestamp = getNowISTISO();
 
     // 1. Fetch transaction directly from Supabase
     const { data: targetTx, error: fetchErr } = await supabase

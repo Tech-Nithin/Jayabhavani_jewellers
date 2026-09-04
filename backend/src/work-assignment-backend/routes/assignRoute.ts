@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { getNowISTISO } from '../../utils/dateHelper';
 
 export const handleAssignTask = async (req: Request, res: Response) => {
   const { workerName, itemWeight, itemPurity, mode, invoiceId } = req.body;
@@ -26,7 +27,7 @@ export const handleAssignTask = async (req: Request, res: Response) => {
       itemPurity,
       mode,
       invoiceId: invoiceId || null,
-      assignedAt: new Date().toISOString(),
+      assignedAt: getNowISTISO(),
     }
   });
 };

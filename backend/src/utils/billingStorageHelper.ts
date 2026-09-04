@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
-import { recordCashTransaction, getTodayISTString } from './cashLedgerHelper';
+import { recordCashTransaction } from './cashLedgerHelper';
+import { getNowISTISO, getTodayIST, toISTTimestamp, toISTDateOnly } from './dateHelper';
 
 export interface BillingStorageInput {
   billing_id: string;
@@ -91,8 +92,9 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         : (paidAmount > 0 ? 'PARTIAL' : 'DUE')
     );
 
-    const billDate = String(input.bill_date || receiptData.bill_date || receiptData.billDate || input.created_at?.split('T')[0] || getTodayISTString()).trim();
-    const createdAt = input.created_at || (billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString());
+    const billDate = String(input.bill_date || receiptData.bill_date || receiptData.billDate || input.created_at?.split('T')[0] || getTodayIST()).trim();
+    const createdAt = input.created_at ? toISTTimestamp(input.created_at) : (billDate ? getNowISTISO(`${billDate}T${getNowISTISO().split('T')[1]}`) : getNowISTISO());
+    const updatedAt = getNowISTISO();
 
     // 1. MASTER TABLE: customer_billing (Upsert by billing_id)
     const masterPayload = {
@@ -108,7 +110,7 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       payment_status: paymentStatus,
       bill_json: receiptData,
       created_at: createdAt,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     };
 
     let customerBillingUuid: string | null = null;
@@ -397,10 +399,10 @@ export async function recordAdditionalPayment(params: {
     }
 
     const rawDate = custom_paid_at ? String(custom_paid_at).split('T')[0] : (bill_date || payment_date);
-    const pDate = String(rawDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })).trim();
+    const pDate = String(rawDate || getTodayIST()).trim();
     const paidTimestamp = custom_paid_at
-      ? (String(custom_paid_at).includes('T') ? String(custom_paid_at) : new Date(custom_paid_at).toISOString())
-      : (pDate ? `${pDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString());
+      ? toISTTimestamp(custom_paid_at)
+      : (pDate ? toISTTimestamp(pDate) : getNowISTISO());
 
     // 1. Fetch customer_billing row
     const { data: billingRow, error: fetchErr } = await supabase
@@ -487,7 +489,7 @@ export async function recordAdditionalPayment(params: {
       due_amount: newDueAmount,
       payment_status: newStatus,
       bill_json: updatedBillJson,
-      updated_at: new Date().toISOString(),
+      updated_at: getNowISTISO(),
     };
     if (effectiveTotal > 0 && Number(billingRow.total_amount || 0) < effectiveTotal) {
       updatePayload.total_amount = effectiveTotal;

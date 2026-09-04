@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { getNowISTISO } from '../utils/dateHelper';
 import fs from 'fs';
 import path from 'path';
 
@@ -112,7 +113,7 @@ router.post('/login', async (req: Request, res: Response) => {
         photo_url: matchedWorker.photo_url || '',
         notes: matchedWorker.notes || '',
         status: matchedWorker.status || 'ACTIVE',
-        created_at: matchedWorker.created_at || new Date().toISOString(),
+        created_at: matchedWorker.created_at || getNowISTISO(),
       },
     });
   } catch (err: any) {

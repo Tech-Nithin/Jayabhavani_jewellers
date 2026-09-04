@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { getTodayIST, getNowISTISO, toISTTimestamp } from './dateHelper';
 
 export interface CashTransactionParams {
   transaction_id?: string;
@@ -15,34 +16,15 @@ export interface CashTransactionParams {
  * Returns today's date string (YYYY-MM-DD) in Indian Standard Time (IST, UTC+5:30)
  */
 export function getTodayISTString(): string {
-  const now = new Date();
-  const istOffsetMs = 5.5 * 60 * 60 * 1000;
-  const istDate = new Date(now.getTime() + istOffsetMs);
-  return istDate.toISOString().split('T')[0];
+  return getTodayIST();
 }
 
 /**
- * Returns ISO timestamp string:
- * - If targetDateStr is today (or empty), returns the exact current live timestamp
- * - If targetDateStr is a custom/past date (YYYY-MM-DD), sets the timestamp to that date in IST
+ * Returns IST timestamp string
  */
 export function getISTTimestamp(targetDateStr?: string): string {
-  const todayIST = getTodayISTString();
-  const now = new Date();
-
-  if (!targetDateStr || targetDateStr === todayIST) {
-    return now.toISOString();
-  }
-
-  // Parse YYYY-MM-DD for custom backdated entry
-  const parts = targetDateStr.split('-').map(Number);
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    // Set to 12:00:00 PM IST (which is 06:30:00 UTC)
-    return new Date(Date.UTC(year, month - 1, day, 6, 30, 0)).toISOString();
-  }
-
-  return now.toISOString();
+  if (!targetDateStr) return getNowISTISO();
+  return toISTTimestamp(targetDateStr);
 }
 
 /**
@@ -93,7 +75,7 @@ export async function recordCashTransaction(params: CashTransactionParams): Prom
           current_cash: initialBalance,
           no_of_transactions: 1,
           created_at: recordTimestamp,
-          updated_at: new Date().toISOString(),
+          updated_at: getNowISTISO(),
         }])
         .select('*')
         .single();
@@ -115,7 +97,7 @@ export async function recordCashTransaction(params: CashTransactionParams): Prom
         .update({
           current_cash: updatedBalance,
           no_of_transactions: newTxnCount,
-          updated_at: new Date().toISOString(),
+          updated_at: getNowISTISO(),
         })
         .eq('cash_history_uuid', currentDayRow.cash_history_uuid);
 
@@ -201,7 +183,7 @@ export async function syncCashHistoryDayRow(cashHistoryUuid: string): Promise<vo
       .update({
         current_cash: Number(netCash.toFixed(2)),
         no_of_transactions: count,
-        updated_at: new Date().toISOString(),
+        updated_at: getNowISTISO(),
       })
       .eq('cash_history_uuid', cashHistoryUuid);
   } catch (err) {

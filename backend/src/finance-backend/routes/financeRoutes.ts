@@ -3,6 +3,7 @@ import multer from 'multer';
 import { supabase } from '../../config/supabase';
 import { uploadFinanceImageToCloudinary } from '../../utils/cloudinaryHelper';
 import { memoryCache } from '../../config/memoryCache';
+import { getNowISTISO, getTodayIST, toISTTimestamp, toISTDateOnly } from '../../utils/dateHelper';
 
 const router = Router();
 const BUCKET = 'loan-item-images';
@@ -109,7 +110,7 @@ function buildReceiptJson(loan: any, paymentHistory: any[]) {
     current_months_elapsed: interest.months,
     total_payable_now: Number((Number(loan.current_principal) + interest.interestDue).toFixed(2)),
     payment_history: paymentHistory,
-    snapshot_at: new Date().toISOString(),
+    snapshot_at: getNowISTISO(),
   };
 }
 
@@ -373,7 +374,7 @@ const handleCreateLoan = async (req: Request, res: Response) => {
   }
 
   const principal = Number(customer_debt_money);
-  const loanDate = debt_date || inputLoanDate || new Date().toISOString().split('T')[0];
+  const loanDate = debt_date || inputLoanDate || getTodayIST();
   let assignedCustomerId = (customer_id && String(customer_id).trim()) || '';
   if (!assignedCustomerId || !/^CUST-\d+$/i.test(assignedCustomerId)) {
     assignedCustomerId = await getNextCustomerId();
@@ -473,7 +474,7 @@ router.post('/:uuid/pay', async (req: Request, res: Response) => {
 
     const currentPrincipal = Number(loan.current_principal);
     const ratePercent = Number(loan.interest_rate_percent);
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayIST();
 
     // 2. Calculate current interest accrued + any previous carrying balance
     const interest = calcInterest({
@@ -541,7 +542,7 @@ router.post('/:uuid/pay', async (req: Request, res: Response) => {
         interest_paying_amount: intPaid,
         principal_paying_amount: prinPaid,
         notes: notes || `Installment #${nextInstallment}`,
-        paid_at: new Date().toISOString(),
+        paid_at: getNowISTISO(),
       }])
       .select()
       .single();
@@ -573,7 +574,7 @@ router.post('/:uuid/pay', async (req: Request, res: Response) => {
       any_balance: newAnyBalance,               // Store remaining interest shortfall
       payment_status: newStatus,
       receipt_json: receiptJson,
-      updated_at: new Date().toISOString(),
+      updated_at: getNowISTISO(),
     };
 
     const { data: updatedLoan } = await supabase
@@ -623,7 +624,7 @@ router.patch('/:uuid/update', async (req: Request, res: Response) => {
     'touch', 'pure_metal_weight', 'metal_value_per_gram', 'total_value_of_item',
     'item_image_url', 'interest_rate_percent', 'timeline_months', 'debt_date', 'debt_category',
   ];
-  const updateFields: any = { updated_at: new Date().toISOString() };
+  const updateFields: any = { updated_at: getNowISTISO() };
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) updateFields[key] = req.body[key];
   });

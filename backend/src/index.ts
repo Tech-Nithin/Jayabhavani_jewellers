@@ -3,6 +3,7 @@ import cors from 'cors';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import { memoryCache } from './config/memoryCache';
+import { getNowISTISO, getTodayIST, toISTDateOnly } from './utils/dateHelper';
 
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
@@ -110,7 +111,7 @@ app.get('/api/health', (req: Request, res: Response) => {
     status: 'online',
     service: 'Jaya Bhavani Jewellers Central Backend',
     modules: ['dashboard-backend', 'accounts-backend', 'billing-backend', 'finance-backend', 'inventory-backend', 'work-assignment-backend'],
-    timestamp: new Date().toISOString(),
+    timestamp: getNowISTISO(),
   });
 });
 
@@ -129,12 +130,12 @@ app.post('/api/health/purge-cache', (req: Request, res: Response) => {
 let lastScheduledRunDate = '';
 setInterval(async () => {
   try {
-    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-    const hours = nowIST.getHours();
-    const minutes = nowIST.getMinutes();
-    const todayStr = nowIST.toISOString().split('T')[0];
+    const todayStr = getTodayIST();
+    const now = new Date();
+    const istHours = Number(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }));
+    const istMinutes = Number(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', minute: 'numeric' }));
 
-    if (hours === 23 && minutes === 55 && lastScheduledRunDate !== todayStr) {
+    if (istHours === 23 && istMinutes === 55 && lastScheduledRunDate !== todayStr) {
       lastScheduledRunDate = todayStr;
       console.log(`🌙 [11:55 PM IST Scheduler] Generating EOD Closing & Tomorrow Opening Record for ${todayStr}...`);
       
@@ -142,9 +143,9 @@ setInterval(async () => {
       const closingData = await generateClosingRecord(todayStr);
       await saveClosingRecord(todayStr, closingData);
 
-      const tomorrowObj = new Date(nowIST);
+      const tomorrowObj = new Date();
       tomorrowObj.setDate(tomorrowObj.getDate() + 1);
-      const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
+      const tomorrowStr = toISTDateOnly(tomorrowObj);
 
       const goldClosing = closingData?.goldStock?.totalGrams ?? 0;
       const silverClosing = closingData?.silverStock?.totalGrams ?? 0;
@@ -157,7 +158,7 @@ setInterval(async () => {
           opening_gold: goldClosing,
           opening_silver: silverClosing,
           opening_cash: cashClosing,
-          updated_at: new Date().toISOString()
+          updated_at: getNowISTISO()
         }], { onConflict: 'record_date' });
       } catch {}
 

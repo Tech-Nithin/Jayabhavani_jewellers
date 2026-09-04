@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
-import { getTodayISTString, calculateDynamicCashBalance } from './cashLedgerHelper';
+import { calculateDynamicCashBalance } from './cashLedgerHelper';
+import { getNowISTISO, getTodayIST } from './dateHelper';
 
 /**
  * Generates a complete End-of-Day closing snapshot for a given date.
@@ -9,8 +10,8 @@ import { getTodayISTString, calculateDynamicCashBalance } from './cashLedgerHelp
  *   Gap 3 — EOD summary report (dynamic from cash_transaction_ledger)
  */
 export async function generateClosingRecord(targetDate?: string): Promise<any> {
-  const date = targetDate || getTodayISTString();
-  const dateEndOfDayISO = `${date}T23:59:59.999Z`;
+  const date = targetDate || getTodayIST();
+  const dateEndOfDayISO = `${date} 23:59:59.999`;
 
   // ─────────────────────────────────────────────────────────────
   // 1. CASH SUMMARY (100% Dynamic from cash_transaction_ledger)
@@ -358,7 +359,7 @@ export async function generateClosingRecord(targetDate?: string): Promise<any> {
   };
 
   return {
-    generated_at: new Date().toISOString(),
+    generated_at: getNowISTISO(),
     record_date: date,
     cash: cashSummary,
     showcase_stock: { items: showcaseItems, total_gold_grams: Number(totalGoldShowcase.toFixed(3)), total_silver_grams: Number(totalSilverShowcase.toFixed(3)) },
@@ -382,7 +383,7 @@ export async function saveClosingRecord(date: string, data: any): Promise<{ succ
       .upsert([{
         record_date: date,
         closing_data: data,
-        updated_at: new Date().toISOString(),
+        updated_at: getNowISTISO(),
       }], { onConflict: 'record_date' });
 
     if (error) {

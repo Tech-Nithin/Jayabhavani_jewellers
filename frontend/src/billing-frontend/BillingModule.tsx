@@ -750,11 +750,14 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           return_pure_gold: Number(primaryItem?.return_pure_gold) || (primaryItem?.return_purity_percentage ? Number((totalNetW * (Number(primaryItem.return_purity_percentage) / 100)).toFixed(3)) : 0),
           notes: primaryItem?.item_notes || (primaryItem as any)?.notes || `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
           bill_date: billDate,
-          created_at: billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString(),
+          created_at: billDate ? `${billDate} 12:00:00` : undefined,
         };
 
-        const resOrder = await fetch(`${API_BASE}/work-assignment/orders`, {
-          method: 'POST',
+        const orderUrl = editingInvoiceId ? `${API_BASE}/work-assignment/orders/${editingInvoiceId}` : `${API_BASE}/work-assignment/orders`;
+        const orderMethod = editingInvoiceId ? 'PUT' : 'POST';
+
+        const resOrder = await fetch(orderUrl, {
+          method: orderMethod,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(postBody),
         });
@@ -765,11 +768,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           printReceipt80mm('pos-realtime-receipt-card');
           setSuccessModal({
             open: true,
-            message: 'Custom Order Registered & Saved to Orders Database!',
-            invId: dataOrder.order?.id || 'ORD-SAVED',
+            message: editingInvoiceId ? 'Custom Order Updated & Saved Successfully!' : 'Custom Order Registered & Saved to Orders Database!',
+            invId: dataOrder.order?.id || editingInvoiceId || 'ORD-SAVED',
           });
+          setEditingInvoiceId(null);
         } else {
-          const errorMsg = dataOrder?.message || dataOrder?.error || 'Unknown server error creating order.';
+          const errorMsg = dataOrder?.message || dataOrder?.error || 'Unknown server error creating/updating order.';
           const detailMsg = dataOrder?.details ? `\nDetails: ${dataOrder.details}` : '';
           const hintMsg = dataOrder?.hint ? `\nHint: ${dataOrder.hint}` : '';
           alert(`⚠️ Database / Server Error:\n\n${errorMsg}${detailMsg}${hintMsg}`);

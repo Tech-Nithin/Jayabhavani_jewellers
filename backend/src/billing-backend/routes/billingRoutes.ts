@@ -2,15 +2,10 @@ import { supabase } from '../../config/supabase';
 import { memoryCache } from '../../config/memoryCache';
 import { Router, Request, Response } from 'express';
 import { activeMetalValues } from '../../metal-rates-backend/index';
+import { getNowISTISO, getTodayIST, toISTTimestamp, toISTDateOnly } from '../../utils/dateHelper';
 
 const router = Router();
 
-/**
- * JBJ Custom 3-Decimal Weight Rounding Rule:
- * Round up ONLY if the 4th decimal place is 6 or greater (> 0.5 remainder).
- * e.g., 4.4285 -> 4.428 (4th digit is 5 -> round down)
- * e.g., 4.4286 -> 4.429 (4th digit is 6 -> round up)
- */
 const round3Decimals = (val: number): number => {
   if (isNaN(val)) return 0;
   const scaled = val * 1000;
@@ -21,7 +16,6 @@ const round3Decimals = (val: number): number => {
 
 let invoicesList: any[] = [];
 
-// POST /api/billing/calculate - 100% Server-side multi-item & single-item calculation engine
 router.post('/calculate', (req: Request, res: Response) => {
   const { items, rates, mode } = req.body;
   const isOrderMode = (mode || '').toUpperCase() === 'ORDER';
@@ -510,9 +504,8 @@ router.post('/create', async (req: Request, res: Response) => {
   const dueAmt = req.body.due_amount !== undefined ? Number(req.body.due_amount) : Number(receipt_json_data?.balanceDueAmount ?? 0);
 
   const rawBillDate = req.body.bill_date || req.body.billDate || req.body.date || receipt_json_data?.bill_date || receipt_json_data?.billDate;
-  const nowTime = new Date().toISOString().split('T')[1] || '12:00:00.000Z';
-  const invoiceCreatedAt = req.body.created_at || (rawBillDate ? `${rawBillDate}T${nowTime}` : new Date().toISOString());
-  const resolvedBillDate = rawBillDate || invoiceCreatedAt.split('T')[0];
+  const invoiceCreatedAt = req.body.created_at ? toISTTimestamp(req.body.created_at) : (rawBillDate ? getNowISTISO(`${rawBillDate}T${getNowISTISO().split('T')[1]}`) : getNowISTISO());
+  const resolvedBillDate = rawBillDate || toISTDateOnly(invoiceCreatedAt);
 
   const newInvoicePayload: any = {
     customer_name: customer_name || 'Walk-in Customer',
@@ -689,7 +682,7 @@ async function deductInventoryStockOnSale(invoice: any) {
                 sold_quantity: newSold,
                 current_stock_weight: newWeight,
                 sell_count: newSellCount,
-                updated_at: new Date().toISOString(),
+                updated_at: getNowISTISO(),
               })
               .eq('id', prod.id);
 
@@ -702,7 +695,7 @@ async function deductInventoryStockOnSale(invoice: any) {
               previous_stock: currentStock,
               new_stock: newStock,
               notes: `Sold in ${invoice.transaction_type || 'SELL'} Invoice #${invoice.id} to ${invoice.customer_name || 'Customer'}`,
-              created_at: new Date().toISOString(),
+              created_at: getNowISTISO(),
             }]);
           }
         }
@@ -721,7 +714,7 @@ async function deductInventoryStockOnSale(invoice: any) {
               previous_stock: 0,
               new_stock: 0,
               notes: `Scrap ${cleanMetal} received in ${invoice.transaction_type || 'BUY'} Invoice #${invoice.id} from ${invoice.customer_name || 'Customer'}`,
-              created_at: new Date().toISOString(),
+              created_at: getNowISTISO(),
             }]);
           } catch (logErr) {
             console.warn('⚠️ Scrap purchase stock log error:', logErr);
@@ -841,7 +834,7 @@ router.put('/update/:id', async (req: Request, res: Response) => {
   }
 
   const existingInv = invoicesList.find((i) => String(i.id) === String(id));
-  const createdAt = existingInv?.created_at || new Date().toISOString();
+  const createdAt = existingInv?.created_at ? toISTTimestamp(existingInv.created_at) : getNowISTISO();
 
   let final_weight = Number(weight_grams) || 0;
   let final_product_name = product_name || 'Jewellery Item';
@@ -949,8 +942,8 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     final_amount_val = Number((subtotal + gst_amount).toFixed(2));
   }
 
-  const nowIso = new Date().toISOString();
-  const todayISTStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const nowIso = getNowISTISO();
+  const todayISTStr = getTodayIST();
   const rawBillDate = req.body.bill_date || req.body.billDate || req.body.date || receipt_json_data?.bill_date || receipt_json_data?.billDate;
   const resolvedBillDate = rawBillDate ? String(rawBillDate).trim() : (createdAt ? createdAt.split('T')[0] : todayISTStr);
 
@@ -1090,7 +1083,7 @@ router.put('/update/:id', async (req: Request, res: Response) => {
         weight_grams: Number(it.weight_grams || it.gross_weight_grams || 0),
         amount: Number(it.lineTotal || it.line_total || it.metalVal || 0),
         purity_percentage: Number(it.purity_percentage) || 100,
-        created_at: updatedInvoice.created_at || new Date().toISOString(),
+        created_at: updatedInvoice.created_at ? toISTTimestamp(updatedInvoice.created_at) : getNowISTISO(),
       }));
       await supabase.from('customer_metal_transactions').insert(metalRecords);
     }
@@ -1188,7 +1181,7 @@ router.put('/invoices/:id/settlement', async (req: Request, res: Response) => {
       notes: note,
       bill_date: resolvedDate,
       payment_date: resolvedDate,
-      custom_paid_at: custom_paid_at ? (String(custom_paid_at).includes('T') ? String(custom_paid_at) : new Date(custom_paid_at).toISOString()) : undefined,
+      custom_paid_at: custom_paid_at ? (String(custom_paid_at).includes('T') ? String(custom_paid_at) : toISTTimestamp(custom_paid_at)) : undefined,
     });
 
     if (!result.success) {
@@ -1210,26 +1203,19 @@ router.put('/invoices/:id/settlement', async (req: Request, res: Response) => {
   }
 });
 
-// Helper: Checks if a date/timestamp matches date filter (all, single date, or date range)
+// Helper: Checks if a date/timestamp matches date filter (all, single date, or date range) without timezone conversions
 function matchesDateFilterIST(created_at: any, targetDate: string, startDate?: string, endDate?: string): boolean {
   if (targetDate === 'all' || targetDate === 'ALL') return true;
   if (!created_at) return false;
 
-  let istDateStr = '';
   const rawStr = String(created_at).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(rawStr)) {
-    istDateStr = rawStr;
-  } else {
-    const dateObj = new Date(created_at);
-    if (isNaN(dateObj.getTime())) return false;
-    istDateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const datePart = rawStr.includes('T') ? rawStr.split('T')[0] : rawStr.split(' ')[0];
+
+  if ((targetDate === 'range' || (startDate && endDate)) && startDate && endDate) {
+    return datePart >= startDate && datePart <= endDate;
   }
 
-  if (startDate && endDate) {
-    return istDateStr >= startDate && istDateStr <= endDate;
-  }
-
-  return istDateStr === targetDate;
+  return datePart === targetDate;
 }
 
 // PUT /api/billing/invoices/:id — Edit Master Invoice details
@@ -1250,7 +1236,7 @@ router.put('/invoices/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: `Invoice #${id} not found` });
     }
 
-    const updateFields: any = { updated_at: new Date().toISOString() };
+    const updateFields: any = { updated_at: getNowISTISO() };
     if (customer_name !== undefined) updateFields.customer_name = customer_name;
     if (customer_phone !== undefined) updateFields.customer_phone = customer_phone;
     if (customer_address !== undefined) updateFields.customer_address = customer_address;
@@ -1286,7 +1272,7 @@ router.put('/invoices/:id', async (req: Request, res: Response) => {
       .update({
         customer_name: updateFields.customer_name,
         bill_date: updateFields.bill_date,
-        updated_at: new Date().toISOString(),
+        updated_at: getNowISTISO(),
       })
       .eq('customer_billing_uuid', billRow.customer_billing_uuid);
 

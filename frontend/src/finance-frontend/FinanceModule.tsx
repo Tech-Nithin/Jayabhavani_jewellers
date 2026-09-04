@@ -401,10 +401,10 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
       String(rec.item_total_value || '').includes(term) ||
       String(rec.debt_date || rec.loan_date || '').toLowerCase().includes(term);
 
-    const loanDateStr = rec.debt_date || rec.loan_date || '';
-    const d = loanDateStr ? new Date(loanDateStr) : new Date();
-    if (startDate && d < new Date(startDate)) return false;
-    if (endDate && d > new Date(endDate)) return false;
+    const rawLoanDate = String(rec.debt_date || rec.loan_date || '').trim();
+    const loanDateStr = rawLoanDate.includes('T') ? rawLoanDate.split('T')[0] : rawLoanDate.split(' ')[0];
+    if (startDate && loanDateStr && loanDateStr < startDate) return false;
+    if (endDate && loanDateStr && loanDateStr > endDate) return false;
     return match;
   });
 

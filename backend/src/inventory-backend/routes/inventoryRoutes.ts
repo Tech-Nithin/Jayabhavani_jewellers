@@ -3,6 +3,7 @@ import multer from 'multer';
 import { supabase } from '../../config/supabase';
 import { uploadToCloudinaryAsWebP, uploadToCloudinaryFile } from '../../utils/cloudinaryHelper';
 import { memoryCache } from '../../config/memoryCache';
+import { getNowISTISO, getTodayIST } from '../../utils/dateHelper';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -206,6 +207,8 @@ router.post('/products', async (req: Request, res: Response) => {
       sell_count: 0,
       img: cloudinaryWebpUrl,
       price: Number(price || 0),
+      created_at: getNowISTISO(),
+      updated_at: getNowISTISO(),
     };
 
     try {
@@ -234,7 +237,7 @@ router.post('/products', async (req: Request, res: Response) => {
 
             // Update today's opening_records table with loaded stock
             const { updateOpeningOnLoad } = await import('../../utils/openingRecordHelper');
-            const todayStr = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })).toISOString().split('T')[0];
+            const todayStr = getTodayIST();
             const isSilver = (item_type || 'GOLD').toUpperCase().includes('SILVER');
             await updateOpeningOnLoad(todayStr, {
               goldGrams: isSilver ? 0 : finalTotalWeight,
@@ -694,7 +697,7 @@ router.get('/cash/transactions/:cash_history_uuid', async (req: Request, res: Re
 router.get('/historical-stock', async (req: Request, res: Response) => {
   try {
     const { date } = req.query;
-    const targetDate = typeof date === 'string' && date ? date : new Date().toISOString().split('T')[0];
+    const targetDate = typeof date === 'string' && date ? date : getTodayIST();
     const { getHistoricalInventoryStock } = await import('../../utils/inventoryLedgerHelper');
     const result = await getHistoricalInventoryStock(targetDate);
     res.json({ success: true, ...result });

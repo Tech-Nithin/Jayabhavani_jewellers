@@ -2,29 +2,24 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { calculateDynamicCashBalance } from '../../utils/cashLedgerHelper';
 import { getOrInitOpeningRecord } from '../../utils/openingRecordHelper';
+import { getTodayIST, getNowISTISO, toISTTimestamp, toISTDateOnly } from '../../utils/dateHelper';
+import { getHistoricalInventoryStock } from '../../utils/inventoryLedgerHelper';
 
 const router = Router();
 
-// Helper: Checks if a date/timestamp matches date filter (all, single date, or date range) in IST
+// Helper: Checks if a date/timestamp matches date filter (all, single date, or date range) without timezone conversion
 export function matchesDateFilterIST(created_at: any, targetDate: string, startDate?: string, endDate?: string): boolean {
   if (targetDate === 'all' || targetDate === 'ALL') return true;
   if (!created_at) return false;
 
-  let istDateStr = '';
   const rawStr = String(created_at).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(rawStr)) {
-    istDateStr = rawStr;
-  } else {
-    const dateObj = new Date(created_at);
-    if (isNaN(dateObj.getTime())) return false;
-    istDateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const datePart = rawStr.includes('T') ? rawStr.split('T')[0] : rawStr.split(' ')[0];
+
+  if ((targetDate === 'range' || (startDate && endDate)) && startDate && endDate) {
+    return datePart >= startDate && datePart <= endDate;
   }
 
-  if (startDate && endDate) {
-    return istDateStr >= startDate && istDateStr <= endDate;
-  }
-
-  return istDateStr === targetDate;
+  return datePart === targetDate;
 }
 
 export function round3Decimals(num: number): number {
@@ -78,7 +73,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   try {
-    const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const todayIST = getTodayIST();
     const targetDate = (req.query.date as string) || todayIST;
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
@@ -191,7 +186,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       logBookTimeline.push({
         id: `log-fin-${fl.finance_uuid || fl.id || Math.random()}`,
         time: formattedTime,
-        created_at: fl.created_at || fl.debt_date || fl.loan_date || new Date().toISOString(),
+        created_at: fl.created_at || fl.debt_date || fl.loan_date || getNowISTISO(),
         type: 'FINANCE',
         title: fullName || 'Finance Customer',
         details: `Gold Loan Finance · ${fl.item_name || 'Gold Item'} (${wt}g)`,
@@ -233,7 +228,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       logBookTimeline.push({
         id: `log-worker-${tx.id || Math.random()}`,
         time: formattedTime,
-        created_at: tx.created_at || new Date().toISOString(),
+        created_at: tx.created_at || getNowISTISO(),
         type: isWorkAssign ? 'WORK ASSIGN' : 'WORKER TX',
         title: directionTitle,
         details: details,
@@ -265,7 +260,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
           logBookTimeline.push({
             id: `log-fin-repay-${tx.id || tx.uuid || tx.cash_history_uuid || Math.random()}`,
             time: formattedTime,
-            created_at: tx.created_at || new Date().toISOString(),
+            created_at: tx.created_at || getNowISTISO(),
             type: 'FINANCE_REPAYMENT',
             title: tx.notes ? (tx.notes.includes('from ') ? tx.notes.split('from ')?.[1] : tx.notes) : 'Finance Payment',
             details: `💰 Finance Repayment · ${tx.item_type || 'Loan Payment'}: ${tx.notes || ''}`,
@@ -287,7 +282,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       logBookTimeline.push({
         id: `log-cash-${tx.cash_history_uuid || tx.id || Math.random()}`,
         time: formattedTime,
-        created_at: tx.created_at || new Date().toISOString(),
+        created_at: tx.created_at || getNowISTISO(),
         type: 'CASH_REGISTER',
         title: type === 'LOADING' ? 'Cash Loaded to Drawer' : (tx.notes || 'Cash Entry'),
         details: `${isFlowIn ? '💵 Cash IN (Loaded to Drawer)' : '💸 Cash OUT'} · Amount: ₹${amt.toLocaleString('en-IN')}${tx.notes ? ` (${tx.notes})` : ''}`,
@@ -435,6 +430,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
         id: `log-inv-${inv.id}`,
         time: formattedTime,
         created_at: effectiveCreatedAt,
+        bill_date: inv.bill_date || inv.receipt_json_data?.bill_date || (inv.created_at ? String(inv.created_at).split('T')[0] : null),
         type: jsonMode === 'TRADE_IN' ? 'EXCHANGE' : jsonMode,
         title: inv.customer_name || 'Walk-in Customer',
         details: detailsText,
@@ -485,7 +481,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       logBookTimeline.push({
         id: `log-pay-${p.id || p.customer_billing_uuid || Math.random()}-${p.installment_number}`,
         time: formattedTime,
-        created_at: p.created_at || (p.bill_date ? `${p.bill_date}T12:00:00.000Z` : new Date().toISOString()),
+        created_at: p.created_at || (p.bill_date ? toISTTimestamp(p.bill_date) : getNowISTISO()),
         bill_date: pDate ? String(pDate).split('T')[0] : targetDate,
         type: 'SETTLEMENT',
         title: custName,
@@ -533,19 +529,43 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
     // Dynamic cash & opening balances
     const { totalCash: liveClosingCash } = await calculateDynamicCashBalance(targetDate === 'all' ? undefined : targetDate);
     let openingCash = liveClosingCash;
+    let openingGold = 0;
+    let openingSilver = 0;
+
     if (targetDate !== 'all') {
       const yesterdayObj = new Date(`${targetDate}T12:00:00Z`);
       yesterdayObj.setDate(yesterdayObj.getDate() - 1);
-      const yesterdayStr = yesterdayObj.toISOString().split('T')[0];
+      const yesterdayStr = toISTDateOnly(yesterdayObj);
       const { totalCash: prevDayCash } = await calculateDynamicCashBalance(yesterdayStr);
       openingCash = prevDayCash;
+
+      try {
+        const { goldStockGrams, silverStockGrams } = await getHistoricalInventoryStock(yesterdayStr);
+        openingGold = goldStockGrams;
+        openingSilver = silverStockGrams;
+      } catch (e) {
+        console.warn('⚠️ Error fetching historical inventory stock for opening:', e);
+      }
     }
 
     const openingRecord = await getOrInitOpeningRecord(
       targetDate,
-      { goldGrams: 0, silverGrams: 0, cashAmount: Number(openingCash.toFixed(2)) },
+      { goldGrams: openingGold, silverGrams: openingSilver, cashAmount: Number(openingCash.toFixed(2)) },
       { goldGrams: 0, silverGrams: 0 }
     );
+
+    const dayBookStockSummary = [
+      {
+        category: 'Gold Showcase Stock',
+        openingWeight: Number(openingRecord.openingGoldGrams.toFixed(3)),
+        loadedWeight: Number(openingRecord.loadedGoldGrams.toFixed(3)),
+      },
+      {
+        category: 'Silver Showcase Stock',
+        openingWeight: Number(openingRecord.openingSilverGrams.toFixed(3)),
+        loadedWeight: Number(openingRecord.loadedSilverGrams.toFixed(3)),
+      },
+    ];
 
     const cashSummary = {
       openingCash: Number(openingRecord.openingCashAmount.toFixed(2)),
@@ -582,6 +602,8 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       oldMetalVaultItems,
       udhaariSummary,
       cashLedgerRecords: cashLedgerToday || [],
+      dayBookStockSummary,
+      openingRecord,
     });
   } catch (err: any) {
     console.error('Error fetching day book logbook:', err);

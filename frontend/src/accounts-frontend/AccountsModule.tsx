@@ -233,15 +233,36 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
     }
   };
 
-  const formatISTDateTime = (dateStr?: string, fallbackTime?: string) => {
-    if (!dateStr) return fallbackTime || '';
+  const formatISTDateTime = (dateStr?: string, fallbackTime?: string, billDateStr?: string) => {
+    const rawDate = billDateStr || dateStr;
+    if (!rawDate && !fallbackTime) return '';
     try {
-      const d = new Date(dateStr);
-      const datePart = d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
-      const timePart = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
-      return `${datePart} ${timePart}`;
+      let datePart = '';
+      if (billDateStr) {
+        const cleanBDate = String(billDateStr).split('T')[0];
+        const parts = cleanBDate.split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+          datePart = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        } else {
+          const bd = new Date(`${cleanBDate}T12:00:00`);
+          datePart = bd.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+        }
+      } else if (dateStr) {
+        const d = new Date(dateStr);
+        datePart = d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      }
+
+      let timePart = '';
+      if (dateStr && dateStr.includes('T')) {
+        const d = new Date(dateStr);
+        timePart = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+      } else if (fallbackTime) {
+        timePart = fallbackTime;
+      }
+
+      return timePart ? `${datePart} ${timePart}` : datePart;
     } catch {
-      return fallbackTime || '';
+      return fallbackTime || dateStr || '';
     }
   };
 
@@ -337,23 +358,48 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
     logBookTimeline.forEach((item: any) => {
       const inv = item.raw_invoice;
       const type = (item.type || '').toUpperCase();
+      const isDeliveredOrder = type === 'ORDER' && (item.submitted === 'yes' || item.stock_debited === true);
 
-      const buyRecs = inv?.receipt_json_data?.buy_records || inv?.receipt_json_data?.old_metal || [];
+      // 1. Scrap / Buy Intake Records (BUY, TRADE-IN BUY, ORDER SCRAP)
+      const buyRecs: any[] = inv?.receipt_json_data?.buy_records
+        || inv?.receipt_json_data?.old_metal
+        || (type === 'BUY' ? (inv?.receipt_json_data?.items || []) : []);
+
+      let hasBuyRecs = false;
       buyRecs.forEach((br: any) => {
-        const metal = (br.metal_type || 'GOLD').toUpperCase();
-        const wt = Number(br.weight_grams || br.item_weight || 0);
+        hasBuyRecs = true;
+        const metal = (br.metal_type || inv?.metal_type || 'GOLD').toUpperCase();
+        const wt = Number(br.weight_grams || br.item_weight || br.gross_weight_grams || 0);
         if (metal.includes('SILVER')) localSilverBought += wt;
         else localGoldBought += wt;
       });
 
-      if (type === 'SELL' || type === 'EXCHANGE') {
-        const sellRecs = inv?.receipt_json_data?.items || inv?.receipt_json_data?.line_items || [];
+      if (!hasBuyRecs && type === 'BUY') {
+        const wt = Number(item.weight_grams || inv?.weight_grams || 0);
+        const metal = (item.category || inv?.metal_type || 'GOLD').toUpperCase();
+        if (metal.includes('SILVER')) localSilverBought += wt;
+        else localGoldBought += wt;
+      }
+
+      // 2. Sales / Outflow Records (SELL, EXCHANGE SELL, DELIVERED ORDERS)
+      if (type === 'SELL' || type === 'EXCHANGE' || isDeliveredOrder) {
+        const sellRecs: any[] = inv?.receipt_json_data?.items || inv?.receipt_json_data?.line_items || [];
+        let hasSellRecs = false;
         sellRecs.forEach((sr: any) => {
-          const metal = (sr.metal_type || 'GOLD').toUpperCase();
-          const wt = Number(sr.weight_grams || sr.item_weight || 0);
+          if (sr.item_type === 'BUY' || sr.item_type === 'EXCHANGE_BUY') return; // Skip trade-in scrap items in sellRecs
+          hasSellRecs = true;
+          const metal = (sr.metal_type || inv?.metal_type || 'GOLD').toUpperCase();
+          const wt = Number(sr.weight_grams || sr.item_weight || sr.gross_weight_grams || 0);
           if (metal.includes('SILVER')) localSilverSold += wt;
           else localGoldSold += wt;
         });
+
+        if (!hasSellRecs) {
+          const wt = Number(item.weight_grams || inv?.weight_grams || 0);
+          const metal = (item.category || inv?.metal_type || 'GOLD').toUpperCase();
+          if (metal.includes('SILVER')) localSilverSold += wt;
+          else localGoldSold += wt;
+        }
       }
     });
 

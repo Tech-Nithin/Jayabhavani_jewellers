@@ -1,19 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { memoryCache } from '../../config/memoryCache';
+import { getNowISTISO } from '../../utils/dateHelper';
 
 const router = Router();
 
 // In-Memory Fallback State (matching updated_metal_values table)
 let activeMetalValues = {
   gold_buy_value: 14200.00,
-  gold_buy_value_updated_at: new Date().toISOString(),
+  gold_buy_value_updated_at: getNowISTISO(),
   gold_sell_value: 14700.00,
-  gold_sell_value_updated_at: new Date().toISOString(),
+  gold_sell_value_updated_at: getNowISTISO(),
   silver_buy_value: 250.00,
-  silver_buy_value_updated_at: new Date().toISOString(),
+  silver_buy_value_updated_at: getNowISTISO(),
   silver_sell_value: 270.00,
-  silver_sell_value_updated_at: new Date().toISOString(),
+  silver_sell_value_updated_at: getNowISTISO(),
 };
 
 interface HistoryEntry {
@@ -26,10 +27,10 @@ interface HistoryEntry {
 }
 
 let metalHistoryRates: HistoryEntry[] = [
-  { id: 1, metal_type: 'GOLD', rate_type: 'BUY', old_value: null, new_value: 14200.00, updated_at: new Date().toISOString() },
-  { id: 2, metal_type: 'GOLD', rate_type: 'SELL', old_value: null, new_value: 14700.00, updated_at: new Date().toISOString() },
-  { id: 3, metal_type: 'SILVER', rate_type: 'BUY', old_value: null, new_value: 250.00, updated_at: new Date().toISOString() },
-  { id: 4, metal_type: 'SILVER', rate_type: 'SELL', old_value: null, new_value: 270.00, updated_at: new Date().toISOString() },
+  { id: 1, metal_type: 'GOLD', rate_type: 'BUY', old_value: null, new_value: 14200.00, updated_at: getNowISTISO() },
+  { id: 2, metal_type: 'GOLD', rate_type: 'SELL', old_value: null, new_value: 14700.00, updated_at: getNowISTISO() },
+  { id: 3, metal_type: 'SILVER', rate_type: 'BUY', old_value: null, new_value: 250.00, updated_at: getNowISTISO() },
+  { id: 4, metal_type: 'SILVER', rate_type: 'SELL', old_value: null, new_value: 270.00, updated_at: getNowISTISO() },
 ];
 
 /**
@@ -56,13 +57,13 @@ router.get('/', async (req: Request, res: Response) => {
     if (!error && data) {
       activeMetalValues = {
         gold_buy_value: Number(data.gold_buy_value),
-        gold_buy_value_updated_at: data.gold_buy_value_updated_at || new Date().toISOString(),
+        gold_buy_value_updated_at: data.gold_buy_value_updated_at || getNowISTISO(),
         gold_sell_value: Number(data.gold_sell_value),
-        gold_sell_value_updated_at: data.gold_sell_value_updated_at || new Date().toISOString(),
+        gold_sell_value_updated_at: data.gold_sell_value_updated_at || getNowISTISO(),
         silver_buy_value: Number(data.silver_buy_value),
-        silver_buy_value_updated_at: data.silver_buy_value_updated_at || new Date().toISOString(),
+        silver_buy_value_updated_at: data.silver_buy_value_updated_at || getNowISTISO(),
         silver_sell_value: Number(data.silver_sell_value),
-        silver_sell_value_updated_at: data.silver_sell_value_updated_at || new Date().toISOString(),
+        silver_sell_value_updated_at: data.silver_sell_value_updated_at || getNowISTISO(),
       };
       memoryCache.set('metal_rates', activeMetalValues, 86400);
     }
@@ -87,13 +88,13 @@ router.get('/rates', async (req: Request, res: Response) => {
     if (data) {
       activeMetalValues = {
         gold_buy_value: Number(data.gold_buy_value),
-        gold_buy_value_updated_at: data.gold_buy_value_updated_at || new Date().toISOString(),
+        gold_buy_value_updated_at: data.gold_buy_value_updated_at || getNowISTISO(),
         gold_sell_value: Number(data.gold_sell_value),
-        gold_sell_value_updated_at: data.gold_sell_value_updated_at || new Date().toISOString(),
+        gold_sell_value_updated_at: data.gold_sell_value_updated_at || getNowISTISO(),
         silver_buy_value: Number(data.silver_buy_value),
-        silver_buy_value_updated_at: data.silver_buy_value_updated_at || new Date().toISOString(),
+        silver_buy_value_updated_at: data.silver_buy_value_updated_at || getNowISTISO(),
         silver_sell_value: Number(data.silver_sell_value),
-        silver_sell_value_updated_at: data.silver_sell_value_updated_at || new Date().toISOString(),
+        silver_sell_value_updated_at: data.silver_sell_value_updated_at || getNowISTISO(),
       };
       memoryCache.set('metal_rates', activeMetalValues, 86400);
     }
@@ -160,7 +161,7 @@ router.post('/rates', handleUpdateRates);
 
 async function handleUpdateRates(req: Request, res: Response) {
   const { gold_buy_value, gold_sell_value, silver_buy_value, silver_sell_value } = req.body;
-  const nowISO = new Date().toISOString();
+  const nowISO = getNowISTISO();
   const updates: any = {};
   const historyEntriesToInsert: any[] = [];
 

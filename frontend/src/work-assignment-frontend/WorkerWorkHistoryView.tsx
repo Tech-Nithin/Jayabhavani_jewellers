@@ -315,19 +315,12 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
     if (statusFilter === 'PENDING' && ord.order_status === 'COMPLETED') return false;
     if (statusFilter === 'COMPLETED' && ord.order_status !== 'COMPLETED') return false;
 
-    // 3. Date Range Filter
+    // 3. Date Range Filter (Direct selected date matching)
     if (startDate || endDate) {
-      const ordDate = new Date(ord.created_at || Date.now());
-      if (startDate) {
-        const s = new Date(startDate);
-        s.setHours(0, 0, 0, 0);
-        if (ordDate < s) return false;
-      }
-      if (endDate) {
-        const e = new Date(endDate);
-        e.setHours(23, 59, 59, 999);
-        if (ordDate > e) return false;
-      }
+      const rawDate = String(ord.created_at || '').trim();
+      const ordDateStr = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate.split(' ')[0];
+      if (startDate && ordDateStr && ordDateStr < startDate) return false;
+      if (endDate && ordDateStr && ordDateStr > endDate) return false;
     }
 
     // 4. Search Term Filter

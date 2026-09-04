@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
 import { getClosingRecord } from './closingRecordHelper';
+import { getNowISTISO, toISTDateOnly } from './dateHelper';
 
 export interface DailyOpeningData {
   recordDate: string;
@@ -32,7 +33,31 @@ export async function getOrInitOpeningRecord(
       };
     }
 
-    // 1. Try reading from daily_opening_records table
+    // 1. Fetch yesterday's closing data and fallback calculations
+    const prevDateObj = new Date(`${dateStr}T12:00:00Z`);
+    prevDateObj.setDate(prevDateObj.getDate() - 1);
+    const prevDateStr = toISTDateOnly(prevDateObj);
+
+    const prevClosingRecord = await getClosingRecord(prevDateStr);
+    const prevGold = Number(
+      prevClosingRecord?.closing_data?.metal_position?.gold?.total_gold_grams
+      ?? prevClosingRecord?.closing_data?.showcase_stock?.total_gold_grams
+      ?? fallbackStock.goldGrams
+      ?? 0
+    );
+    const prevSilver = Number(
+      prevClosingRecord?.closing_data?.metal_position?.silver?.total_silver_grams
+      ?? prevClosingRecord?.closing_data?.showcase_stock?.total_silver_grams
+      ?? fallbackStock.silverGrams
+      ?? 0
+    );
+    const prevCash = Number(
+      prevClosingRecord?.closing_data?.cash?.cash_in_drawer
+      ?? fallbackStock.cashAmount
+      ?? 0
+    );
+
+    // 2. Try reading from daily_opening_records table
     const { data: existing } = await supabase
       .from('daily_opening_records')
       .select('*')
@@ -44,28 +69,23 @@ export async function getOrInitOpeningRecord(
       let silver = Number(existing.opening_silver ?? existing.opening_silver_grams ?? 0);
       let cash = Number(existing.opening_cash ?? existing.opening_cash_amount ?? 0);
 
+      // If existing DB row has 0, but dynamic calculation or yesterday's closing had non-zero, carry it forward
+      if (gold === 0 && prevGold > 0) gold = prevGold;
+      if (silver === 0 && prevSilver > 0) silver = prevSilver;
+      if (cash === 0 && prevCash !== 0) cash = prevCash;
+
       return {
         recordDate: dateStr,
-        openingGoldGrams: gold,
-        openingSilverGrams: silver,
-        openingCashAmount: cash,
-        loadedGoldGrams: Number(existing.loaded_gold_grams || 0),
-        loadedSilverGrams: Number(existing.loaded_silver_grams || 0),
+        openingGoldGrams: Number(gold.toFixed(3)),
+        openingSilverGrams: Number(silver.toFixed(3)),
+        openingCashAmount: Number(cash.toFixed(2)),
+        loadedGoldGrams: Number(existing.loaded_gold_grams || loadedToday.goldGrams || 0),
+        loadedSilverGrams: Number(existing.loaded_silver_grams || loadedToday.silverGrams || 0),
       };
     }
 
-    // 2. Otherwise calculate read-only fallback values WITHOUT inserting into daily_opening_records
-    const prevDateObj = new Date(dateStr);
-    prevDateObj.setDate(prevDateObj.getDate() - 1);
-    const prevDateStr = prevDateObj.toISOString().split('T')[0];
-
-    const prevClosingRecord = await getClosingRecord(prevDateStr);
-    const prevGold = prevClosingRecord?.closing_data?.goldStock?.totalGrams ?? fallbackStock.goldGrams;
-    const prevSilver = prevClosingRecord?.closing_data?.silverStock?.totalGrams ?? fallbackStock.silverGrams;
-    const prevCash = prevClosingRecord?.closing_data?.cashInHand ?? fallbackStock.cashAmount;
-
-    const openingGoldGrams = Number((prevGold + loadedToday.goldGrams).toFixed(3));
-    const openingSilverGrams = Number((prevSilver + loadedToday.silverGrams).toFixed(3));
+    const openingGoldGrams = Number((prevGold + (loadedToday.goldGrams || 0)).toFixed(3));
+    const openingSilverGrams = Number((prevSilver + (loadedToday.silverGrams || 0)).toFixed(3));
     const openingCashAmount = Number(prevCash.toFixed(2));
 
     return {
@@ -73,8 +93,8 @@ export async function getOrInitOpeningRecord(
       openingGoldGrams,
       openingSilverGrams,
       openingCashAmount,
-      loadedGoldGrams: loadedToday.goldGrams,
-      loadedSilverGrams: loadedToday.silverGrams,
+      loadedGoldGrams: loadedToday.goldGrams || 0,
+      loadedSilverGrams: loadedToday.silverGrams || 0,
     };
   } catch (err: any) {
     console.warn(`⚠️ Error in getOrInitOpeningRecord for ${dateStr}:`, err?.message);
@@ -115,7 +135,7 @@ export async function updateOpeningOnLoad(
           opening_gold: newGold,
           opening_silver: newSilver,
           opening_cash: newCash,
-          updated_at: new Date().toISOString(),
+          updated_at: getNowISTISO(),
         }], { onConflict: 'record_date' });
 
       console.log(`✨ [Opening Record Updated for ${dateStr}]: Gold ${existing.openingGoldGrams}g + ${load.goldGrams || 0}g -> ${newGold}g, Cash ₹${existing.openingCashAmount} + ₹${load.cashAmount || 0} -> ₹${newCash}`);

@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase';
-import { getTodayISTString, getISTTimestamp } from './cashLedgerHelper';
+import { getTodayIST, getNowISTISO, toISTTimestamp } from './dateHelper';
 
 export interface InventoryMovementParams {
   itemId: string;
@@ -24,8 +24,8 @@ export async function recordInventoryMovement(params: InventoryMovementParams): 
   error?: string;
 }> {
   try {
-    const todayStr = params.date || getTodayISTString();
-    const recordTimestamp = getISTTimestamp(params.date);
+    const todayStr = params.date || getTodayIST();
+    const recordTimestamp = params.date ? toISTTimestamp(params.date) : getNowISTISO();
     const delta = Number(params.weightDeltaGrams) || 0;
 
     if (delta === 0) {
