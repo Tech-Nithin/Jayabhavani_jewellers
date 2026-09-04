@@ -1468,8 +1468,22 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         onConfirm={async () => {
           if (deleteConfirmRecord) {
             const targetId = deleteConfirmRecord.finance_uuid || deleteConfirmRecord.id || '';
-            await handleRecordAction(targetId, 'deleted');
-            setDeleteConfirmRecord(null);
+            setActionUpdating(targetId);
+            try {
+              const res = await fetch(`${API_BASE}/finance/${targetId}`, { method: 'DELETE' });
+              const data = await res.json();
+              if (data.success) {
+                setLedger((prev) => prev.filter((r) => (r.finance_uuid || r.id) !== targetId));
+                fetchData();
+              } else {
+                alert('Failed to delete loan: ' + (data.message || 'Unknown error'));
+              }
+            } catch (err: any) {
+              alert('Error deleting loan: ' + err.message);
+            } finally {
+              setActionUpdating(null);
+              setDeleteConfirmRecord(null);
+            }
           }
         }}
         submitting={actionUpdating !== null}

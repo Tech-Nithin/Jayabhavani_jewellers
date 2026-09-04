@@ -150,7 +150,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
     if (isFetchingRef.current && !force) return;
     try {
       setLoading(true);
-      let queryUrl = `${API_BASE}/billing/accounts/day-book?section=all`;
+      let queryUrl = `${API_BASE}/accounts/day-book?section=all`;
       if (dateFilterMode === 'ALL') {
         queryUrl += `&date=all`;
       } else if (dateFilterMode === 'CUSTOM' && startDate && endDate) {
@@ -282,8 +282,20 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
       if (type === 'WORKER TX' || type === 'WORK ASSIGN' || type === 'KARIGAR') {
         const cat = (item.category || '').toUpperCase();
         const details = (item.details || '').toUpperCase();
-        const isGiven = details.includes('GIVEN TO WORKER') || details.includes('ISSUE');
+        const direction = (item.direction || '').toUpperCase();
+        const title = (item.title || '').toUpperCase();
+
+        const isGiven =
+          direction === 'ADMIN_TO_WORKER' ||
+          details.includes('GIVEN') ||
+          details.includes('ISSUE') ||
+          details.includes('OUTGOING') ||
+          title.includes('ADMIN →') ||
+          title.includes('ADMIN->') ||
+          details.includes('↑');
+
         const wt = Number(item.weight_grams || 0);
+        const cashAmt = Number(item.paid_amount || item.amount || 0);
 
         if (cat.includes('GOLD')) {
           if (isGiven) goldGivenToWorker += wt;
@@ -292,12 +304,12 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
           if (isGiven) silverGivenToWorker += wt;
           else silverTakenFromWorker += wt;
         } else if (cat.includes('CASH')) {
-          if (isGiven) cashGivenToWorker += paid;
-          else cashTakenFromWorker += paid;
+          if (isGiven) cashGivenToWorker += cashAmt;
+          else cashTakenFromWorker += cashAmt;
         }
-      } else if (type === 'FINANCE') {
+      } else if (type === 'FINANCE' || type === 'FINANCE_REPAYMENT') {
         const flow = (item.flow_type || '').toUpperCase();
-        if (flow === 'OUT' || amount > 0) {
+        if (flow === 'OUT' || (type === 'FINANCE' && amount > 0 && flow !== 'IN')) {
           totalFinanceIssued += amount;
           cashGivenToFinance += amount;
           financeTakenCount++;
@@ -307,7 +319,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
         }
       } else if (type === 'BUY') {
         cashGivenToCustomer += paid;
-      } else if (type === 'SELL' || type === 'ORDER' || type === 'EXCHANGE') {
+      } else if (type === 'SELL' || type === 'ORDER' || type === 'EXCHANGE' || type === 'SETTLEMENT' || type === 'DUE PAYMENT' || type === 'INSTALLMENT' || type === 'DUE_PAYMENT') {
         if (paid > 0) {
           cashGotFromCustomer += paid;
           totalCashCollected += paid;
@@ -395,8 +407,8 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
       silverIn: overallMetalPuritySummary?.silver?.boughtGross || 0,
       silverOut: overallMetalPuritySummary?.silver?.soldGross || 0,
       silverWtAdded: 0,
-      cashIn: Math.round(cashGotFromCustomer + cashGotFromFinance),
-      cashOut: Math.round(cashGivenToCustomer + cashGivenToFinance),
+      cashIn: Math.round(cashGotFromCustomer + cashGotFromFinance + cashTakenFromWorker),
+      cashOut: Math.round(cashGivenToCustomer + cashGivenToFinance + cashGivenToWorker),
       cashGotFromCustomer: Math.round(cashGotFromCustomer),
       cashGivenToCustomer: Math.round(cashGivenToCustomer),
       cashGotFromFinance: Math.round(cashGotFromFinance),

@@ -4,6 +4,7 @@ import { recordCashTransaction, getTodayISTString } from './cashLedgerHelper';
 export interface BillingStorageInput {
   billing_id: string;
   bill_type: 'SELL' | 'BUY' | 'ORDER' | 'EXCHANGE' | 'TRADE_IN' | string;
+  bill_date?: string;
   customer_name?: string;
   customer_phone?: string;
   customer_address?: string;
@@ -90,12 +91,14 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         : (paidAmount > 0 ? 'PARTIAL' : 'DUE')
     );
 
-    const createdAt = input.created_at || new Date().toISOString();
+    const billDate = String(input.bill_date || receiptData.bill_date || receiptData.billDate || input.created_at?.split('T')[0] || getTodayISTString()).trim();
+    const createdAt = input.created_at || (billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString());
 
     // 1. MASTER TABLE: customer_billing (Upsert by billing_id)
     const masterPayload = {
       billing_id: billingId,
       bill_type: cleanBillType,
+      bill_date: billDate,
       customer_name: customerName,
       customer_phone: customerPhone || null,
       customer_address: customerAddress || null,
@@ -186,6 +189,7 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
           customer_billing_uuid: customerBillingUuid,
           billing_mode: resolvedBillingMode,
           transaction_type: itemType,
+          bill_date: billDate,
           is_item_submitted: isSubmittedVal ? 'yes' : 'no',
           item_submitted_at: submittedTimeVal,
           metal_type: metalType,
@@ -231,6 +235,7 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         customer_billing_uuid: customerBillingUuid,
         billing_mode: resolvedBillingMode,
         transaction_type: singleType,
+        bill_date: billDate,
         is_item_submitted: isSubmittedSingle ? 'yes' : 'no',
         item_submitted_at: submittedTimeSingle,
         metal_type: singleMetal,
@@ -307,25 +312,48 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       }
     }
 
-    // 3. PAYMENT / INSTALLMENT TABLE: billing_payment_history (Record Initial Payment)
-    if (paidAmount > 0) {
-      // Check if Installment #1 already exists
-      const { data: existingPayments } = await supabase
-        .from('billing_payment_history')
-        .select('payment_uuid')
-        .eq('customer_billing_uuid', customerBillingUuid)
-        .eq('installment_number', 1);
+    // 3. PAYMENT / INSTALLMENT TABLE: billing_payment_history (Record Initial Payment / Update Installment #1)
+    const paymentMode = input.payment_mode || receiptData.payment_mode || 'CASH';
+    const { data: existingPayments } = await supabase
+      .from('billing_payment_history')
+      .select('payment_uuid')
+      .eq('customer_billing_uuid', customerBillingUuid)
+      .eq('installment_number', 1);
 
-      if (!existingPayments || existingPayments.length === 0) {
-        const paymentMode = input.payment_mode || receiptData.payment_mode || 'CASH';
-        await supabase.from('billing_payment_history').insert([{
-          customer_billing_uuid: customerBillingUuid,
-          installment_number: 1,
+    if (existingPayments && existingPayments.length > 0) {
+      const { error: payUpdErr } = await supabase
+        .from('billing_payment_history')
+        .update({
           amount_paid: paidAmount,
           payment_mode: paymentMode,
+          payment_status: paymentStatus,
+          remaining_due: dueAmount,
+          bill_date: billDate,
           notes: cleanBillType === 'ORDER' ? 'Initial Advance during Order Placement' : 'Initial Invoice Payment',
-          created_at: createdAt,
-        }]);
+        })
+        .eq('payment_uuid', existingPayments[0].payment_uuid);
+
+      if (payUpdErr) {
+        console.error('❌ Error updating billing_payment_history:', payUpdErr.message);
+      } else {
+        console.log(`✅ Updated billing_payment_history installment #1 for ${billingId} (Paid: ₹${paidAmount}, Due: ₹${dueAmount})`);
+      }
+    } else if (paidAmount > 0) {
+      const { error: payInsErr } = await supabase.from('billing_payment_history').insert([{
+        customer_billing_uuid: customerBillingUuid,
+        installment_number: 1,
+        amount_paid: paidAmount,
+        payment_mode: paymentMode,
+        payment_status: paymentStatus,
+        remaining_due: dueAmount,
+        bill_date: billDate,
+        notes: cleanBillType === 'ORDER' ? 'Initial Advance during Order Placement' : 'Initial Invoice Payment',
+        created_at: createdAt,
+      }]);
+      if (payInsErr) {
+        console.error('❌ Error inserting billing_payment_history:', payInsErr.message);
+      } else {
+        console.log(`✅ Inserted billing_payment_history installment #1 for ${billingId} (Paid: ₹${paidAmount})`);
       }
     }
 
@@ -345,8 +373,13 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
 export async function recordAdditionalPayment(params: {
   billing_id: string;
   amount_paid: number;
+  remaining_due?: number;
+  total_amount?: number;
   payment_mode?: 'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER';
   notes?: string;
+  bill_date?: string;
+  payment_date?: string;
+  custom_paid_at?: string;
 }): Promise<{
   success: boolean;
   message?: string;
@@ -357,11 +390,17 @@ export async function recordAdditionalPayment(params: {
   error?: string;
 }> {
   try {
-    const { billing_id, amount_paid, payment_mode = 'CASH', notes } = params;
+    const { billing_id, amount_paid, remaining_due, total_amount, payment_mode = 'CASH', notes, bill_date, payment_date, custom_paid_at } = params;
     const amount = Number(amount_paid);
     if (amount <= 0) {
       return { success: false, error: 'Payment amount must be greater than 0' };
     }
+
+    const rawDate = custom_paid_at ? String(custom_paid_at).split('T')[0] : (bill_date || payment_date);
+    const pDate = String(rawDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })).trim();
+    const paidTimestamp = custom_paid_at
+      ? (String(custom_paid_at).includes('T') ? String(custom_paid_at) : new Date(custom_paid_at).toISOString())
+      : (pDate ? `${pDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString());
 
     // 1. Fetch customer_billing row
     const { data: billingRow, error: fetchErr } = await supabase
@@ -384,7 +423,26 @@ export async function recordAdditionalPayment(params: {
 
     const nextInstallmentNum = payments && payments.length > 0 ? (payments[0].installment_number + 1) : 1;
 
-    // 3. Insert into billing_payment_history
+    // Calculate new amounts accurately
+    const billJson = billingRow.bill_json || {};
+    const effectiveTotal = Number(
+      total_amount ||
+      billJson.grandTotal ||
+      billJson.netPayable ||
+      billJson.totalSellValue ||
+      billJson.total_amount ||
+      billingRow.total_amount ||
+      (Number(billingRow.paid_amount || 0) + Number(billingRow.due_amount || 0)) ||
+      0
+    );
+
+    const newPaidAmount = Number((Number(billingRow.paid_amount || 0) + amount).toFixed(2));
+    const newDueAmount = remaining_due !== undefined
+      ? Math.max(0, Number(Number(remaining_due).toFixed(2)))
+      : Math.max(0, Number((effectiveTotal - newPaidAmount).toFixed(2)));
+    const newStatus = newDueAmount <= 0.01 ? 'PAID' : 'PARTIAL';
+
+    // 3. Insert into billing_payment_history with bill_date, payment_status, and remaining_due
     const { error: payErr } = await supabase
       .from('billing_payment_history')
       .insert([{
@@ -392,27 +450,52 @@ export async function recordAdditionalPayment(params: {
         installment_number: nextInstallmentNum,
         amount_paid: amount,
         payment_mode: payment_mode,
+        payment_status: newDueAmount <= 0.01 ? 'FULL' : 'PARTIAL',
+        remaining_due: newDueAmount,
+        bill_date: pDate,
         notes: notes || `Installment #${nextInstallmentNum} for ${billing_id}`,
-        created_at: new Date().toISOString(),
+        created_at: paidTimestamp,
       }]);
 
     if (payErr) {
       return { success: false, error: payErr.message };
     }
 
-    // 4. Update customer_billing paid_amount, due_amount, payment_status
-    const newPaidAmount = Number((Number(billingRow.paid_amount || 0) + amount).toFixed(2));
-    const newDueAmount = Math.max(0, Number((Number(billingRow.total_amount || 0) - newPaidAmount).toFixed(2)));
-    const newStatus = newDueAmount <= 0 ? 'PAID' : 'PARTIAL';
+    // 4. Update customer_billing paid_amount, due_amount, payment_status & bill_json
+    const existingBillJson = billingRow.bill_json || {};
+    const existingHist = Array.isArray(existingBillJson.payment_history) ? [...existingBillJson.payment_history] : [];
+    existingHist.push({
+      installment: nextInstallmentNum,
+      amount: amount,
+      paid_at: paidTimestamp,
+      note: notes || `Installment #${nextInstallmentNum}`,
+    });
+
+    const updatedBillJson = {
+      ...existingBillJson,
+      grandTotal: effectiveTotal || existingBillJson.grandTotal,
+      advancePaidAmount: newPaidAmount,
+      paid_amount: newPaidAmount,
+      balanceDueAmount: newDueAmount,
+      due_amount: newDueAmount,
+      paymentType: newDueAmount <= 0.01 ? 'FULL' : 'PARTIAL',
+      payment_history: existingHist,
+    };
+
+    const updatePayload: any = {
+      paid_amount: newPaidAmount,
+      due_amount: newDueAmount,
+      payment_status: newStatus,
+      bill_json: updatedBillJson,
+      updated_at: new Date().toISOString(),
+    };
+    if (effectiveTotal > 0 && Number(billingRow.total_amount || 0) < effectiveTotal) {
+      updatePayload.total_amount = effectiveTotal;
+    }
 
     const { data: updatedBilling, error: updateErr } = await supabase
       .from('customer_billing')
-      .update({
-        paid_amount: newPaidAmount,
-        due_amount: newDueAmount,
-        payment_status: newStatus,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('customer_billing_uuid', billingRow.customer_billing_uuid)
       .select('*')
       .single();
@@ -421,7 +504,7 @@ export async function recordAdditionalPayment(params: {
       console.warn('⚠️ Error updating customer_billing amounts:', updateErr.message);
     }
 
-    // 5. If paid in CASH, record cash inflow in cash drawer
+    // 5. If paid in CASH, record cash inflow in cash drawer on the selected payment date
     if (payment_mode.toUpperCase() === 'CASH') {
       try {
         await recordCashTransaction({
@@ -432,6 +515,7 @@ export async function recordAdditionalPayment(params: {
           metal_type: 'GOLD',
           item_type: `Installment #${nextInstallmentNum}`,
           notes: `Installment #${nextInstallmentNum} (${billing_id}) from ${billingRow.customer_name}`,
+          date: pDate,
         });
       } catch (cashErr) {
         console.warn('⚠️ Error syncing cash drawer on installment:', cashErr);

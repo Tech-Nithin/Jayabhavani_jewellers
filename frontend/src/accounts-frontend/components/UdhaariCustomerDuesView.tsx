@@ -17,16 +17,31 @@ export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = (
 
   const allSortedDues = useMemo(() => {
     return logBookTimeline
-      .filter((item: any) => Number(item.due_amount || item.raw_invoice?.due_amount || 0) > 0)
+      .filter((item: any) => {
+        const itemType = (item.type || '').toUpperCase();
+        if (itemType === 'SETTLEMENT' || itemType === 'INVENTORY' || itemType === 'WORKER TX' || itemType === 'WORK ASSIGN' || itemType === 'CASH_REGISTER') {
+          return false;
+        }
+        const activeDue = Number(item.current_due ?? item.latest_due_amount ?? item.raw_invoice?.due_amount ?? item.due_amount ?? 0);
+        return activeDue > 0.01;
+      })
       .sort((a: any, b: any) => {
         const timeA = new Date(a.created_at || a.date || 0).getTime();
         const timeB = new Date(b.created_at || b.date || 0).getTime();
         return timeB - timeA;
       })
-      .map((item: any, idx: number) => ({
-        ...item,
-        originalSNo: idx + 1,
-      }));
+      .map((item: any, idx: number) => {
+        const activeDue = Number(item.current_due ?? item.latest_due_amount ?? item.raw_invoice?.due_amount ?? item.due_amount ?? 0);
+        const totalPaid = Number(item.current_paid ?? item.latest_paid_amount ?? item.raw_invoice?.paid_amount ?? item.paid_amount ?? 0);
+        const billVal = Number(item.amount || (totalPaid + activeDue));
+        return {
+          ...item,
+          due_amount: activeDue,
+          paid_amount: totalPaid,
+          total_bill: billVal,
+          originalSNo: idx + 1,
+        };
+      });
   }, [logBookTimeline]);
 
   // Filter customer dues list
@@ -57,9 +72,9 @@ export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = (
     const customerSet = new Set<string>();
 
     customerDuesList.forEach((item: any) => {
-      const due = Number(item.due_amount || item.raw_invoice?.due_amount || 0);
+      const due = Number(item.due_amount || 0);
       const paid = Number(item.paid_amount || 0);
-      const billVal = Number(item.amount || item.paid_amount || 0) + due;
+      const billVal = Number(item.total_bill || (paid + due));
 
       totalDue += due;
       totalPaid += paid;
@@ -214,9 +229,9 @@ export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = (
               </thead>
               <tbody>
                 {customerDuesList.map((item: any, idx: number) => {
-                  const due = Number(item.due_amount || item.raw_invoice?.due_amount || 0);
+                  const due = Number(item.due_amount || 0);
                   const paid = Number(item.paid_amount || 0);
-                  const totalBill = Number(item.amount || item.paid_amount || 0) + due;
+                  const totalBill = Number(item.total_bill || (paid + due));
                   const isPartial = paid > 0;
 
                   return (

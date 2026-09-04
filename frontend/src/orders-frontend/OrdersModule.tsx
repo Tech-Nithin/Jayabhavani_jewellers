@@ -8,6 +8,8 @@ import { OrdersHistoryTable } from './components/OrdersHistoryTable';
 import { AssignWorkerModal } from './components/AssignWorkerModal';
 import { AddWorkerView } from '../work-assignment-frontend/AddWorkerView';
 import { PaymentSettlementModal } from './components/PaymentSettlementModal';
+import { EditOrderModal } from './components/EditOrderModal';
+import { DeleteOrderModal } from './components/DeleteOrderModal';
 import { OrderDetailView } from './components/OrderDetailDrawer';
 import { ReceiptPreview, downloadReceiptAsPNG } from '../billing-frontend/components/ReceiptPreview';
 import { formatDDMMYYYY } from '../utils/dateUtils';
@@ -118,11 +120,13 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     open: boolean;
     order: OrderItem | null;
     payingNow: string;
+    paymentDate: string;
     isSubmitting: boolean;
   }>({
     open: false,
     order: null,
     payingNow: '',
+    paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
     isSubmitting: false,
   });
 
@@ -160,6 +164,26 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     photoUrl: '',
     notes: '',
     isSubmitting: false,
+  });
+
+  const [editOrderModal, setEditOrderModal] = useState<{
+    open: boolean;
+    order: OrderItem | null;
+    isSubmitting: boolean;
+  }>({
+    open: false,
+    order: null,
+    isSubmitting: false,
+  });
+
+  const [deleteOrderModal, setDeleteOrderModal] = useState<{
+    open: boolean;
+    order: OrderItem | null;
+    isDeleting: boolean;
+  }>({
+    open: false,
+    order: null,
+    isDeleting: false,
   });
 
   const syncFromUrl = (ordersList: OrderItem[] = orders) => {
@@ -500,6 +524,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       open: true,
       order,
       payingNow: dueVal > 0 ? dueVal.toLocaleString('en-IN') : '',
+      paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
       isSubmitting: false,
     });
   };
@@ -511,6 +536,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     const currentDue = order.due_amount !== undefined ? order.due_amount : 0;
     const remainingDue = Math.max(0, currentDue - paidNowNum);
     const targetStatus: 'SOLD' | 'DUE' = remainingDue === 0 ? 'SOLD' : 'DUE';
+    const chosenPaymentDate = settlementModal.paymentDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
     setSettlementModal((prev) => ({ ...prev, isSubmitting: true }));
     try {
@@ -522,6 +548,8 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           submitted: order.submitted || 'no',
           paid_now: paidNowNum,
           remaining_due: remainingDue,
+          payment_date: chosenPaymentDate,
+          bill_date: chosenPaymentDate,
         }),
       });
       const data = await res.json();
@@ -539,11 +567,17 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
               : o
           )
         );
-        setSettlementModal({ open: false, order: null, payingNow: '', isSubmitting: false });
+        setSettlementModal({
+          open: false,
+          order: null,
+          payingNow: '',
+          paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+          isSubmitting: false,
+        });
         alert(
           targetStatus === 'SOLD'
-            ? `✅ Order ${order.id} full payment received & marked as SOLD!`
-            : `ℹ️ Payment of ₹${paidNowNum.toLocaleString('en-IN')} recorded. Remaining Balance Due: ₹${remainingDue.toLocaleString('en-IN')}.`
+            ? `✅ Order ${order.id} full payment received on ${chosenPaymentDate} & marked as SOLD!`
+            : `ℹ️ Payment of ₹${paidNowNum.toLocaleString('en-IN')} recorded on ${chosenPaymentDate}. Remaining Balance Due: ₹${remainingDue.toLocaleString('en-IN')}.`
         );
       } else {
         alert('Failed to update payment status: ' + (data.message || 'Error'));
@@ -552,6 +586,64 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
       alert('Request error: ' + err.message);
     } finally {
       setSettlementModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
+  const handleSaveOrderEdit = async (updatedFields: Partial<OrderItem>) => {
+    if (!editOrderModal.order) return;
+    const orderId = editOrderModal.order.id;
+    setEditOrderModal((prev) => ({ ...prev, isSubmitting: true }));
+    try {
+      const res = await fetch(`${API_BASE}/work-assignment/orders/${orderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedFields),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, ...updatedFields } : o))
+        );
+        setEditOrderModal({ open: false, order: null, isSubmitting: false });
+        alert(`✅ Order #${orderId} updated successfully!`);
+        fetchOrders();
+      } else {
+        alert('Failed to update order: ' + (data.message || 'Unknown error'));
+      }
+    } catch (err: any) {
+      alert('Error updating order: ' + err.message);
+    } finally {
+      setEditOrderModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
+  const handleConfirmDeleteOrder = async () => {
+    if (!deleteOrderModal.order) return;
+    const order = deleteOrderModal.order;
+    const orderId = order.id;
+    setDeleteOrderModal((prev) => ({ ...prev, isDeleting: true }));
+    try {
+      const res = await fetch(`${API_BASE}/work-assignment/orders/${orderId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrders((prev) => prev.filter((o) => o.id !== orderId));
+        setTotalOrdersCount((prev) => Math.max(0, prev - 1));
+        setDeleteOrderModal({ open: false, order: null, isDeleting: false });
+        alert(
+          order.assigned_worker_id
+            ? `✅ Order #${orderId} deleted and cancellation notification sent to ${order.assigned_worker_name || 'Worker'}!`
+            : `✅ Order #${orderId} deleted successfully.`
+        );
+        fetchOrders();
+      } else {
+        alert('Failed to delete order: ' + (data.message || 'Unknown error'));
+      }
+    } catch (err: any) {
+      alert('Error deleting order: ' + err.message);
+    } finally {
+      setDeleteOrderModal((prev) => ({ ...prev, isDeleting: false }));
     }
   };
 
@@ -960,6 +1052,8 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
           onViewSeeBill={(order) => handleOpenSeeBill(order)}
           onViewOrderDetails={(order) => handleOpenOrderDetails(order)}
           onViewDetail={(order, showBill) => (showBill ? handleOpenSeeBill(order) : handleOpenOrderDetails(order))}
+          onEditOrder={(order) => setEditOrderModal({ open: true, order, isSubmitting: false })}
+          onDeleteOrder={(order) => setDeleteOrderModal({ open: true, order, isDeleting: false })}
         />
 
         {/* ── PAGINATION & ROWS PER PAGE CONTROL FOOTER ── */}
@@ -1111,11 +1205,31 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
         open={settlementModal.open}
         order={settlementModal.order}
         payingNow={settlementModal.payingNow}
+        paymentDate={settlementModal.paymentDate}
         isSubmitting={settlementModal.isSubmitting}
         lang={lang}
         onPayingNowChange={(val) => setSettlementModal((prev) => ({ ...prev, payingNow: formatIndianCurrencyInput(val) }))}
-        onClose={() => setSettlementModal({ open: false, order: null, payingNow: '', isSubmitting: false })}
+        onPaymentDateChange={(val) => setSettlementModal((prev) => ({ ...prev, paymentDate: val }))}
+        onClose={() => setSettlementModal({ open: false, order: null, payingNow: '', paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }), isSubmitting: false })}
         onConfirm={handleConfirmSettlement}
+      />
+
+      {/* ── EDIT CUSTOM ORDER MODAL ── */}
+      <EditOrderModal
+        open={editOrderModal.open}
+        order={editOrderModal.order}
+        isSubmitting={editOrderModal.isSubmitting}
+        onClose={() => setEditOrderModal({ open: false, order: null, isSubmitting: false })}
+        onSave={handleSaveOrderEdit}
+      />
+
+      {/* ── DELETE ORDER MODAL (With Worker Assignment Warning) ── */}
+      <DeleteOrderModal
+        open={deleteOrderModal.open}
+        order={deleteOrderModal.order}
+        isDeleting={deleteOrderModal.isDeleting}
+        onClose={() => setDeleteOrderModal({ open: false, order: null, isDeleting: false })}
+        onConfirm={handleConfirmDeleteOrder}
       />
     </div>
   );

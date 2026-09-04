@@ -21,6 +21,17 @@ export async function getOrInitOpeningRecord(
   loadedToday: { goldGrams: number; silverGrams: number }
 ): Promise<DailyOpeningData> {
   try {
+    if (!dateStr || dateStr === 'all' || dateStr === 'ALL' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return {
+        recordDate: dateStr || 'all',
+        openingGoldGrams: fallbackStock.goldGrams,
+        openingSilverGrams: fallbackStock.silverGrams,
+        openingCashAmount: fallbackStock.cashAmount,
+        loadedGoldGrams: loadedToday.goldGrams,
+        loadedSilverGrams: loadedToday.silverGrams,
+      };
+    }
+
     // 1. Try reading from daily_opening_records table
     const { data: existing } = await supabase
       .from('daily_opening_records')

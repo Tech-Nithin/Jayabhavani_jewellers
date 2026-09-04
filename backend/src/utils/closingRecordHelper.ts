@@ -1,53 +1,50 @@
 import { supabase } from '../config/supabase';
-import { getTodayISTString } from './cashLedgerHelper';
+import { getTodayISTString, calculateDynamicCashBalance } from './cashLedgerHelper';
 
 /**
  * Generates a complete End-of-Day closing snapshot for a given date.
  * Fills all 3 gaps:
- *   Gap 1 — Old Metal Vault running balance
- *   Gap 2 — Live karigar/workshop metal register
- *   Gap 3 — EOD summary report
+ *   Gap 1 — Old Metal Vault running balance (dynamic from billing_sell_buy_records)
+ *   Gap 2 — Live karigar/workshop metal register (dynamic from worker_transactions)
+ *   Gap 3 — EOD summary report (dynamic from cash_transaction_ledger)
  */
 export async function generateClosingRecord(targetDate?: string): Promise<any> {
   const date = targetDate || getTodayISTString();
+  const dateEndOfDayISO = `${date}T23:59:59.999Z`;
 
   // ─────────────────────────────────────────────────────────────
-  // 1. CASH SUMMARY (from cash_history + cash_transaction_ledger)
+  // 1. CASH SUMMARY (100% Dynamic from cash_transaction_ledger)
   // ─────────────────────────────────────────────────────────────
-  const { data: cashRow } = await supabase
-    .from('cash_history')
-    .select('*')
-    .eq('date', date)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { totalCash: dynamicCashInDrawer } = await calculateDynamicCashBalance(date);
 
-  const { data: cashTxns } = await supabase
+  const { data: allCashTxns } = await supabase
     .from('cash_transaction_ledger')
-    .select('*')
-    .eq('cash_history_uuid', cashRow?.cash_history_uuid || '');
+    .select('transaction_cash_total, flow_type, transaction_type, created_at, cash_history(date)');
 
   let cashLoaded = 0, salesIn = 0, scrapOut = 0, loansOut = 0, loansIn = 0, workerOut = 0, workerIn = 0, exchangeIn = 0;
+  let targetDateTxnCount = 0;
 
-  (cashTxns || []).forEach((t: any) => {
-    const amt = Number(t.transaction_cash_total || 0);
-    const type = (t.transaction_type || '').toUpperCase();
-    const flow = (t.flow_type || '').toUpperCase();
-    if (type === 'LOADING') cashLoaded += amt;
-    else if (type === 'SELL' && flow === 'IN') salesIn += amt;
-    else if (type === 'BUY' && flow === 'OUT') scrapOut += amt;
-    else if (type === 'FINANCE' && flow === 'OUT') loansOut += amt;
-    else if (type === 'FINANCE' && flow === 'IN') loansIn += amt;
-    else if (type === 'WORKER' && flow === 'OUT') workerOut += amt;
-    else if (type === 'WORKER' && flow === 'IN') workerIn += amt;
-    else if (type === 'EXCHANGE' && flow === 'IN') exchangeIn += amt;
+  (allCashTxns || []).forEach((t: any) => {
+    const rowDate = t.cash_history?.date || (t.created_at ? String(t.created_at).split('T')[0] : '');
+    if (rowDate === date) {
+      targetDateTxnCount += 1;
+      const amt = Number(t.transaction_cash_total || 0);
+      const type = (t.transaction_type || '').toUpperCase();
+      const flow = (t.flow_type || '').toUpperCase();
+      if (type === 'LOADING') cashLoaded += amt;
+      else if (type === 'SELL' && flow === 'IN') salesIn += amt;
+      else if (type === 'BUY' && flow === 'OUT') scrapOut += amt;
+      else if (type === 'FINANCE' && flow === 'OUT') loansOut += amt;
+      else if (type === 'FINANCE' && flow === 'IN') loansIn += amt;
+      else if (type === 'WORKER' && flow === 'OUT') workerOut += amt;
+      else if (type === 'WORKER' && flow === 'IN') workerIn += amt;
+      else if (type === 'EXCHANGE' && flow === 'IN') exchangeIn += amt;
+    }
   });
-
-  const cashInDrawer = Number(cashRow?.current_cash || 0);
 
   const cashSummary = {
     date,
-    cash_in_drawer: cashInDrawer,
+    cash_in_drawer: dynamicCashInDrawer,
     cash_loaded_today: Number(cashLoaded.toFixed(2)),
     sales_cash_in: Number(salesIn.toFixed(2)),
     exchange_cash_in: Number(exchangeIn.toFixed(2)),
@@ -56,7 +53,7 @@ export async function generateClosingRecord(targetDate?: string): Promise<any> {
     loans_repaid_in: Number(loansIn.toFixed(2)),
     worker_wages_out: Number(workerOut.toFixed(2)),
     worker_cash_in: Number(workerIn.toFixed(2)),
-    total_transactions: cashRow?.no_of_transactions || 0,
+    total_transactions: targetDateTxnCount,
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -87,19 +84,24 @@ export async function generateClosingRecord(targetDate?: string): Promise<any> {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 3. GAP 1 — OLD METAL VAULT BALANCE (from billing_sell_buy_records BUY)
+  // 3. GAP 1 — OLD METAL VAULT BALANCE (Dynamic up to target date from billing_sell_buy_records BUY)
   // ─────────────────────────────────────────────────────────────
   const { data: scrapRecords } = await supabase
     .from('billing_sell_buy_records')
-    .select('metal_type, only_metal_weight, pure_metal_weight, item_quality_percentage, created_at')
+    .select('metal_type, only_metal_weight, pure_metal_weight, item_quality_percentage, bill_date, created_at')
     .eq('transaction_type', 'BUY');
 
   let vaultGoldNetGrams = 0;
   let vaultGoldPureGrams = 0;
   let vaultSilverNetGrams = 0;
   let vaultSilverPureGrams = 0;
+  let totalScrapEntries = 0;
 
   (scrapRecords || []).forEach((r: any) => {
+    const rowDate = r.bill_date || (r.created_at ? String(r.created_at).split('T')[0] : '');
+    if (rowDate && rowDate > date) return;
+
+    totalScrapEntries += 1;
     const metal = (r.metal_type || 'GOLD').toUpperCase();
     const net = Number(r.only_metal_weight || 0);
     const pure = Number(r.pure_metal_weight || 0);
@@ -117,17 +119,18 @@ export async function generateClosingRecord(targetDate?: string): Promise<any> {
     gold_pure_grams: Number(vaultGoldPureGrams.toFixed(3)),
     silver_net_grams: Number(vaultSilverNetGrams.toFixed(3)),
     silver_pure_grams: Number(vaultSilverPureGrams.toFixed(3)),
-    total_scrap_entries: scrapRecords?.length || 0,
-    note: 'Running total of all scrap gold/silver purchased since app launch',
+    total_scrap_entries: totalScrapEntries,
+    note: `Running dynamic total of scrap metal purchased on or before ${date}`,
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 4. GAP 2 — KARIGAR WORKSHOP METAL REGISTER
+  // 4. GAP 2 — KARIGAR WORKSHOP METAL REGISTER (Dynamic up to target date)
   // ─────────────────────────────────────────────────────────────
   const { data: workerTxns } = await supabase
     .from('worker_transactions')
     .select('worker_id, direction, category, weight_grams, fine_weight_grams, item_name, created_at')
-    .in('category', ['GOLD', 'SILVER', 'ORNAMENT']);
+    .in('category', ['GOLD', 'SILVER', 'ORNAMENT'])
+    .lte('created_at', dateEndOfDayISO);
 
   const { data: workers } = await supabase
     .from('workers')

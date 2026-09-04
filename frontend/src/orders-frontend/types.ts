@@ -39,6 +39,7 @@ export interface OrderItem {
   assigned_at?: string | null;
   returned_from_worker?: 'yes' | 'no';
   returned_at?: string | null;
+  bill_date?: string;
   created_at: string;
   updated_at?: string;
 }

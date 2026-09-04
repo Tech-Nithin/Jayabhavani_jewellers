@@ -1,20 +1,9 @@
-import { Router, Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { memoryCache } from '../../config/memoryCache';
+import { Router, Request, Response } from 'express';
+import { activeMetalValues } from '../../metal-rates-backend/index';
 
 const router = Router();
-
-// In-Memory Fallback State (matching updated_metal_values table)
-let activeMetalValues = {
-  gold_buy_value: 14200.00,
-  gold_buy_value_updated_at: new Date().toISOString(),
-  gold_sell_value: 14700.00,
-  gold_sell_value_updated_at: new Date().toISOString(),
-  silver_buy_value: 250.00,
-  silver_buy_value_updated_at: new Date().toISOString(),
-  silver_sell_value: 270.00,
-  silver_sell_value_updated_at: new Date().toISOString(),
-};
 
 /**
  * JBJ Custom 3-Decimal Weight Rounding Rule:
@@ -30,186 +19,7 @@ const round3Decimals = (val: number): number => {
   return diff > 0.5 ? Math.ceil(scaled) / 1000 : floorVal / 1000;
 };
 
-interface HistoryEntry {
-  id?: number;
-  metal_type: 'GOLD' | 'SILVER';
-  rate_type: 'BUY' | 'SELL';
-  old_value: number | null;
-  new_value: number;
-  updated_at: string;
-}
-
-let metalHistoryRates: HistoryEntry[] = [
-  { id: 1, metal_type: 'GOLD', rate_type: 'BUY', old_value: null, new_value: 14200.00, updated_at: new Date().toISOString() },
-  { id: 2, metal_type: 'GOLD', rate_type: 'SELL', old_value: null, new_value: 14700.00, updated_at: new Date().toISOString() },
-  { id: 3, metal_type: 'SILVER', rate_type: 'BUY', old_value: null, new_value: 250.00, updated_at: new Date().toISOString() },
-  { id: 4, metal_type: 'SILVER', rate_type: 'SELL', old_value: null, new_value: 270.00, updated_at: new Date().toISOString() },
-];
-
 let invoicesList: any[] = [];
-
-// GET /api/billing/rates - Fetch active metal values with per-column timestamps (from updated_metal_values)
-router.get('/rates', async (req: Request, res: Response) => {
-  const cachedRates = memoryCache.get<any>('metal_rates');
-  if (cachedRates) {
-    activeMetalValues = cachedRates;
-    return res.json({
-      success: true,
-      rates: activeMetalValues,
-    });
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('updated_metal_values')
-      .select('*')
-      .eq('id', 1)
-      .single();
-
-    if (!error && data) {
-      activeMetalValues = {
-        gold_buy_value: Number(data.gold_buy_value),
-        gold_buy_value_updated_at: data.gold_buy_value_updated_at || new Date().toISOString(),
-        gold_sell_value: Number(data.gold_sell_value),
-        gold_sell_value_updated_at: data.gold_sell_value_updated_at || new Date().toISOString(),
-        silver_buy_value: Number(data.silver_buy_value),
-        silver_buy_value_updated_at: data.silver_buy_value_updated_at || new Date().toISOString(),
-        silver_sell_value: Number(data.silver_sell_value),
-        silver_sell_value_updated_at: data.silver_sell_value_updated_at || new Date().toISOString(),
-      };
-      memoryCache.set('metal_rates', activeMetalValues, 86400);
-    }
-  } catch (err) {
-    console.warn('⚠️ Supabase updated_metal_values fetch error:', err);
-  }
-
-  res.json({
-    success: true,
-    rates: activeMetalValues,
-  });
-});
-
-// GET /api/billing/rates/history - Fetch audit history from PostgreSQL / Supabase
-router.get('/rates/history', async (req: Request, res: Response) => {
-  try {
-    const { data, error } = await supabase
-      .from('metal_history_rates')
-      .select('*')
-      .order('updated_at', { ascending: false });
-
-    if (!error && data && data.length > 0) {
-      return res.json({
-        success: true,
-        history: data,
-      });
-    }
-  } catch (err) {
-    console.error('Supabase DB rates history fetch warning:', err);
-  }
-
-  res.json({
-    success: true,
-    history: metalHistoryRates,
-  });
-});
-
-// POST /api/billing/rates - Update active metal values AND insert history log entry
-router.post('/rates', async (req: Request, res: Response) => {
-  const { gold_buy_value, gold_sell_value, silver_buy_value, silver_sell_value } = req.body;
-  const now = new Date().toISOString();
-  const dbHistoryInserts: any[] = [];
-
-  // 1. Update Gold Buy Value if changed
-  if (gold_buy_value !== undefined && Number(gold_buy_value) !== activeMetalValues.gold_buy_value) {
-    const oldVal = activeMetalValues.gold_buy_value;
-    const newVal = Number(gold_buy_value);
-    activeMetalValues.gold_buy_value = newVal;
-    activeMetalValues.gold_buy_value_updated_at = now;
-
-    const entry: HistoryEntry = { metal_type: 'GOLD', rate_type: 'BUY', old_value: oldVal, new_value: newVal, updated_at: now };
-    metalHistoryRates.unshift({ id: metalHistoryRates.length + 1, ...entry });
-    dbHistoryInserts.push(entry);
-  }
-
-  // 2. Update Gold Sell Value if changed
-  if (gold_sell_value !== undefined && Number(gold_sell_value) !== activeMetalValues.gold_sell_value) {
-    const oldVal = activeMetalValues.gold_sell_value;
-    const newVal = Number(gold_sell_value);
-    activeMetalValues.gold_sell_value = newVal;
-    activeMetalValues.gold_sell_value_updated_at = now;
-
-    const entry: HistoryEntry = { metal_type: 'GOLD', rate_type: 'SELL', old_value: oldVal, new_value: newVal, updated_at: now };
-    metalHistoryRates.unshift({ id: metalHistoryRates.length + 1, ...entry });
-    dbHistoryInserts.push(entry);
-  }
-
-  // 3. Update Silver Buy Value if changed
-  if (silver_buy_value !== undefined && Number(silver_buy_value) !== activeMetalValues.silver_buy_value) {
-    const oldVal = activeMetalValues.silver_buy_value;
-    const newVal = Number(silver_buy_value);
-    activeMetalValues.silver_buy_value = newVal;
-    activeMetalValues.silver_buy_value_updated_at = now;
-
-    const entry: HistoryEntry = { metal_type: 'SILVER', rate_type: 'BUY', old_value: oldVal, new_value: newVal, updated_at: now };
-    metalHistoryRates.unshift({ id: metalHistoryRates.length + 1, ...entry });
-    dbHistoryInserts.push(entry);
-  }
-
-  // 4. Update Silver Sell Value if changed
-  if (silver_sell_value !== undefined && Number(silver_sell_value) !== activeMetalValues.silver_sell_value) {
-    const oldVal = activeMetalValues.silver_sell_value;
-    const newVal = Number(silver_sell_value);
-    activeMetalValues.silver_sell_value = newVal;
-    activeMetalValues.silver_sell_value_updated_at = now;
-
-    const entry: HistoryEntry = { metal_type: 'SILVER', rate_type: 'SELL', old_value: oldVal, new_value: newVal, updated_at: now };
-    metalHistoryRates.unshift({ id: metalHistoryRates.length + 1, ...entry });
-    dbHistoryInserts.push(entry);
-  }
-
-  // Persist to Supabase PostgreSQL DB
-  try {
-    const dbUpdateFields: Record<string, any> = { id: 1 };
-    if (gold_buy_value !== undefined) {
-      dbUpdateFields.gold_buy_value = activeMetalValues.gold_buy_value;
-      dbUpdateFields.gold_buy_value_updated_at = activeMetalValues.gold_buy_value_updated_at;
-    }
-    if (gold_sell_value !== undefined) {
-      dbUpdateFields.gold_sell_value = activeMetalValues.gold_sell_value;
-      dbUpdateFields.gold_sell_value_updated_at = activeMetalValues.gold_sell_value_updated_at;
-    }
-    if (silver_buy_value !== undefined) {
-      dbUpdateFields.silver_buy_value = activeMetalValues.silver_buy_value;
-      dbUpdateFields.silver_buy_value_updated_at = activeMetalValues.silver_buy_value_updated_at;
-    }
-    if (silver_sell_value !== undefined) {
-      dbUpdateFields.silver_sell_value = activeMetalValues.silver_sell_value;
-      dbUpdateFields.silver_sell_value_updated_at = activeMetalValues.silver_sell_value_updated_at;
-    }
-
-    await supabase.from('updated_metal_values').upsert(dbUpdateFields);
-
-    if (dbHistoryInserts.length > 0) {
-      await supabase.from('metal_history_rates').insert(dbHistoryInserts);
-    }
-
-    console.log(` 🏛 [DB INSPECTION] updated_metal_values (id=1):`);
-    console.log(`    Gold Buy: ₹${activeMetalValues.gold_buy_value} | Gold Sell: ₹${activeMetalValues.gold_sell_value}`);
-    console.log(`    Silver Buy: ₹${activeMetalValues.silver_buy_value} | Silver Sell: ₹${activeMetalValues.silver_sell_value}`);
-    if (dbHistoryInserts.length > 0) {
-      console.log(` 📜 [DB INSPECTION] metal_history_rates (${dbHistoryInserts.length} new audit rows inserted into PostgreSQL)`);
-    }
-    memoryCache.set('metal_rates', activeMetalValues, 86400);
-  } catch (err) {
-    console.error('Supabase DB rates update warning:', err);
-  }
-
-  res.json({
-    success: true,
-    message: 'Active metal rates updated & persisted in database successfully',
-    rates: activeMetalValues,
-  });
-});
 
 // POST /api/billing/calculate - 100% Server-side multi-item & single-item calculation engine
 router.post('/calculate', (req: Request, res: Response) => {
@@ -368,6 +178,7 @@ const formatCustomerBillingToInvoice = (b: any) => {
     final_amount: Number(b.total_amount || 0),
     paid_amount: Number(b.paid_amount || 0),
     due_amount: Number(b.due_amount || 0),
+    bill_date: b.bill_date || receipt.bill_date || (b.created_at ? b.created_at.split('T')[0] : null),
     payment_status: b.payment_status || (Number(b.due_amount || 0) <= 0 ? 'PAID' : 'PARTIAL'),
     image_url: primaryItem.image_url || receipt.image_url || null,
     receipt_json_data: receipt,
@@ -698,6 +509,11 @@ router.post('/create', async (req: Request, res: Response) => {
   const paidAmt = req.body.paid_amount !== undefined ? Number(req.body.paid_amount) : Number(receipt_json_data?.advancePaidAmount ?? final_amount_val);
   const dueAmt = req.body.due_amount !== undefined ? Number(req.body.due_amount) : Number(receipt_json_data?.balanceDueAmount ?? 0);
 
+  const rawBillDate = req.body.bill_date || req.body.billDate || req.body.date || receipt_json_data?.bill_date || receipt_json_data?.billDate;
+  const nowTime = new Date().toISOString().split('T')[1] || '12:00:00.000Z';
+  const invoiceCreatedAt = req.body.created_at || (rawBillDate ? `${rawBillDate}T${nowTime}` : new Date().toISOString());
+  const resolvedBillDate = rawBillDate || invoiceCreatedAt.split('T')[0];
+
   const newInvoicePayload: any = {
     customer_name: customer_name || 'Walk-in Customer',
     customer_phone: customer_phone || '',
@@ -715,14 +531,18 @@ router.post('/create', async (req: Request, res: Response) => {
     final_amount: Number(final_amount_val) || 0,
     paid_amount: Number(paidAmt) || 0,
     due_amount: Number(dueAmt) || 0,
+    bill_date: resolvedBillDate,
     gold_buy_rate_snapshot: Number(activeMetalValues.gold_buy_value) || 0,
     gold_sell_rate_snapshot: Number(activeMetalValues.gold_sell_value) || 0,
     silver_buy_rate_snapshot: Number(activeMetalValues.silver_buy_value) || 0,
     silver_sell_rate_snapshot: Number(activeMetalValues.silver_sell_value) || 0,
     return_purity_percentage: Number(receipt_json_data?.items?.[0]?.return_purity_percentage) || 0,
     return_pure_gold: Number(receipt_json_data?.items?.[0]?.return_pure_gold) || 0,
-    receipt_json_data,
-    created_at: new Date().toISOString(),
+    receipt_json_data: {
+      ...receipt_json_data,
+      bill_date: resolvedBillDate,
+    },
+    created_at: invoiceCreatedAt,
   };
 
   const billingId = await generateNextBillingId(transaction_type || 'SELL');
@@ -739,6 +559,7 @@ router.post('/create', async (req: Request, res: Response) => {
     const storeRes = await storeBillingTransaction({
       billing_id: billingId,
       bill_type: (createdInvoice.transaction_type || 'SELL').toUpperCase(),
+      bill_date: resolvedBillDate,
       customer_name: createdInvoice.customer_name,
       customer_phone: createdInvoice.customer_phone,
       customer_address: createdInvoice.customer_address,
@@ -820,7 +641,7 @@ async function recordInvoiceCashTransaction(invoice: any) {
       metal_type: invoice.metal_type || 'GOLD',
       item_type: invoice.product_name || `${txnType} Invoice`,
       notes: `${txnType} Invoice #${invoice.id} - ${invoice.customer_name || 'Walk-in'} (${flowType === 'OUT' ? 'Paid to Customer' : 'Collected'}: ₹${cashAmount.toLocaleString('en-IN')})`,
-      date: invoice.created_at ? String(invoice.created_at).split('T')[0] : undefined,
+      date: invoice.bill_date || (invoice.created_at ? String(invoice.created_at).split('T')[0] : undefined),
     });
   } catch (err) {
     console.warn('⚠️ Error recording invoice cash transaction:', err);
@@ -1129,11 +950,21 @@ router.put('/update/:id', async (req: Request, res: Response) => {
   }
 
   const nowIso = new Date().toISOString();
+  const todayISTStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const rawBillDate = req.body.bill_date || req.body.billDate || req.body.date || receipt_json_data?.bill_date || receipt_json_data?.billDate;
+  const resolvedBillDate = rawBillDate ? String(rawBillDate).trim() : (createdAt ? createdAt.split('T')[0] : todayISTStr);
+
   const existingHistory = Array.isArray(receipt_json_data?.update_history) ? receipt_json_data.update_history : [];
   const updateHistoryList = [...existingHistory, nowIso];
 
   receipt_json_data.updated_at = nowIso;
   receipt_json_data.update_history = updateHistoryList;
+  receipt_json_data.bill_date = resolvedBillDate;
+
+  const rawPaidVal = req.body.paid_amount ?? receipt_json_data?.paid_amount ?? receipt_json_data?.paidAmount;
+  const paidVal = rawPaidVal !== undefined ? Number(rawPaidVal) : (transaction_type === 'BUY' ? 0 : final_amount_val);
+  const rawDueVal = req.body.due_amount ?? receipt_json_data?.due_amount ?? receipt_json_data?.dueAmount;
+  const dueVal = rawDueVal !== undefined ? Number(rawDueVal) : Math.max(0, Number((final_amount_val - paidVal).toFixed(2)));
 
   const updatedInvoice = {
     id,
@@ -1151,6 +982,9 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     making_charges,
     gst_amount,
     final_amount: final_amount_val,
+    paid_amount: paidVal,
+    due_amount: dueVal,
+    bill_date: resolvedBillDate,
     gold_buy_rate_snapshot: activeMetalValues.gold_buy_value,
     gold_sell_rate_snapshot: activeMetalValues.gold_sell_value,
     silver_buy_rate_snapshot: activeMetalValues.silver_buy_value,
@@ -1168,18 +1002,19 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     invoicesList.unshift(updatedInvoice);
   }
 
-  // Persist update to customer_billing & billing_sell_buy_records
+  // 1. Persist update to customer_billing, billing_sell_buy_records, and billing_payment_history
   try {
     const { storeBillingTransaction } = await import('../../utils/billingStorageHelper');
     const storeRes = await storeBillingTransaction({
       billing_id: String(updatedInvoice.id),
       bill_type: (updatedInvoice.transaction_type || 'SELL').toUpperCase(),
+      bill_date: resolvedBillDate,
       customer_name: updatedInvoice.customer_name,
       customer_phone: updatedInvoice.customer_phone,
       customer_address: updatedInvoice.customer_address,
       total_amount: Number(updatedInvoice.final_amount || 0),
-      paid_amount: Number((updatedInvoice as any).paid_amount ?? (updatedInvoice.transaction_type === 'BUY' ? 0 : updatedInvoice.final_amount)),
-      due_amount: Number((updatedInvoice as any).due_amount || 0),
+      paid_amount: Number(updatedInvoice.paid_amount),
+      due_amount: Number(updatedInvoice.due_amount),
       receipt_json_data: updatedInvoice.receipt_json_data,
       created_at: updatedInvoice.created_at,
       metal_type: updatedInvoice.metal_type,
@@ -1195,39 +1030,82 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     console.warn('⚠️ storeBillingTransaction update warning:', e);
   }
 
+  // 2. Synchronize cash_transaction_ledger & cash_history for this invoice ID
+  try {
+    const { syncCashHistoryDayRow } = await import('../../utils/cashLedgerHelper');
+    const { data: oldLedgerEntries } = await supabase
+      .from('cash_transaction_ledger')
+      .select('cash_history_uuid')
+      .or(`transaction_id.eq.${String(id)},transaction_id.eq.${String(updatedInvoice.id)}`);
+
+    const affectedHistoryUuids = new Set<string>();
+    if (oldLedgerEntries && oldLedgerEntries.length > 0) {
+      oldLedgerEntries.forEach((e) => {
+        if (e.cash_history_uuid) affectedHistoryUuids.add(e.cash_history_uuid);
+      });
+      await supabase
+        .from('cash_transaction_ledger')
+        .delete()
+        .or(`transaction_id.eq.${String(id)},transaction_id.eq.${String(updatedInvoice.id)}`);
+    }
+
+    // Now record the updated cash movement cleanly
+    await recordInvoiceCashTransaction(updatedInvoice);
+
+    // Collect new cash_history_uuid
+    const { data: newLedgerEntries } = await supabase
+      .from('cash_transaction_ledger')
+      .select('cash_history_uuid')
+      .or(`transaction_id.eq.${String(id)},transaction_id.eq.${String(updatedInvoice.id)}`);
+
+    if (newLedgerEntries && newLedgerEntries.length > 0) {
+      newLedgerEntries.forEach((e) => {
+        if (e.cash_history_uuid) affectedHistoryUuids.add(e.cash_history_uuid);
+      });
+    }
+
+    // Automatically recalculate exact sum for all affected day rows
+    for (const hUuid of affectedHistoryUuids) {
+      await syncCashHistoryDayRow(hUuid);
+    }
+  } catch (cashErr) {
+    console.warn('⚠️ Cash ledger synchronization warning on update:', cashErr);
+  }
+
+  // 3. Synchronize customer_metal_transactions for trade-in / scrap buy items
+  try {
+    await supabase.from('customer_metal_transactions').delete().eq('invoice_id', String(id));
+    const itemsList: any[] = Array.isArray(receipt_json_data?.items) ? receipt_json_data.items : [];
+    const scrapItems = itemsList.filter((i) => (i.item_type || '').toUpperCase() === 'BUY');
+    if (scrapItems.length > 0) {
+      const metalRecords = scrapItems.map((it) => ({
+        invoice_id: String(id),
+        customer_id: updatedInvoice.customer_phone || null,
+        customer_phone: updatedInvoice.customer_phone,
+        customer_name: updatedInvoice.customer_name,
+        transaction_type: (updatedInvoice.transaction_type || 'SELL').toUpperCase(),
+        metal_type: (it.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
+        item_type: 'BUY',
+        product_name: it.product_name || `Scrap Metal Intake`,
+        weight_grams: Number(it.weight_grams || it.gross_weight_grams || 0),
+        amount: Number(it.lineTotal || it.line_total || it.metalVal || 0),
+        purity_percentage: Number(it.purity_percentage) || 100,
+        created_at: updatedInvoice.created_at || new Date().toISOString(),
+      }));
+      await supabase.from('customer_metal_transactions').insert(metalRecords);
+    }
+  } catch (metalErr) {
+    console.warn('⚠️ Metal transaction update warning:', metalErr);
+  }
+
   // Invalidate cache
   memoryCache.clear();
 
   res.json({
     success: true,
-    message: 'Invoice record completely updated in customer_billing',
+    message: 'Invoice record completely updated across all tables',
     invoice: updatedInvoice,
   });
-});
-
-// POST /api/billing/invoices/:id/payment - Record an installment payment for an invoice
-router.post('/invoices/:id/payment', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { amount_paid, payment_mode, notes } = req.body;
-
-    const { recordAdditionalPayment } = await import('../../utils/billingStorageHelper');
-    const result = await recordAdditionalPayment({
-      billing_id: String(id),
-      amount_paid: Number(amount_paid),
-      payment_mode: payment_mode || 'CASH',
-      notes: notes,
-    });
-
-    if (!result.success) {
-      return res.status(400).json({ success: false, message: result.error });
-    }
-
-    res.json(result);
-  } catch (err: any) {
-    console.error('Error recording installment payment:', err);
-    res.status(500).json({ success: false, message: err.message });
-  }
 });
 
 // GET /api/billing/presets - Fetch presets 100% directly from billing_presets database table
@@ -1293,19 +1171,24 @@ router.post('/presets', async (req: Request, res: Response) => {
 router.put('/invoices/:id/settlement', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { paid_now, note } = req.body;
+    const { paid_now, note, bill_date, payment_date, custom_paid_at, payment_mode } = req.body;
 
     const pNow = Number(paid_now) || 0;
     if (pNow <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid payment amount' });
     }
 
+    const resolvedDate = (custom_paid_at ? String(custom_paid_at).split('T')[0] : '') || bill_date || payment_date;
+
     const { recordAdditionalPayment } = await import('../../utils/billingStorageHelper');
     const result = await recordAdditionalPayment({
       billing_id: String(id),
       amount_paid: pNow,
-      payment_mode: 'CASH',
+      payment_mode: payment_mode || 'CASH',
       notes: note,
+      bill_date: resolvedDate,
+      payment_date: resolvedDate,
+      custom_paid_at: custom_paid_at ? (String(custom_paid_at).includes('T') ? String(custom_paid_at) : new Date(custom_paid_at).toISOString()) : undefined,
     });
 
     if (!result.success) {
@@ -1332,10 +1215,15 @@ function matchesDateFilterIST(created_at: any, targetDate: string, startDate?: s
   if (targetDate === 'all' || targetDate === 'ALL') return true;
   if (!created_at) return false;
 
-  const dateObj = new Date(created_at);
-  if (isNaN(dateObj.getTime())) return false;
-
-  const istDateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  let istDateStr = '';
+  const rawStr = String(created_at).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawStr)) {
+    istDateStr = rawStr;
+  } else {
+    const dateObj = new Date(created_at);
+    if (isNaN(dateObj.getTime())) return false;
+    istDateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  }
 
   if (startDate && endDate) {
     return istDateStr >= startDate && istDateStr <= endDate;
@@ -1344,961 +1232,181 @@ function matchesDateFilterIST(created_at: any, targetDate: string, startDate?: s
   return istDateStr === targetDate;
 }
 
-// GET /api/accounts/day-book - Comprehensive EOD Day Book & Accounts Ledger
-router.get('/accounts/day-book', async (req: Request, res: Response) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+// PUT /api/billing/invoices/:id — Edit Master Invoice details
+router.put('/invoices/:id', async (req: Request, res: Response) => {
   try {
-    const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const targetDate = (req.query.date as string) || todayIST;
-    const startDate = req.query.startDate as string;
-    const endDate = req.query.endDate as string;
-    const section = ((req.query.section as string) || 'all').toLowerCase();
+    const { id } = req.params;
+    const invIdStr = String(id);
+    const { customer_name, customer_phone, customer_address, bill_date, notes, total_amount, paid_amount, due_amount } = req.body;
 
-    // 1. Fetch Invoices from DB customer_billing and merge RAM invoicesList for instant visibility
-    const { data: dbInvoices } = await supabase
+    // Find master record
+    const { data: billRow, error: fetchErr } = await supabase
       .from('customer_billing')
       .select('*')
-      .order('created_at', { ascending: true });
-
-    const formattedDbInvoices = (dbInvoices || []).map(formatCustomerBillingToInvoice);
-    const combinedInvoicesMap = new Map<string, any>();
-    formattedDbInvoices.forEach((inv: any) => combinedInvoicesMap.set(String(inv.id), inv));
-    invoicesList.forEach((inv: any) => combinedInvoicesMap.set(String(inv.id), inv));
-
-    // Fetch Orders table from Supabase to check submitted status ('yes' / 'no') and item_submitted_at delivery timestamp
-    const { data: dbOrdersList } = await supabase
-      .from('orders')
-      .select('*');
-
-    const invoices = Array.from(combinedInvoicesMap.values()).filter((inv) => {
-      const orderKey = String(inv.id || inv.receipt_json_data?.order_id || '').toLowerCase();
-      const matchedOrd = (dbOrdersList || []).find((o: any) => String(o.id || o.order_id || '').toLowerCase() === orderKey);
-      const isOrderType = (inv.receipt_json_data?.transaction_type || inv.transaction_type || '').toUpperCase() === 'ORDER';
-      const isSubmitted = (matchedOrd?.submitted || inv.submitted || 'no').toLowerCase() === 'yes';
-
-      // Delivered custom orders filter by item_submitted_at (or updated_at); pending orders/direct sales filter by created_at
-      const effectiveDate = isOrderType && isSubmitted && (matchedOrd?.item_submitted_at || matchedOrd?.updated_at)
-        ? (matchedOrd.item_submitted_at || matchedOrd.updated_at)
-        : inv.created_at;
-
-      return matchesDateFilterIST(effectiveDate, targetDate, startDate, endDate);
-    });
-
-    // 3. Fetch Workers table & Worker Transactions for targetDate
-    const { data: dbWorkers } = await supabase.from('workers').select('id, name');
-    const workerNameMap = new Map<string, string>();
-    (dbWorkers || []).forEach((w: any) => {
-      if (w.id && w.name) {
-        workerNameMap.set(String(w.id).toLowerCase(), w.name);
-        workerNameMap.set(String(w.id), w.name);
-      }
-    });
-
-    const { data: workerTxns } = await supabase
-      .from('worker_transactions')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    const workerTransactions = (workerTxns || []).filter((tx) => matchesDateFilterIST(tx.created_at, targetDate, startDate, endDate));
-
-    // 4. Fetch Added Inventory Products for targetDate
-    const { data: dbProducts } = await supabase
-      .from('inventory_products')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    const addedProductsToday = (dbProducts || []).filter((p) => matchesDateFilterIST(p.created_at, targetDate, startDate, endDate));
-
-    // 5. Fetch Finance Loans from Supabase 'finance' table for targetDate
-    const { data: dbLoans } = await supabase
-      .from('finance')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    const loansToday = (dbLoans || []).filter((fl) => matchesDateFilterIST(fl.created_at || fl.debt_date || fl.loan_date, targetDate, startDate, endDate));
-
-    // 5.5 Fetch Cash Ledger transactions from Supabase 'cash_transaction_ledger'
-    const { data: dbCashLedger } = await supabase
-      .from('cash_transaction_ledger')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    const cashLedgerToday = (dbCashLedger || []).filter((tx) => matchesDateFilterIST(tx.created_at, targetDate, startDate, endDate));
-
-    // 6. Fetch customer_billing & billing_sell_buy_records for fast Transaction Activity calculation
-    const [{ data: dbCustomerBills }, { data: dbBillingRecords }] = await Promise.all([
-      supabase.from('customer_billing').select('*').order('created_at', { ascending: true }),
-      supabase.from('billing_sell_buy_records').select('*').order('created_at', { ascending: true }),
-    ]);
-
-    const matchedCustomerBills = (dbCustomerBills || []).filter((b) => matchesDateFilterIST(b.created_at, targetDate, startDate, endDate));
-    const matchedBillingRecords = (dbBillingRecords || []).filter((r) => {
-      const mode = (r.billing_mode || '').toUpperCase();
-      const txType = (r.transaction_type || '').toUpperCase();
-      
-      let isSub = true;
-      let effectiveDate = r.created_at;
-
-      if (mode === 'ORDER' && txType === 'SELL') {
-        if (r.is_item_submitted !== undefined && r.is_item_submitted !== null && String(r.is_item_submitted).trim() !== '') {
-          isSub = String(r.is_item_submitted).toLowerCase() === 'yes';
-        } else {
-          const orderKey = String(r.customer_billing_uuid || r.billing_id || '').toLowerCase();
-          const matchedOrd = (dbOrdersList || []).find((o: any) => String(o.id || o.order_id || '').toLowerCase() === orderKey);
-          isSub = (matchedOrd?.submitted || 'no').toLowerCase() === 'yes';
-          effectiveDate = matchedOrd?.item_submitted_at || matchedOrd?.updated_at || r.created_at;
-        }
-      }
-
-      if (!isSub) return false;
-      return matchesDateFilterIST(effectiveDate, targetDate, startDate, endDate);
-    });
-
-    const billTypeMap = new Map<string, string>();
-    let customerBillsOrderCount = 0;
-    let customerBillsSellCount = 0;
-    let customerBillsBuyCount = 0;
-    let customerBillsTradeInCount = 0;
-
-    matchedCustomerBills.forEach((b: any) => {
-      const type = (b.bill_type || '').toUpperCase();
-      const uuid = String(b.customer_billing_uuid || b.billing_id || '');
-      if (uuid) billTypeMap.set(uuid, type);
-
-      if (type === 'ORDER') customerBillsOrderCount++;
-      else if (type === 'SELL') customerBillsSellCount++;
-      else if (type === 'BUY') customerBillsBuyCount++;
-      else if (type === 'EXCHANGE' || type === 'TRADE_IN') customerBillsTradeInCount++;
-    });
-
-    // 1. Group records strictly by customer_billing_uuid / billing_id
-    const uuidToBillingIdMap = new Map<string, string>();
-    matchedCustomerBills.forEach((b: any) => {
-      const u = String(b.customer_billing_uuid || '').toLowerCase();
-      const idStr = String(b.billing_id || b.id || '').toLowerCase();
-      if (u && idStr) {
-        uuidToBillingIdMap.set(u, idStr);
-        uuidToBillingIdMap.set(idStr, u);
-      }
-    });
-
-    const getCanonicalKey = (rawId: string) => {
-      const lower = String(rawId || '').toLowerCase();
-      return uuidToBillingIdMap.get(lower) || lower;
-    };
-
-    const billMap = new Map<string, { mode: string; items: any[] }>();
-
-    matchedBillingRecords.forEach((r: any) => {
-      const rawUuid = String(r.customer_billing_uuid || r.billing_id || r.id || '');
-      if (!rawUuid) return;
-      const uuid = getCanonicalKey(rawUuid);
-      let mode = (r.billing_mode || (r.customer_billing_uuid ? billTypeMap.get(r.customer_billing_uuid) : '') || 'SELL').toUpperCase();
-      if (mode === 'EXCHANGE') mode = 'TRADE_IN';
-
-      if (!billMap.has(uuid)) {
-        billMap.set(uuid, { mode, items: [] });
-      }
-      billMap.get(uuid)!.items.push(r);
-    });
-
-    // Include any customer_billing bills without line items, extracting items/buy_records from receipt_json_data or dbOrdersList
-    matchedCustomerBills.forEach((b: any) => {
-      const rawUuid = String(b.customer_billing_uuid || b.billing_id || b.id || '');
-      if (!rawUuid) return;
-      const uuid = getCanonicalKey(rawUuid);
-      let mode = (b.bill_type || 'SELL').toUpperCase();
-      if (mode === 'EXCHANGE') mode = 'TRADE_IN';
-
-      if (!billMap.has(uuid)) {
-        billMap.set(uuid, { mode, items: [] });
-      }
-
-      const existingEntry = billMap.get(uuid)!;
-      if (existingEntry.items.length === 0) {
-        if (b.receipt_json_data) {
-          const jsonItems = b.receipt_json_data.items || b.receipt_json_data.line_items || [];
-          const jsonBuyRecords = b.receipt_json_data.buy_records || b.receipt_json_data.old_metal || [];
-
-          jsonItems.forEach((it: any) => {
-            existingEntry.items.push({
-              transaction_type: (it.item_type || 'SELL').toUpperCase(),
-              metal_type: (it.metal_type || b.metal_type || 'GOLD').toUpperCase(),
-              item_weight: Number(it.weight_grams || it.item_weight || 0),
-              only_metal_weight: Number(it.net_weight_grams || it.weight_grams || 0),
-              pure_metal_weight: Number(it.fine_weight_grams || it.weight_grams || 0),
-            });
-          });
-
-          jsonBuyRecords.forEach((it: any) => {
-            existingEntry.items.push({
-              transaction_type: (it.item_type || 'BUY').toUpperCase(),
-              metal_type: (it.metal_type || 'GOLD').toUpperCase(),
-              item_weight: Number(it.weight_grams || it.item_weight || 0),
-              only_metal_weight: Number(it.net_weight_grams || it.weight_grams || 0),
-              pure_metal_weight: Number(it.fine_weight_grams || it.weight_grams || 0),
-            });
-          });
-        }
-      }
-
-      // Ensure SELL ornament item is extracted if mode === 'ORDER' and not present in items yet
-      const hasSellItem = existingEntry.items.some((it: any) => (it.transaction_type || it.item_type || '').toUpperCase() === 'SELL');
-      if (!hasSellItem && mode === 'ORDER') {
-        if (b.receipt_json_data && Array.isArray(b.receipt_json_data.items)) {
-          const sellJsonItems = b.receipt_json_data.items.filter((it: any) => (it.item_type || 'SELL').toUpperCase() === 'SELL');
-          sellJsonItems.forEach((it: any) => {
-            existingEntry.items.push({
-              transaction_type: 'SELL',
-              metal_type: (it.metal_type || b.metal_type || 'GOLD').toUpperCase(),
-              item_weight: Number(it.weight_grams || it.item_weight || 0),
-              only_metal_weight: Number(it.net_weight_grams || it.weight_grams || 0),
-              pure_metal_weight: Number(it.fine_weight_grams || it.weight_grams || 0),
-            });
-          });
-        }
-
-        const stillHasSellItem = existingEntry.items.some((it: any) => (it.transaction_type || it.item_type || '').toUpperCase() === 'SELL');
-        if (!stillHasSellItem) {
-          const bUuid = String(b.customer_billing_uuid || '').toLowerCase();
-          const bId = String(b.billing_id || b.id || '').toLowerCase();
-          const rawUuid = String(uuid).toLowerCase();
-
-          const matchedOrd = (dbOrdersList || []).find((o: any) => {
-            const oId = String(o.id || o.order_id || '').toLowerCase();
-            const oUuid = String(o.customer_billing_uuid || '').toLowerCase();
-
-            return (
-              (oUuid && (oUuid === bUuid || oUuid === rawUuid)) ||
-              (oId && (oId === bId || oId === rawUuid)) ||
-              (o.customer_name && b.customer_name && o.customer_name.trim().toLowerCase() === b.customer_name.trim().toLowerCase() && Math.abs(new Date(o.created_at).getTime() - new Date(b.created_at).getTime()) < 86400000)
-            );
-          });
-
-          if (matchedOrd) {
-            const ordAny = matchedOrd as any;
-            existingEntry.items.push({
-              transaction_type: 'SELL',
-              metal_type: (ordAny.metal_type || 'GOLD').toUpperCase(),
-              item_weight: Number(ordAny.gross_weight_grams || ordAny.net_weight_grams || ordAny.weight_grams || 0),
-              only_metal_weight: Number(ordAny.net_weight_grams || ordAny.gross_weight_grams || ordAny.weight_grams || 0),
-              pure_metal_weight: Number(ordAny.fine_weight_grams || ordAny.net_weight_grams || 0),
-            });
-          }
-        }
-      }
-    });
-
-    const createDetailedWeightTracker = () => ({
-      goldSoldGross: 0,
-      goldSoldNet: 0,
-      goldSoldPure: 0,
-      goldBoughtGross: 0,
-      goldBoughtNet: 0,
-      goldBoughtPure: 0,
-      silverSoldGross: 0,
-      silverSoldNet: 0,
-      silverSoldPure: 0,
-      silverBoughtGross: 0,
-      silverBoughtNet: 0,
-      silverBoughtPure: 0,
-      sellsCount: 0,
-      buysCount: 0,
-    });
-
-    const orderTracker = createDetailedWeightTracker();
-    const sellTracker = createDetailedWeightTracker();
-    const buyTracker = createDetailedWeightTracker();
-    const tradeInTracker = createDetailedWeightTracker();
-
-    const recordItemToTracker = (r: any, tracker: any) => {
-      const txType = (r.transaction_type || r.item_type || '').toUpperCase();
-      const metal = (r.metal_type || 'GOLD').toUpperCase();
-      const gross = Number(r.item_weight || r.weight_grams || r.gross_weight_grams || 0) || 0;
-      const net = Number(r.only_metal_weight ?? r.net_weight_grams ?? Math.max(0, gross - (Number(r.deduction_weight) || 0)));
-      const pure = Number(r.pure_metal_weight ?? r.fine_weight_grams) || net;
-
-      if (txType === 'SELL') {
-        tracker.sellsCount++;
-        if (metal.includes('SILVER')) {
-          tracker.silverSoldGross += gross;
-          tracker.silverSoldNet += net;
-          tracker.silverSoldPure += pure;
-        } else {
-          tracker.goldSoldGross += gross;
-          tracker.goldSoldNet += net;
-          tracker.goldSoldPure += pure;
-        }
-      } else {
-        tracker.buysCount++;
-        if (metal.includes('SILVER')) {
-          tracker.silverBoughtGross += gross;
-          tracker.silverBoughtNet += net;
-          tracker.silverBoughtPure += pure;
-        } else {
-          tracker.goldBoughtGross += gross;
-          tracker.goldBoughtNet += net;
-          tracker.goldBoughtPure += pure;
-        }
-      }
-    };
-
-    let finalOrderCount = 0;
-    let finalSellCount = 0;
-    let finalBuyCount = 0;
-    let finalTradeInCount = 0;
-
-    billMap.forEach(({ mode, items }, uuid) => {
-      if (mode === 'ORDER') {
-        finalOrderCount++;
-        const matchedOrd = (dbOrdersList || []).find((o: any) => {
-          const oId = String(o.id || o.order_id || '').toLowerCase();
-          const oUuid = String(o.customer_billing_uuid || '').toLowerCase();
-          const rawUuid = String(uuid).toLowerCase();
-          return (
-            (oUuid && oUuid === rawUuid) ||
-            (oId && oId === rawUuid)
-          );
-        });
-        const isSubmitted = matchedOrd ? (matchedOrd.submitted || 'no').toLowerCase() === 'yes' : true;
-
-        items.forEach((it) => {
-          const itemType = (it.item_type || it.transaction_type || '').toUpperCase();
-          // Scrap/Old Metal bought from customer in ORDER is ALWAYS counted immediately on registration date!
-          if (itemType === 'BUY' || itemType === 'EXCHANGE_BUY') {
-            recordItemToTracker(it, orderTracker);
-          } else if (itemType === 'SELL' && isSubmitted) {
-            // Sold item in custom order is counted ONLY when submitted = 'yes'
-            recordItemToTracker(it, orderTracker);
-          }
-        });
-      } else if (mode === 'SELL') {
-        finalSellCount++;
-        items.forEach((it) => recordItemToTracker(it, sellTracker));
-      } else if (mode === 'BUY') {
-        finalBuyCount++;
-        items.forEach((it) => recordItemToTracker(it, buyTracker));
-      } else if (mode === 'TRADE_IN') {
-        finalTradeInCount++;
-        items.forEach((it) => recordItemToTracker(it, tradeInTracker));
-      }
-    });
-
-    const totalTransactionsCount = finalOrderCount + finalSellCount + finalBuyCount + finalTradeInCount;
-
-    const roundDetailedTracker = (t: any) => ({
-      sellsCount: t.sellsCount,
-      buysCount: t.buysCount,
-      goldSoldGross: round3Decimals(t.goldSoldGross),
-      goldSoldNet: round3Decimals(t.goldSoldNet),
-      goldSoldPure: round3Decimals(t.goldSoldPure),
-      goldBoughtGross: round3Decimals(t.goldBoughtGross),
-      goldBoughtNet: round3Decimals(t.goldBoughtNet),
-      goldBoughtPure: round3Decimals(t.goldBoughtPure),
-      silverSoldGross: round3Decimals(t.silverSoldGross),
-      silverSoldNet: round3Decimals(t.silverSoldNet),
-      silverSoldPure: round3Decimals(t.silverSoldPure),
-      silverBoughtGross: round3Decimals(t.silverBoughtGross),
-      silverBoughtNet: round3Decimals(t.silverBoughtNet),
-      silverBoughtPure: round3Decimals(t.silverBoughtPure),
-    });
-
-    const totalGoldSoldGross = round3Decimals(orderTracker.goldSoldGross + sellTracker.goldSoldGross + buyTracker.goldSoldGross + tradeInTracker.goldSoldGross);
-    const totalGoldSoldNet = round3Decimals(orderTracker.goldSoldNet + sellTracker.goldSoldNet + buyTracker.goldSoldNet + tradeInTracker.goldSoldNet);
-    const totalGoldSoldPure = round3Decimals(orderTracker.goldSoldPure + sellTracker.goldSoldPure + buyTracker.goldSoldPure + tradeInTracker.goldSoldPure);
-
-    const totalGoldBoughtGross = round3Decimals(orderTracker.goldBoughtGross + sellTracker.goldBoughtGross + buyTracker.goldBoughtGross + tradeInTracker.goldBoughtGross);
-    const totalGoldBoughtNet = round3Decimals(orderTracker.goldBoughtNet + sellTracker.goldBoughtNet + buyTracker.goldBoughtNet + tradeInTracker.goldBoughtNet);
-    const totalGoldBoughtPure = round3Decimals(orderTracker.goldBoughtPure + sellTracker.goldBoughtPure + buyTracker.goldBoughtPure + tradeInTracker.goldBoughtPure);
-
-    const totalSilverSoldGross = round3Decimals(orderTracker.silverSoldGross + sellTracker.silverSoldGross + buyTracker.silverSoldGross + tradeInTracker.silverSoldGross);
-    const totalSilverSoldNet = round3Decimals(orderTracker.silverSoldNet + sellTracker.silverSoldNet + buyTracker.silverSoldNet + tradeInTracker.silverSoldNet);
-    const totalSilverSoldPure = round3Decimals(orderTracker.silverSoldPure + sellTracker.silverSoldPure + buyTracker.silverSoldPure + tradeInTracker.silverSoldPure);
-
-    const totalSilverBoughtGross = round3Decimals(orderTracker.silverBoughtGross + sellTracker.silverBoughtGross + buyTracker.silverBoughtGross + tradeInTracker.silverBoughtGross);
-    const totalSilverBoughtNet = round3Decimals(orderTracker.silverBoughtNet + sellTracker.silverBoughtNet + buyTracker.silverBoughtNet + tradeInTracker.silverBoughtNet);
-    const totalSilverBoughtPure = round3Decimals(orderTracker.silverBoughtPure + sellTracker.silverBoughtPure + buyTracker.silverBoughtPure + tradeInTracker.silverBoughtPure);
-
-    const netPureGoldFlow = round3Decimals(totalGoldBoughtPure - totalGoldSoldPure);
-    const netPureSilverFlow = round3Decimals(totalSilverBoughtPure - totalSilverSoldPure);
-
-    const overallMetalPuritySummary = {
-      gold: {
-        soldGross: totalGoldSoldGross,
-        soldNet: totalGoldSoldNet,
-        soldPure: totalGoldSoldPure,
-        boughtGross: totalGoldBoughtGross,
-        boughtNet: totalGoldBoughtNet,
-        boughtPure: totalGoldBoughtPure,
-        netPureFlow: netPureGoldFlow,
-      },
-      silver: {
-        soldGross: totalSilverSoldGross,
-        soldNet: totalSilverSoldNet,
-        soldPure: totalSilverSoldPure,
-        boughtGross: totalSilverBoughtGross,
-        boughtNet: totalSilverBoughtNet,
-        boughtPure: totalSilverBoughtPure,
-        netPureFlow: netPureSilverFlow,
-      }
-    };
-
-    // --- All-Time Overall Stock & Cash Flow Calculation (Unfiltered by date) ---
-    const allTimeOrderTracker = createDetailedWeightTracker();
-    const allTimeSellTracker = createDetailedWeightTracker();
-    const allTimeBuyTracker = createDetailedWeightTracker();
-    const allTimeTradeInTracker = createDetailedWeightTracker();
-
-    (dbBillingRecords || []).forEach((r: any) => {
-      const mode = (r.billing_mode || '').toUpperCase();
-      let tracker = allTimeSellTracker;
-      if (mode === 'ORDER') tracker = allTimeOrderTracker;
-      else if (mode === 'BUY') tracker = allTimeBuyTracker;
-      else if (mode === 'TRADE_IN' || mode === 'EXCHANGE') tracker = allTimeTradeInTracker;
-      recordItemToTracker(r, tracker);
-    });
-
-    const allTimeGoldSold = round3Decimals(allTimeOrderTracker.goldSoldGross + allTimeSellTracker.goldSoldGross + allTimeBuyTracker.goldSoldGross + allTimeTradeInTracker.goldSoldGross);
-    const allTimeGoldBought = round3Decimals(allTimeOrderTracker.goldBoughtGross + allTimeSellTracker.goldBoughtGross + allTimeBuyTracker.goldBoughtGross + allTimeTradeInTracker.goldBoughtGross);
-    const allTimeSilverSold = round3Decimals(allTimeOrderTracker.silverSoldGross + allTimeSellTracker.silverSoldGross + allTimeBuyTracker.silverSoldGross + allTimeTradeInTracker.silverSoldGross);
-    const allTimeSilverBought = round3Decimals(allTimeOrderTracker.silverBoughtGross + allTimeSellTracker.silverBoughtGross + allTimeBuyTracker.silverBoughtGross + allTimeTradeInTracker.silverBoughtGross);
-
-    let allTimeCashIn = 0;
-    let allTimeCashOut = 0;
-    let allTimeFinanceIssued = 0;
-    let allTimeFinanceClearedCount = 0;
-    let allTimeFinanceTakenCount = 0;
-
-    (dbCustomerBills || []).forEach((b: any) => {
-      allTimeCashIn += Number(b.paid_amount || b.final_amount || 0);
-    });
-
-    (dbLoans || []).forEach((fl: any) => {
-      const isRepayment = (fl.status || '').toUpperCase() === 'CLEARED' || (fl.type || '').toUpperCase() === 'REPAYMENT';
-      const amt = Number(fl.amount || fl.principal_amount || 0);
-      if (isRepayment) {
-        allTimeCashIn += amt;
-        allTimeFinanceClearedCount++;
-      } else {
-        allTimeCashOut += amt;
-        allTimeFinanceIssued += amt;
-        allTimeFinanceTakenCount++;
-      }
-    });
-
-    const allTimeSummary = {
-      cashFlow: {
-        totalCashCollected: round3Decimals(allTimeCashIn - allTimeCashOut),
-        cashIn: round3Decimals(allTimeCashIn),
-        cashOut: round3Decimals(allTimeCashOut),
-      },
-      finance: {
-        totalFinanceIssued: round3Decimals(allTimeFinanceIssued),
-        financeClearedCount: allTimeFinanceClearedCount,
-        financeTakenCount: allTimeFinanceTakenCount,
-        cashIn: round3Decimals(allTimeCashIn),
-        cashOut: round3Decimals(allTimeCashOut),
-      },
-      goldFlow: {
-        goldIn: allTimeGoldBought,
-        goldOut: allTimeGoldSold,
-        goldNetFlow: round3Decimals(allTimeGoldBought - allTimeGoldSold),
-      },
-      silverFlow: {
-        silverIn: allTimeSilverBought,
-        silverOut: allTimeSilverSold,
-        silverNetFlow: round3Decimals(allTimeSilverBought - allTimeSilverSold),
-      },
-    };
-
-    const billingActivitySummary = {
-      totalTransactionsCount,
-      orderMode: { count: finalOrderCount, ...roundDetailedTracker(orderTracker) },
-      sellMode: { count: finalSellCount, ...roundDetailedTracker(sellTracker) },
-      buyMode: { count: finalBuyCount, ...roundDetailedTracker(buyTracker) },
-      tradeInMode: { count: finalTradeInCount, ...roundDetailedTracker(tradeInTracker) },
-      overallMetalPuritySummary,
-      allTimeSummary,
-      activityCounts: {
-        orderCount: finalOrderCount,
-        sellCount: finalSellCount,
-        buyCount: finalBuyCount,
-        exchangeCount: finalTradeInCount,
-      }
-    };
-
-    // --- Chronological Log Book Timeline ---
-    const logBookTimeline: any[] = [];
-
-    let totalSalesCash = 0;
-    let totalSalesUPI = 0;
-    let totalSalesCard = 0;
-    let totalSalesValue = 0;
-    let totalGoldWeightSold = 0;
-    let totalSilverWeightSold = 0;
-    let totalGoldWeightBought = 0;
-    let totalSilverWeightBought = 0;
-    let totalScrapPayout = 0;
-    let newDuesCreated = 0;
-    let oldDuesCollected = 0;
-    let makingChargesProfit = 0;
-
-    // Process Added Inventory Products
-    addedProductsToday.forEach((p: any) => {
-      const formattedTime = p.created_at
-        ? new Date(p.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '12:00 PM';
-      const wt = Number(p.current_stock_weight ?? p.weight_grams ?? p.stock_quantity ?? p.weight_from_grams ?? 0);
-      const pcs = Number(p.initial_quantity || 0);
-
-      logBookTimeline.push({
-        id: `log-inv-prod-${p.id}`,
-        time: formattedTime,
-        created_at: p.created_at,
-        type: 'INVENTORY',
-        title: p.item_name || 'Inventory Item',
-        details: `${(p.item_type || 'GOLD').toUpperCase()} ${p.category || 'Stock'} · Total Net Weight: ${wt}g ${pcs > 0 ? `(${pcs} pcs)` : ''}`,
-        category: (p.item_type || 'GOLD').toUpperCase(),
-        weight_grams: wt,
-        amount: Number(p.price || 0),
-        paid_amount: 0,
-        due_amount: 0,
-        payment_mode: 'INVENTORY_STOCK',
-      });
-    });
-
-    // Process Finance Loans
-    loansToday.forEach((fl: any) => {
-      const formattedTime = fl.created_at
-        ? new Date(fl.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '01:30 PM';
-      const wt = Number(fl.item_weight ?? fl.item_weight_grams ?? fl.net_weight ?? fl.gross_weight ?? 0);
-      const loanAmt = Number(fl.customer_debt_money ?? fl.current_principal ?? fl.amount ?? 0);
-      const fullName = (fl.customer_name || 'Finance Customer').trim();
-
-      logBookTimeline.push({
-        id: `log-fin-${fl.finance_uuid || fl.id || Math.random()}`,
-        time: formattedTime,
-        created_at: fl.created_at || fl.debt_date || fl.loan_date || new Date().toISOString(),
-        type: 'FINANCE',
-        title: fullName || 'Finance Customer',
-        details: `Gold Loan Finance · ${fl.item_name || 'Gold Item'} (${wt}g)`,
-        category: (fl.debt_category || fl.item_metal_type || 'GOLD').toUpperCase(),
-        weight_grams: wt,
-        amount: loanAmt,
-        paid_amount: loanAmt,
-        due_amount: 0,
-        payment_mode: 'FINANCE_LOAN',
-        customer_phone: fl.customer_phone,
-      });
-    });
-
-    // Process Worker / Karigar Transactions (Admin <-> Worker Transfers)
-    workerTransactions.forEach((tx: any) => {
-      const formattedTime = tx.created_at
-        ? new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '02:00 PM';
-      const wt = Number(tx.weight_grams || tx.net_weight || tx.fine_weight_grams || tx.fine_weight || 0);
-      const amt = Number(tx.amount || tx.cash_amount || tx.amount_cash || 0);
-
-      const rawWorkerId = String(tx.worker_id || tx.workerId || '').toLowerCase();
-      const resolvedWorkerName = tx.worker_name || tx.karigar_name || tx.workerName || workerNameMap.get(rawWorkerId) || (tx.worker_id ? `Worker (${tx.worker_id})` : 'Karigar');
-
-      const directionStr = String(tx.direction || tx.transfer_direction || tx.type || '').toUpperCase();
-      const isAdminToWorker = directionStr.includes('OUTGOING') || directionStr.includes('ADMIN') || directionStr.includes('SEND') || directionStr.includes('ISSUE');
-      const itemMode = (tx.category || tx.item_type || tx.metal_type || tx.transfer_mode || 'GOLD').toUpperCase();
-      const isWorkAssign = Boolean(tx.order_id) || itemMode === 'ORDER' || (tx.notes && tx.notes.includes('Order #'));
-
-      const directionTitle = isAdminToWorker
-        ? `Admin → Worker (${resolvedWorkerName})`
-        : `Worker (${resolvedWorkerName}) → Admin`;
-
-      const directionIcon = isAdminToWorker ? '↑ Given' : '↓ Returned';
-      const rawNotes = (tx.notes || tx.item_name || tx.description || tx.item_description || '').replace(/\n/g, ' · ');
-      const itemDesc = rawNotes || `${itemMode} Transfer`;
-      const details = `${directionIcon} : ${itemDesc} ${wt > 0 ? `(${wt}g)` : ''} ${amt > 0 ? `· ₹${amt.toLocaleString('en-IN')}` : ''} ${tx.order_id ? `· Order #${tx.order_id}` : ''}`;
-
-      logBookTimeline.push({
-        id: `log-worker-${tx.id || Math.random()}`,
-        time: formattedTime,
-        created_at: tx.created_at || new Date().toISOString(),
-        type: isWorkAssign ? 'WORK ASSIGN' : 'WORKER TX',
-        title: directionTitle,
-        details: details,
-        category: itemMode,
-        cash_metal_link: tx.cash_metal_link || null,
-        weight_grams: wt,
-        amount: amt,
-        paid_amount: amt,
-        due_amount: 0,
-        payment_mode: 'WORKER_TRANSFER',
-        direction: isAdminToWorker ? 'ADMIN_TO_WORKER' : 'WORKER_TO_ADMIN',
-        transfer_item_mode: itemMode,
-        raw_worker_txn: tx,
-      });
-    });
-
-    // Process Cash Register Ledger Transactions (Cash Loaded / Manual Cash Entries)
-    cashLedgerToday.forEach((tx: any) => {
-      const type = (tx.transaction_type || '').toUpperCase();
-      const formattedTime = tx.created_at
-        ? new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '12:00 PM';
-      const amt = Number(tx.transaction_cash_total || 0);
-      const isFlowIn = (tx.flow_type || '').toUpperCase() === 'IN';
-
-      // Handle Finance Loan Repayments/Installments recorded in cash drawer
-      if (type === 'FINANCE') {
-        const isRepayment = isFlowIn || (tx.item_type || '').toLowerCase().includes('payment') || (tx.item_type || '').toLowerCase().includes('repay') || (tx.notes || '').toLowerCase().includes('received');
-        if (isRepayment) {
-          logBookTimeline.push({
-            id: `log-fin-repay-${tx.id || tx.uuid || tx.cash_history_uuid || Math.random()}`,
-            time: formattedTime,
-            created_at: tx.created_at || new Date().toISOString(),
-            type: 'FINANCE_REPAYMENT',
-            title: tx.notes ? (tx.notes.includes('from ') ? tx.notes.split('from ')?.[1] : tx.notes) : 'Finance Payment',
-            details: `💰 Finance Repayment · ${tx.item_type || 'Loan Payment'}: ${tx.notes || ''}`,
-            category: (tx.metal_type || 'GOLD').toUpperCase(),
-            weight_grams: 0,
-            amount: amt,
-            paid_amount: amt,
-            due_amount: 0,
-            payment_mode: 'REPAYMENT',
-            flow_type: 'IN',
-            raw_cash_ledger: tx,
-          });
-        }
-        return;
-      }
-
-      // Skip bill-based cash entries (SELL, BUY, EXCHANGE, ORDER) as they are logged via invoices below
-      if (type === 'SELL' || type === 'BUY' || type === 'EXCHANGE' || type === 'ORDER') return;
-
-      logBookTimeline.push({
-        id: `log-cash-${tx.cash_history_uuid || tx.id || Math.random()}`,
-        time: formattedTime,
-        created_at: tx.created_at || new Date().toISOString(),
-        type: 'CASH_REGISTER',
-        title: type === 'LOADING' ? 'Cash Loaded to Drawer' : (tx.notes || 'Cash Entry'),
-        details: `${isFlowIn ? '💵 Cash IN (Loaded to Drawer)' : '💸 Cash OUT'} · Amount: ₹${amt.toLocaleString('en-IN')}${tx.notes ? ` (${tx.notes})` : ''}`,
-        category: 'CASH',
-        weight_grams: 0,
-        amount: amt,
-        paid_amount: isFlowIn ? amt : 0,
-        due_amount: 0,
-        payment_mode: isFlowIn ? 'CASH_IN' : 'CASH_OUT',
-        raw_cash_ledger: tx,
-      });
-    });
-
-    // Process Invoices (Orders, Sells, Buys, Trade-ins from customer_billing)
-    invoices.forEach((inv: any) => {
-      const formattedTime = inv.created_at
-        ? new Date(inv.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '10:00 AM';
-
-      const jsonMode = (inv.receipt_json_data?.transaction_type || inv.transaction_type || 'SELL').toUpperCase();
-      const items = inv.receipt_json_data?.items || [];
-      const netAmount = Number(inv.final_amount || inv.receipt_json_data?.netPayable || 0);
-      const paidAmount = Number(inv.paid_amount || inv.receipt_json_data?.advancePaidAmount || netAmount);
-      const dueAmount = Number(inv.due_amount || inv.receipt_json_data?.balanceDueAmount || 0);
-
-      const orderKey = String(inv.id || inv.receipt_json_data?.order_id || '').toLowerCase();
-      const matchedDbOrder = (dbOrdersList || []).find((o: any) => String(o.id || o.order_id || '').toLowerCase() === orderKey);
-      const isSubmitted = (matchedDbOrder?.submitted || inv.submitted || inv.receipt_json_data?.submitted || 'no').toLowerCase() === 'yes';
-      const isOrderType = jsonMode === 'ORDER';
-      const isStockDebited = !isOrderType || isSubmitted; // Custom orders debit stock ONLY when submitted = 'yes'
-
-      const isSell = jsonMode === 'SELL' || jsonMode === 'EXCHANGE' || jsonMode === 'TRADE_IN' || isOrderType;
-
-      if (isSell) {
-        totalSalesValue += netAmount;
-        newDuesCreated += dueAmount;
-        totalSalesCash += paidAmount;
-      }
-
-      if (dueAmount === 0 && paidAmount > 0 && inv.created_at) {
-        oldDuesCollected += (inv.receipt_json_data?.payment_history?.length > 1 ? paidAmount : 0);
-      }
-
-      items.forEach((item: any) => {
-        const wt = Number(item.weight_grams || 0);
-        const isGold = (item.metal_type || '').toUpperCase() !== 'SILVER';
-
-        if (item.item_type === 'SELL') {
-          if (isStockDebited) {
-            if (isGold) totalGoldWeightSold += wt;
-            else totalSilverWeightSold += wt;
-          }
-          makingChargesProfit += Number(item.making_charges_per_gram || 0) * wt;
-        } else if (item.item_type === 'BUY' || item.item_type === 'EXCHANGE_BUY') {
-          if (isGold) totalGoldWeightBought += wt;
-          else totalSilverWeightBought += wt;
-          totalScrapPayout += Number(item.total_price || 0);
-        }
-      });
-
-      // Build rich description if multi-item (Order or Exchange)
-      const sellItems = items.filter((it: any) => it.item_type === 'SELL');
-      const buyItems = items.filter((it: any) => it.item_type === 'BUY' || it.item_type === 'EXCHANGE_BUY');
-      let detailsText = `${inv.product_name || 'Jewellery'} · Weight: ${inv.weight_grams || 0}g`;
-      if (sellItems.length > 0 && buyItems.length > 0) {
-        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
-        const buyStr = buyItems.map((i: any) => `${i.product_name || 'Scrap'} (${i.weight_grams || 0}g)`).join(', ');
-        detailsText = `📦 Sold: ${sellStr} | ⚖️ Bought: ${buyStr}`;
-      } else if (sellItems.length > 0 && isOrderType) {
-        const sellStr = sellItems.map((i: any) => `${i.product_name || 'Item'} (${i.weight_grams || 0}g)`).join(', ');
-        detailsText = `📦 Custom Order: ${sellStr}${isSubmitted ? ' (Delivered to Customer)' : ' (Pending Delivery)'}`;
-      }
-
-      const totalBuyCredit = Number(inv.total_buy_credit || inv.receipt_json_data?.totalBuyCredit || inv.receipt_json_data?.total_buy_credit || 0);
-      const totalSellValue = Number(inv.total_sell_value || inv.receipt_json_data?.totalSellValue || inv.receipt_json_data?.total_sell_value || 0);
-
-      const isOutflow = 
-        String(inv.flow_type || inv.receipt_json_data?.flow_type || '').toUpperCase() === 'OUT' ||
-        Boolean(inv.shop_pays_customer || inv.receipt_json_data?.shop_pays_customer) ||
-        (totalBuyCredit > totalSellValue && totalBuyCredit > 0);
-
-      // Deduction timestamp: Use item_submitted_at (or updated_at) timestamp when submitted = 'yes', otherwise creation date
-      const effectiveCreatedAt = isOrderType && isSubmitted && (matchedDbOrder?.item_submitted_at || matchedDbOrder?.updated_at)
-        ? (matchedDbOrder.item_submitted_at || matchedDbOrder.updated_at)
-        : inv.created_at;
-
-      logBookTimeline.push({
-        id: `log-inv-${inv.id}`,
-        time: formattedTime,
-        created_at: effectiveCreatedAt,
-        type: jsonMode === 'TRADE_IN' ? 'EXCHANGE' : jsonMode,
-        title: inv.customer_name || 'Walk-in Customer',
-        details: detailsText,
-        category: inv.metal_type || 'GOLD',
-        weight_grams: Number(inv.weight_grams || 0),
-        amount: netAmount,
-        paid_amount: paidAmount,
-        due_amount: dueAmount,
-        submitted: isSubmitted ? 'yes' : 'no',
-        stock_debited: isStockDebited,
-        payment_mode: inv.receipt_json_data?.paymentType || (dueAmount === 0 ? 'FULL' : 'PARTIAL'),
-        customer_phone: inv.customer_phone,
-        flow_type: isOutflow ? 'OUT' : 'IN',
-        direction: isOutflow ? 'SHOP_TO_CUSTOMER' : 'CUSTOMER_TO_SHOP',
-        raw_invoice: inv,
-      });
-    });
-
-    // Deduplicate logBookTimeline by unique ID
-    const seenTimelineIds = new Set<string>();
-    const deduplicatedTimeline: any[] = [];
-    logBookTimeline.forEach((item: any) => {
-      const dedupKey = String(item.id || `${item.type}_${item.created_at}_${item.amount}`);
-      if (!seenTimelineIds.has(dedupKey)) {
-        seenTimelineIds.add(dedupKey);
-        deduplicatedTimeline.push(item);
-      }
-    });
-
-    // Sort timeline by created_at descending (latest first) and assign S.No + Payment Status Badges
-    deduplicatedTimeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    deduplicatedTimeline.forEach((item, index) => {
-      item.sNo = index + 1;
-      item.payment_status = item.due_amount > 0 ? 'PARTIAL' : 'FULL';
-    });
-
-    // --- Category Stock Balance Summary (100% Dynamic from inventory_products) ---
-    let currentGoldShowcase = 0;
-    let currentSilverShowcase = 0;
-    (dbProducts || []).forEach((p: any) => {
-      const metal = (p.item_type || p.metal_type || 'GOLD').toUpperCase();
-      const wt = Number(p.stock_quantity || p.weight_grams || p.weight_from_grams || 0);
-      if (metal.includes('SILVER')) {
-        currentSilverShowcase += wt;
-      } else {
-        currentGoldShowcase += wt;
-      }
-    });
-
-    const goldLoadedToday = addedProductsToday
-      .filter((p: any) => !(p.item_type || 'GOLD').toUpperCase().includes('SILVER'))
-      .reduce((sum: number, p: any) => sum + Number(p.stock_quantity || p.weight_grams || 0), 0);
-    const silverLoadedToday = addedProductsToday
-      .filter((p: any) => (p.item_type || 'GOLD').toUpperCase().includes('SILVER'))
-      .reduce((sum: number, p: any) => sum + Number(p.stock_quantity || p.weight_grams || 0), 0);
-
-    const goldWorkerOutToday = (workerTransactions || [])
-      .filter((tx: any) => {
-        const dir = String(tx.direction || tx.transfer_direction || tx.type || '').toUpperCase();
-        const isAdminToWorker = dir.includes('OUTGOING') || dir.includes('ADMIN') || dir.includes('SEND') || dir.includes('ISSUE');
-        const itemMode = (tx.category || tx.item_type || tx.metal_type || 'GOLD').toUpperCase();
-        return isAdminToWorker && itemMode.includes('GOLD');
-      })
-      .reduce((sum: number, tx: any) => sum + Number(tx.weight_grams || tx.net_weight || tx.fine_weight_grams || 0), 0);
-
-    const silverWorkerOutToday = (workerTransactions || [])
-      .filter((tx: any) => {
-        const dir = String(tx.direction || tx.transfer_direction || tx.type || '').toUpperCase();
-        const isAdminToWorker = dir.includes('OUTGOING') || dir.includes('ADMIN') || dir.includes('SEND') || dir.includes('ISSUE');
-        const itemMode = (tx.category || tx.item_type || tx.metal_type || 'GOLD').toUpperCase();
-        return isAdminToWorker && itemMode.includes('SILVER');
-      })
-      .reduce((sum: number, tx: any) => sum + Number(tx.weight_grams || tx.net_weight || tx.fine_weight_grams || 0), 0);
-
-    // --- Cash & Register Summary (100% Dynamic from cash_history) ---
-    const { data: todayCashRow } = await supabase
-      .from('cash_history')
-      .select('*')
-      .lte('date', targetDate)
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    let liveClosingCash = 0;
-    let openingCash = 0;
-
-    if (todayCashRow) {
-      liveClosingCash = Number(todayCashRow.current_cash || 0);
-      // Get opening cash from previous day
-      const { data: prevCashRow } = await supabase
-        .from('cash_history')
-        .select('*')
-        .lt('date', todayCashRow.date)
-        .order('date', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      openingCash = Number(prevCashRow?.current_cash || liveClosingCash);
+      .or(`customer_billing_uuid.eq.${invIdStr},billing_id.eq.${invIdStr}`)
+      .single();
+
+    if (fetchErr || !billRow) {
+      return res.status(404).json({ success: false, message: `Invoice #${id} not found` });
     }
 
-    const isHistoricalPastDate = targetDate !== 'all' && targetDate !== todayIST;
-    const fallbackGoldGrams = isHistoricalPastDate ? 0 : round3Decimals(currentGoldShowcase + totalGoldWeightSold + goldWorkerOutToday);
-    const fallbackSilverGrams = isHistoricalPastDate ? 0 : round3Decimals(currentSilverShowcase + totalSilverWeightSold + silverWorkerOutToday);
+    const updateFields: any = { updated_at: new Date().toISOString() };
+    if (customer_name !== undefined) updateFields.customer_name = customer_name;
+    if (customer_phone !== undefined) updateFields.customer_phone = customer_phone;
+    if (customer_address !== undefined) updateFields.customer_address = customer_address;
+    if (bill_date !== undefined) updateFields.bill_date = bill_date;
+    if (total_amount !== undefined) updateFields.total_amount = Number(total_amount);
+    if (paid_amount !== undefined) updateFields.paid_amount = Number(paid_amount);
+    if (due_amount !== undefined) updateFields.due_amount = Number(due_amount);
 
-    const { getOrInitOpeningRecord } = await import('../../utils/openingRecordHelper');
-    const openingRecord = await getOrInitOpeningRecord(
-      targetDate,
-      {
-        goldGrams: fallbackGoldGrams,
-        silverGrams: fallbackSilverGrams,
-        cashAmount: Number(openingCash.toFixed(2))
-      },
-      { goldGrams: round3Decimals(goldLoadedToday), silverGrams: round3Decimals(silverLoadedToday) }
-    );
-
-    const goldOpeningWeight = round3Decimals(openingRecord.openingGoldGrams);
-    const silverOpeningWeight = round3Decimals(openingRecord.openingSilverGrams);
-
-    const stockSummary = [
-      {
-        category: 'Gold Ornaments',
-        openingWeight: goldOpeningWeight,
-        loadedWeight: round3Decimals(goldLoadedToday),
-        soldWeight: totalGoldWeightSold,
-        closingWeight: round3Decimals(currentGoldShowcase),
-      },
-      {
-        category: 'Silver Articles & Ornaments',
-        openingWeight: silverOpeningWeight,
-        loadedWeight: round3Decimals(silverLoadedToday),
-        soldWeight: totalSilverWeightSold,
-        closingWeight: round3Decimals(currentSilverShowcase),
-      },
-    ];
-
-    const cashSummary = {
-      openingCash: Number(openingRecord.openingCashAmount.toFixed(2)),
-      salesCashCollected: totalSalesCash,
-      oldDuesCollected,
-      scrapPayout: totalScrapPayout,
-      dailyExpenses: 0,
-      expectedClosingCash: Number(liveClosingCash.toFixed(2)),
-      current_cash: Number(liveClosingCash.toFixed(2)),
-      upiCollected: totalSalesUPI,
-      cardCollected: totalSalesCard,
+    const existingBillJson = billRow.bill_json || {};
+    const updatedBillJson = {
+      ...existingBillJson,
+      customer_name: updateFields.customer_name || existingBillJson.customer_name,
+      customer_phone: updateFields.customer_phone || existingBillJson.customer_phone,
+      customer_address: updateFields.customer_address || existingBillJson.customer_address,
+      bill_date: updateFields.bill_date || existingBillJson.bill_date,
     };
+    updateFields.bill_json = updatedBillJson;
 
-    // --- Scrap Vault Summary ---
-    const scrapSummary = {
-      oldGoldBoughtWeight: totalGoldWeightBought,
-      oldSilverBoughtWeight: totalSilverWeightBought,
-      totalScrapPayout,
-    };
+    const { data: updatedMaster, error: updateErr } = await supabase
+      .from('customer_billing')
+      .update(updateFields)
+      .eq('customer_billing_uuid', billRow.customer_billing_uuid)
+      .select('*')
+      .single();
 
-    // Extract Old Metal Vault Customer Items
-    const oldMetalVaultItems: any[] = [];
-    invoices.forEach((inv: any) => {
-      let rData: any = inv.receipt_json_data;
-      if (typeof rData === 'string') {
-        try { rData = JSON.parse(rData); } catch (e) { }
-      }
+    if (updateErr) {
+      return res.status(500).json({ success: false, message: updateErr.message });
+    }
 
-      if (rData && Array.isArray(rData.items)) {
-        rData.items.forEach((it: any) => {
-          if (it.item_type === 'BUY' || it.item_type === 'EXCHANGE_BUY') {
-            const wt = Number(it.weight_grams || 0);
-            const purity = Number(it.purity_percentage || it.purity || 91.6);
-            const pureWt = round3Decimals(wt * (purity / 100));
-            oldMetalVaultItems.push({
-              id: `scrap-${inv.id}-${it.id || Math.random()}`,
-              customer_name: inv.customer_name || 'Customer',
-              customer_phone: inv.customer_phone || 'N/A',
-              created_at: inv.created_at,
-              item_name: it.product_name || (it.metal_type + ' Scrap Item'),
-              metal_type: (it.metal_type || 'GOLD').toUpperCase(),
-              gross_weight: wt,
-              purity_percentage: purity,
-              pure_weight: pureWt,
-              payout_amount: Number(it.total_price || 0),
-            });
-          }
-        });
-      }
-    });
+    // Sync changes to line items in billing_sell_buy_records
+    await supabase
+      .from('billing_sell_buy_records')
+      .update({
+        customer_name: updateFields.customer_name,
+        bill_date: updateFields.bill_date,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('customer_billing_uuid', billRow.customer_billing_uuid);
 
-    // --- Udhaari & Karigar Summary ---
-    const karigarGoldIssued = workerTransactions.reduce((sum: number, tx: any) =>
-      tx.direction === 'OUTGOING' ? sum + Number(tx.weight_grams || tx.fine_gold_grams || 0) : sum, 0);
-    const karigarGoldReceived = workerTransactions.reduce((sum: number, tx: any) =>
-      tx.direction !== 'OUTGOING' ? sum + Number(tx.weight_grams || tx.fine_gold_grams || 0) : sum, 0);
+    // Sync to cash_transactions & cash_transaction_ledger
+    if (updateFields.customer_name || updateFields.bill_date || updateFields.paid_amount !== undefined) {
+      try {
+        await supabase
+          .from('cash_transactions')
+          .update({
+            notes: `Updated for ${updateFields.customer_name || billRow.customer_name} (${billRow.billing_id})`,
+            created_at: updateFields.bill_date ? `${updateFields.bill_date}T12:00:00.000Z` : undefined,
+          })
+          .or(`transaction_id.eq.${billRow.billing_id},transaction_id.eq.${billRow.customer_billing_uuid}`);
 
-    const udhaariSummary = {
-      newDuesCreated,
-      oldDuesCollected,
-      karigarGoldIssued,
-      karigarGoldReceived,
-    };
+        await supabase
+          .from('cash_transaction_ledger')
+          .update({
+            notes: `Updated for ${updateFields.customer_name || billRow.customer_name} (${billRow.billing_id})`,
+            created_at: updateFields.bill_date ? `${updateFields.bill_date}T12:00:00.000Z` : undefined,
+          })
+          .or(`transaction_id.eq.${billRow.billing_id},transaction_id.eq.${billRow.customer_billing_uuid},notes.ilike.%${billRow.billing_id}%`);
+      } catch (e) {}
+    }
 
+    memoryCache.deletePattern('billing');
+    memoryCache.deletePattern('accounts');
 
-    // --- Profit Summary ---
-    const dailyExpenses = 0;
-    const netProfit = makingChargesProfit - dailyExpenses;
-    const profitSummary = {
-      makingChargesProfit,
-      metalMarginProfit: round3Decimals(totalSalesValue * 0.05),
-      grossProfit: makingChargesProfit + round3Decimals(totalSalesValue * 0.05),
-      dailyExpenses,
-      netProfit: Math.max(0, netProfit + round3Decimals(totalSalesValue * 0.05)),
-    };
-
-    return res.json({
+    res.json({
       success: true,
-      date: targetDate,
-      section,
-      logBookTimeline: deduplicatedTimeline,
-      stockSummary,
-      cashSummary,
-      cashLedgerRecords: cashLedgerToday || [],
-      scrapSummary,
-      oldMetalVaultItems,
-      udhaariSummary,
-      profitSummary,
-      billingActivitySummary,
-      activityCounts: billingActivitySummary.activityCounts,
+      message: `Invoice #${billRow.billing_id} updated successfully!`,
+      invoice: updatedMaster,
     });
   } catch (err: any) {
-    console.error('Error fetching day book accounts:', err);
-    return res.status(500).json({ success: false, message: err.message || 'Server error fetching day book accounts' });
+    res.status(500).json({ success: false, message: err.message || 'Failed to update invoice' });
+  }
+});
+
+// DELETE /api/billing/invoices/:id — Cascading Delete of Invoice
+router.delete('/invoices/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const invIdStr = String(id);
+
+    // 1. Fetch master record
+    const { data: billRow, error: fetchErr } = await supabase
+      .from('customer_billing')
+      .select('*')
+      .or(`customer_billing_uuid.eq.${invIdStr},billing_id.eq.${invIdStr}`)
+      .single();
+
+    if (fetchErr || !billRow) {
+      return res.status(404).json({ success: false, message: `Invoice #${id} not found` });
+    }
+
+    const uuid = billRow.customer_billing_uuid;
+    const bId = billRow.billing_id;
+
+    // 2. Cascading Deletion across all related tables
+    try {
+      // Delete installments from billing_payment_history
+      await supabase
+        .from('billing_payment_history')
+        .delete()
+        .or(`customer_billing_uuid.eq.${uuid},notes.ilike.%${bId}%`);
+
+      // Delete line items from billing_sell_buy_records
+      await supabase
+        .from('billing_sell_buy_records')
+        .delete()
+        .or(`customer_billing_uuid.eq.${uuid},billing_id.eq.${bId}`);
+
+      // Delete metal scrap/buy transactions
+      await supabase
+        .from('customer_metal_transactions')
+        .delete()
+        .or(`transaction_id.eq.${bId},transaction_id.eq.${uuid}`);
+
+      // Delete cash drawer entries from cash_transactions & cash_transaction_ledger
+      await supabase
+        .from('cash_transactions')
+        .delete()
+        .or(`transaction_id.eq.${bId},transaction_id.eq.${uuid}`);
+
+      await supabase
+        .from('cash_transaction_ledger')
+        .delete()
+        .or(`transaction_id.eq.${bId},transaction_id.eq.${uuid},notes.ilike.%${bId}%`);
+
+      // Delete inventory logs
+      await supabase
+        .from('inventory_stock_logs')
+        .delete()
+        .or(`transaction_id.eq.${bId},transaction_id.eq.${uuid}`);
+
+      // If this was an ORDER bill, also clean orders table if matched
+      if (billRow.bill_type === 'ORDER') {
+        await supabase
+          .from('orders')
+          .delete()
+          .or(`id.eq.${bId},id.eq.${uuid}`);
+      }
+
+      // Finally, delete the master customer_billing record
+      await supabase
+        .from('customer_billing')
+        .delete()
+        .eq('customer_billing_uuid', uuid);
+    } catch (delErr) {
+      console.warn('⚠️ Error during invoice cascading delete:', delErr);
+    }
+
+    memoryCache.deletePattern('billing');
+    memoryCache.deletePattern('accounts');
+
+    res.json({
+      success: true,
+      message: `Invoice #${bId} deleted permanently from all registers.`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to delete invoice' });
   }
 });
 

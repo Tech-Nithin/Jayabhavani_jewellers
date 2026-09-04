@@ -146,6 +146,7 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
                 const isSell = rawItemType === 'SELL';
                 const isBuy = rawItemType === 'BUY';
                 const isExchange = rawItemType === 'EXCHANGE';
+                const isSettlement = rawItemType === 'SETTLEMENT' || rawItemType === 'DUE PAYMENT' || rawItemType === 'INSTALLMENT';
                 const isInventory = rawItemType === 'INVENTORY';
                 const isFinance = rawItemType === 'FINANCE';
                 const isKarigar = rawItemType === 'KARIGAR' || rawItemType === 'WORK ASSIGN' || rawItemType === 'WORKER TX';
@@ -161,6 +162,7 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
                 else if (isSell) { typeBg = '#f0fdf4'; typeColor = '#15803d'; }
                 else if (isBuy) { typeBg = '#eff6ff'; typeColor = '#1d4ed8'; }
                 else if (isExchange) { typeBg = '#faf5ff'; typeColor = '#7e22ce'; }
+                else if (isSettlement) { typeBg = '#e0f2fe'; typeColor = '#0369a1'; }
                 else if (isInventory) { typeBg = '#fff7ed'; typeColor = '#c2410c'; }
                 else if (isFinance) { typeBg = '#ccfbf1'; typeColor = '#0f766e'; }
                 else if (isWorkAssign) { typeBg = '#ecfdf5'; typeColor = '#047857'; }
@@ -170,6 +172,7 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
                 const totalBillVal = Number(item.amount || item.paid_amount || 0);
 
                 const isClickableBill = isOrder || isSell || isBuy || isExchange;
+                const isDueRemaining = Number(item.due_amount || 0) > 0.01 && (inHandCash < totalBillVal) && item.payment_status !== 'FULL' && item.payment_status !== 'PAID';
 
                 return (
                   <React.Fragment key={item.id || idx}>
@@ -242,18 +245,29 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
                           <span style={{ fontSize: '0.52rem', fontWeight: 800, color: '#475569', background: '#f1f5f9', padding: '1px 4px', borderRadius: '4px' }}>
                             WEIGHT ACC
                           </span>
+                        ) : isSettlement ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                            <span style={{ fontSize: '0.52rem', fontWeight: 800, color: Number(item.due_amount || 0) <= 0.01 ? '#15803d' : '#0369a1', background: Number(item.due_amount || 0) <= 0.01 ? '#dcfce7' : '#e0f2fe', border: `1px solid ${Number(item.due_amount || 0) <= 0.01 ? '#bbf7d0' : '#bae6fd'}`, padding: '1px 5px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                              {Number(item.due_amount || 0) <= 0.01 ? '✅ DUE CLEARED' : '💵 DUE RECEIVED'}
+                            </span>
+                            {Number(item.due_amount || 0) > 0.01 && (
+                              <span style={{ fontSize: '0.48rem', fontWeight: 700, color: '#b91c1c' }}>
+                                DUE: ₹{Number(item.due_amount).toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
                         ) : isOrder ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                             <span style={{ fontSize: '0.52rem', fontWeight: 800, color: item.submitted === 'yes' ? '#15803d' : '#b45309', background: item.submitted === 'yes' ? '#dcfce7' : '#fef3c7', border: `1px solid ${item.submitted === 'yes' ? '#bbf7d0' : '#fde68a'}`, padding: '1px 5px', borderRadius: '4px' }}>
                               {item.submitted === 'yes' ? '✅ DELIVERED' : '⏳ ORDER TAKEN'}
                             </span>
-                            {item.due_amount > 0 && (
+                            {isDueRemaining && (
                               <span style={{ fontSize: '0.48rem', fontWeight: 700, color: '#b91c1c' }}>
-                                DUE: ₹{item.due_amount.toLocaleString('en-IN')}
+                                DUE: ₹{Number(item.due_amount).toLocaleString('en-IN')}
                               </span>
                             )}
                           </div>
-                        ) : item.due_amount > 0 ? (
+                        ) : isDueRemaining ? (
                           <span style={{ fontSize: '0.52rem', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', padding: '1px 5px', borderRadius: '4px' }}>
                             PARTIAL PAID
                           </span>

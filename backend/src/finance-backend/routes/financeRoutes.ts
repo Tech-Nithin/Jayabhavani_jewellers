@@ -162,8 +162,28 @@ router.get('/metal-rates', async (_req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sequential Customer ID Helpers (CUST-01, CUST-02, ...)
+// GET /api/finance/presets — Auto-suggestions for customer address & names
 // ─────────────────────────────────────────────────────────────────────────────
+router.get('/presets', async (_req: Request, res: Response) => {
+  try {
+    const { data: financeCustomers } = await supabase
+      .from('finance')
+      .select('customer_name, customer_phone, customer_address')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    const addresses = Array.from(new Set((financeCustomers || []).map((c: any) => c.customer_address).filter(Boolean)));
+    const customers = Array.from(new Set((financeCustomers || []).map((c: any) => c.customer_name).filter(Boolean)));
+
+    res.json({
+      success: true,
+      addresses,
+      customers,
+    });
+  } catch (err: any) {
+    res.json({ success: true, addresses: ['Patelpura, Siddipet', 'Subhash Nagar, Siddipet'], customers: [] });
+  }
+});
 async function getNextCustomerId(): Promise<string> {
   const { data } = await supabase
     .from('finance')
@@ -619,15 +639,26 @@ router.patch('/:uuid/update', async (req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/finance/:uuid — Soft delete (mark with record_action)
+// DELETE /api/finance/:uuid — Cascading Delete of Loan Record
 // ─────────────────────────────────────────────────────────────────────────────
 router.delete('/:uuid', async (req: Request, res: Response) => {
   const { uuid } = req.params;
   try {
-    const { error } = await supabase.from('finance').update({ updated_at: new Date().toISOString() }).eq('finance_uuid', uuid);
+    // 1. Delete all installment payments from payment history
+    await supabase.from('finance_payment_history').delete().eq('finance_uuid', uuid);
+
+    // 2. Delete any matching entries from cash_transaction_ledger
+    await supabase
+      .from('cash_transaction_ledger')
+      .delete()
+      .or(`transaction_id.eq.${uuid},notes.ilike.%${uuid}%`);
+
+    // 3. Delete master loan record from finance table
+    const { error } = await supabase.from('finance').delete().eq('finance_uuid', uuid);
     if (error) return res.status(500).json({ success: false, message: error.message });
+
     memoryCache.clear();
-    res.json({ success: true, message: 'Loan record removed.' });
+    res.json({ success: true, message: 'Loan record and payment history permanently deleted.' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

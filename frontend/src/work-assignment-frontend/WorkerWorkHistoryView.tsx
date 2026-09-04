@@ -405,7 +405,7 @@ export const WorkerWorkHistoryView: React.FC<WorkerWorkHistoryViewProps> = ({
             boxShadow: '0 2px 8px rgba(217, 119, 6, 0.25)',
           }}
         >
-          <i className="fa-solid fa-users"></i> See Workers ({workersList.length})
+          <i className="fa-solid fa-users"></i> Workers ({workersList.length})
         </button>
       </div>
 

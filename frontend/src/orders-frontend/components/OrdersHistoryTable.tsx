@@ -18,6 +18,8 @@ interface OrdersHistoryTableProps {
   onViewDetail?: (order: OrderItem, showBill?: boolean) => void;
   onViewSeeBill?: (order: OrderItem) => void;
   onViewOrderDetails?: (order: OrderItem) => void;
+  onEditOrder?: (order: OrderItem) => void;
+  onDeleteOrder?: (order: OrderItem) => void;
 }
 
 const getCurrentDatetimeLocalString = (isoStr?: string | null): string => {
@@ -44,6 +46,8 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
   onViewDetail,
   onViewSeeBill,
   onViewOrderDetails,
+  onEditOrder,
+  onDeleteOrder,
 }) => {
   const t = getOrdersTranslation(lang);
   const commonT = translations[lang] || translations.EN;
@@ -460,9 +464,73 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
                   </div>
                 </td>
 
-                {/* Info Column: See Bill Icon & Order Details Drawer Button */}
+                {/* Info / Actions Column */}
                 <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}>
+                    {/* ✏️ Edit Order Button */}
+                    <button
+                      type="button"
+                      onClick={() => onEditOrder && onEditOrder(ord)}
+                      title="Edit Order Details"
+                      style={{
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                        color: '#16a34a',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '7px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#16a34a';
+                        e.currentTarget.style.color = '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#f0fdf4';
+                        e.currentTarget.style.color = '#16a34a';
+                      }}
+                    >
+                      <i className="fa-solid fa-pen-to-square"></i>
+                    </button>
+
+                    {/* 🗑️ Delete Order Button */}
+                    <button
+                      type="button"
+                      onClick={() => onDeleteOrder && onDeleteOrder(ord)}
+                      title="Delete Order & Cancel Worker Assignment"
+                      style={{
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        color: '#dc2626',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '7px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#dc2626';
+                        e.currentTarget.style.color = '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#fef2f2';
+                        e.currentTarget.style.color = '#dc2626';
+                      }}
+                    >
+                      <i className="fa-solid fa-trash-can"></i>
+                    </button>
+
                     {/* Bill Receipt Icon Button */}
                     <button
                       type="button"

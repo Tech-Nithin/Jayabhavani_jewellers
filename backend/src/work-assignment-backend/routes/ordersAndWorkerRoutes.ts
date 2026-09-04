@@ -283,7 +283,12 @@ router.post('/orders', async (req: Request, res: Response) => {
 
     const finalImageUrl = image_url || receipt_json_data?.image_url || receipt_json_data?.items?.[0]?.image_url || '';
 
-    const newOrder: OrderItem = {
+    const rawOrderBillDate = req.body.bill_date || req.body.billDate || req.body.date || receipt_json_data?.bill_date || receipt_json_data?.billDate;
+    const nowTime = new Date().toISOString().split('T')[1] || '12:00:00.000Z';
+    const orderCreatedAt = req.body.created_at || (rawOrderBillDate ? `${rawOrderBillDate}T${nowTime}` : new Date().toISOString());
+    const resolvedOrderBillDate = rawOrderBillDate || orderCreatedAt.split('T')[0];
+
+    const newOrder: any = {
       id: generateOrderId(),
       customer_name: customer_name || 'Walk-in Customer',
       customer_phone: customer_phone || '',
@@ -316,11 +321,12 @@ router.post('/orders', async (req: Request, res: Response) => {
       metal_value: Number(metal_value) || 0,
       gst_amount: Number(gst_amount) || 0,
       final_amount: Number(final_amount) || 0,
-      receipt_json_data: receipt_json_data || null,
+      bill_date: resolvedOrderBillDate,
+      receipt_json_data: receipt_json_data ? { ...receipt_json_data, bill_date: resolvedOrderBillDate } : null,
       image_url: finalImageUrl,
       assigned_worker_id: null,
       assigned_worker_name: null,
-      created_at: new Date().toISOString(),
+      created_at: orderCreatedAt,
     };
 
     // Strip fine_weight_grams because it is a GENERATED ALWAYS AS STORED column in PostgreSQL
@@ -437,6 +443,7 @@ router.post('/orders', async (req: Request, res: Response) => {
               paid_amount: Number(newOrder.paid_amount || 0),
               due_amount: Number(newOrder.due_amount || 0),
               receipt_json_data: newOrder.receipt_json_data,
+              bill_date: newOrder.bill_date,
               created_at: newOrder.created_at,
               metal_type: newOrder.metal_type,
               metal_rate: Number(anyOrder.applied_rate_per_gram || 0),
@@ -709,7 +716,8 @@ router.put('/orders/:id/return-status', async (req: Request, res: Response) => {
 router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { sold_status, submitted, paid_now, remaining_due } = req.body;
+    const { sold_status, submitted, paid_now, remaining_due, payment_date, bill_date } = req.body;
+    const resolvedPaymentDate = String(payment_date || bill_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })).trim();
 
     let order = mockOrders.find((o) => o.id === id);
 
@@ -769,7 +777,7 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
     // Append new installment payment entry if paid_now > 0
     if (pNow > 0) {
       historyList.push({
-        date: new Date().toISOString(),
+        date: resolvedPaymentDate,
         amount: pNow,
         due_after: order.due_amount,
         type: newSoldStatus === 'SOLD' ? 'Full Settlement' : 'Partial Installment',
@@ -833,7 +841,26 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
     }
     memoryCache.deletePattern('orders');
 
-    // 2. When submitted === 'yes' or marked SOLD, also insert into billing_invoices & customer_metal_transactions!
+    // 2. Record installment payment in billing_payment_history on the custom selected payment date
+    if (pNow > 0) {
+      try {
+        const { recordAdditionalPayment } = await import('../../utils/billingStorageHelper');
+        await recordAdditionalPayment({
+          billing_id: String(order.id),
+          amount_paid: pNow,
+          remaining_due: Number(order.due_amount || 0),
+          total_amount: Number(finalAmt),
+          payment_mode: 'CASH',
+          bill_date: resolvedPaymentDate,
+          payment_date: resolvedPaymentDate,
+          notes: `Order #${order.id} settlement payment from ${order.customer_name}`,
+        });
+      } catch (payHistErr) {
+        console.warn('⚠️ Error recording order installment payment history:', payHistErr);
+      }
+    }
+
+    // 3. When submitted === 'yes' or marked SOLD, also insert into customer_billing & billing_sell_buy_records
     if (newSubmitted === 'yes' || newSoldStatus === 'SOLD') {
       if (newSubmitted === 'yes') {
         try {
@@ -864,12 +891,312 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: newSoldStatus === 'SOLD' ? `Order ${order.id} marked as SOLD!` : `Payment recorded for Order ${order.id}`,
+      message: newSoldStatus === 'SOLD' ? `Order ${order.id} marked as SOLD on ${resolvedPaymentDate}!` : `Payment of ₹${pNow.toLocaleString('en-IN')} recorded on ${resolvedPaymentDate} for Order ${order.id}`,
       order,
       invoicePersisted,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message || 'Failed to update sold status' });
+  }
+});
+
+// PUT /api/orders/:id — Edit Custom Order details
+router.put('/orders/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      customer_name,
+      customer_phone,
+      customer_address,
+      metal_type,
+      item_name,
+      quantity_unit,
+      quantity_value,
+      item_length_inches,
+      gross_weight_grams,
+      net_weight_grams,
+      touch_percentage,
+      making_charges,
+      estimated_delivery_date,
+      notes,
+      hmw_percentage,
+      hmw_weight,
+      additional_charge_name,
+      additional_charge_value,
+      return_purity_percentage,
+      return_pure_gold,
+      paid_amount,
+      due_amount,
+      applied_rate_per_gram,
+      pure_metal_weight,
+      metal_value,
+      gst_amount,
+      final_amount,
+      bill_date,
+      image_url,
+    } = req.body;
+
+    const gross = Number(gross_weight_grams) || 0;
+    const net = Number(net_weight_grams) || gross;
+    const touch = Number(touch_percentage) || 91.6;
+    const fine = Number(((net * touch) / 100).toFixed(3));
+    const hmwPct = Number(hmw_percentage) || 0;
+    const hmwW = Number(hmw_weight) || Number(((gross * hmwPct) / 100).toFixed(3));
+    const retPurity = Number(return_purity_percentage) || 0;
+    const retPureG = Number(return_pure_gold) || Number(((net * retPurity) / 100).toFixed(3));
+
+    const updatePayload: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (customer_name !== undefined) updatePayload.customer_name = customer_name;
+    if (customer_phone !== undefined) updatePayload.customer_phone = customer_phone;
+    if (customer_address !== undefined) updatePayload.customer_address = customer_address;
+    if (metal_type !== undefined) updatePayload.metal_type = (metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+    if (item_name !== undefined) updatePayload.item_name = item_name;
+    if (quantity_unit !== undefined) updatePayload.quantity_unit = quantity_unit;
+    if (quantity_value !== undefined) updatePayload.quantity_value = Number(quantity_value);
+    if (item_length_inches !== undefined) updatePayload.item_length_inches = item_length_inches;
+    if (gross_weight_grams !== undefined) updatePayload.gross_weight_grams = gross;
+    if (net_weight_grams !== undefined) updatePayload.net_weight_grams = net;
+    if (touch_percentage !== undefined) updatePayload.touch_percentage = touch;
+    if (making_charges !== undefined) updatePayload.making_charges = Number(making_charges);
+    if (estimated_delivery_date !== undefined) updatePayload.estimated_delivery_date = estimated_delivery_date;
+    if (notes !== undefined) updatePayload.notes = notes;
+    if (hmw_percentage !== undefined) updatePayload.hmw_percentage = hmwPct;
+    if (hmw_weight !== undefined) updatePayload.hmw_weight = hmwW;
+    if (additional_charge_name !== undefined) updatePayload.additional_charge_name = additional_charge_name;
+    if (additional_charge_value !== undefined) updatePayload.additional_charge_value = Number(additional_charge_value);
+    if (return_purity_percentage !== undefined) updatePayload.return_purity_percentage = retPurity;
+    if (return_pure_gold !== undefined) updatePayload.return_pure_gold = retPureG;
+    if (applied_rate_per_gram !== undefined) updatePayload.applied_rate_per_gram = Number(applied_rate_per_gram);
+    if (pure_metal_weight !== undefined) updatePayload.pure_metal_weight = Number(pure_metal_weight);
+    if (metal_value !== undefined) updatePayload.metal_value = Number(metal_value);
+    if (gst_amount !== undefined) updatePayload.gst_amount = Number(gst_amount);
+    if (final_amount !== undefined) updatePayload.final_amount = Number(final_amount);
+    if (paid_amount !== undefined) updatePayload.paid_amount = Number(paid_amount);
+    if (due_amount !== undefined) updatePayload.due_amount = Number(due_amount);
+    if (bill_date !== undefined) updatePayload.bill_date = bill_date;
+    if (image_url !== undefined) updatePayload.image_url = image_url;
+
+    // Update in Supabase orders
+    const { data: updatedDbOrder, error: updateErr } = await supabase
+      .from('orders')
+      .update(updatePayload)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (updateErr) {
+      console.error('❌ Error updating order:', updateErr);
+      return res.status(500).json({ success: false, message: updateErr.message });
+    }
+
+    // Also update mockOrders
+    const mockIdx = mockOrders.findIndex((o) => o.id === id);
+    if (mockIdx !== -1) {
+      mockOrders[mockIdx] = { ...mockOrders[mockIdx], ...updatePayload };
+    }
+
+    // Sync into customer_billing and billing_sell_buy_records if present
+    try {
+      const orderIdStr = String(id);
+      await supabase
+        .from('customer_billing')
+        .update({
+          customer_name: updatePayload.customer_name,
+          customer_phone: updatePayload.customer_phone,
+          customer_address: updatePayload.customer_address,
+          total_amount: updatePayload.final_amount,
+          paid_amount: updatePayload.paid_amount,
+          due_amount: updatePayload.due_amount,
+          bill_date: updatePayload.bill_date,
+          updated_at: new Date().toISOString(),
+        })
+        .or(`billing_id.eq.${orderIdStr},customer_billing_uuid.eq.${orderIdStr}`);
+
+      await supabase
+        .from('billing_sell_buy_records')
+        .update({
+          customer_name: updatePayload.customer_name,
+          product_name: updatePayload.item_name,
+          weight_grams: updatePayload.gross_weight_grams,
+          net_weight_grams: updatePayload.net_weight_grams,
+          bill_date: updatePayload.bill_date,
+          updated_at: new Date().toISOString(),
+        })
+        .or(`billing_id.eq.${orderIdStr},customer_billing_uuid.eq.${orderIdStr}`);
+
+      // Sync billing_payment_history installment #1 based on customer_billing_uuid
+      const { data: matchedBill } = await supabase
+        .from('customer_billing')
+        .select('customer_billing_uuid')
+        .or(`billing_id.eq.${orderIdStr},customer_billing_uuid.eq.${orderIdStr}`)
+        .maybeSingle();
+
+      if (matchedBill?.customer_billing_uuid) {
+        const orderPaid = Number(updatePayload.paid_amount || 0);
+        const orderDue = Number(updatePayload.due_amount || 0);
+        const { error: paySyncErr } = await supabase
+          .from('billing_payment_history')
+          .update({
+            amount_paid: orderPaid,
+            remaining_due: orderDue,
+            payment_status: orderDue <= 0 ? 'FULL' : 'PARTIAL',
+            bill_date: updatePayload.bill_date,
+          })
+          .eq('customer_billing_uuid', matchedBill.customer_billing_uuid)
+          .eq('installment_number', 1);
+
+        if (paySyncErr) {
+          console.warn('⚠️ billing_payment_history order update notice:', paySyncErr.message);
+        }
+      }
+    } catch (syncErr) {
+      console.warn('⚠️ Syncing order edit to billing tables notice:', syncErr);
+    }
+
+    memoryCache.deletePattern('orders');
+    res.json({
+      success: true,
+      message: `Order #${id} updated successfully!`,
+      order: updatedDbOrder || mockOrders[mockIdx],
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to update order' });
+  }
+});
+
+// DELETE /api/orders/:id — Delete Custom Order with worker notification & cascading cleanup
+router.delete('/orders/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const orderIdStr = String(id);
+
+    // 1. Fetch order to inspect worker assignment details
+    let orderToDelete: any = null;
+    try {
+      const { data: fetchDb } = await supabase.from('orders').select('*').eq('id', id).single();
+      if (fetchDb) orderToDelete = fetchDb;
+    } catch (e) {}
+
+    if (!orderToDelete) {
+      orderToDelete = mockOrders.find((o) => o.id === id);
+    }
+
+    if (!orderToDelete) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const assignedWorkerId = orderToDelete.assigned_worker_id;
+    const assignedWorkerName = orderToDelete.assigned_worker_name;
+    const orderGrossWeight = orderToDelete.gross_weight_grams || orderToDelete.net_weight_grams || 0;
+
+    // 2. If order was assigned to a worker, broadcast cancellation message & FCM push notification
+    if (assignedWorkerId) {
+      const cancellationMsg = `🚨 ORDER CANCELLED: Order #${id} has been cancelled by Admin. Please stop work and return any issued metal to the shop.`;
+      const cancelTxn: any = {
+        id: `TXN-${Date.now()}`,
+        worker_id: assignedWorkerId,
+        order_id: id,
+        direction: 'OUTGOING',
+        category: 'ORDER',
+        amount_cash: 0,
+        weight_grams: 0,
+        touch_percentage: 0,
+        fine_weight_grams: 0,
+        item_name: orderToDelete.item_name || 'Cancelled Order',
+        photos: [],
+        notes: cancellationMsg,
+        status_state: 'DELIVERED',
+        is_seen: 'NO',
+        read_at: null,
+        seen_at: null,
+        created_at: new Date().toISOString(),
+      };
+
+      try {
+        mockTransactions.push(cancelTxn);
+        await supabase.from('worker_transactions').insert([cancelTxn]);
+      } catch (insertErr) {
+        console.warn('⚠️ Error inserting cancellation worker_transaction:', insertErr);
+      }
+
+      // Trigger FCM Push Notification
+      try {
+        triggerFcmPushNotification(assignedWorkerId, 'Jaya Bhavani Admin', cancellationMsg, {
+          transaction_id: cancelTxn.id,
+          direction: 'OUTGOING',
+          category: 'ORDER_CANCELLED',
+          order_id: id,
+        });
+      } catch (fcmErr) {}
+
+      // Broadcast SSE Realtime Event
+      broadcastToWorker(assignedWorkerId, 'NEW_TRANSACTION', cancelTxn);
+      broadcastToWorker(assignedWorkerId, 'ORDER_CANCELLED', { order_id: id });
+    }
+
+    // 3. Cascading Delete across related tables
+    try {
+      // Delete from billing_payment_history
+      await supabase
+        .from('billing_payment_history')
+        .delete()
+        .or(`customer_billing_uuid.eq.${orderIdStr},notes.ilike.%${orderIdStr}%`);
+
+      // Delete from billing_sell_buy_records
+      await supabase
+        .from('billing_sell_buy_records')
+        .delete()
+        .or(`customer_billing_uuid.eq.${orderIdStr},billing_id.eq.${orderIdStr}`);
+
+      // Delete from customer_billing
+      await supabase
+        .from('customer_billing')
+        .delete()
+        .or(`customer_billing_uuid.eq.${orderIdStr},billing_id.eq.${orderIdStr}`);
+
+      // Delete from customer_metal_transactions
+      await supabase
+        .from('customer_metal_transactions')
+        .delete()
+        .eq('transaction_id', orderIdStr);
+
+      // Delete from cash_transactions & cash_transaction_ledger
+      await supabase
+        .from('cash_transactions')
+        .delete()
+        .eq('transaction_id', orderIdStr);
+
+      await supabase
+        .from('cash_transaction_ledger')
+        .delete()
+        .or(`transaction_id.eq.${orderIdStr},notes.ilike.%${orderIdStr}%`);
+
+      // Delete from orders
+      await supabase
+        .from('orders')
+        .delete()
+        .eq('id', id);
+    } catch (delErr) {
+      console.warn('⚠️ Error in cascading delete of order:', delErr);
+    }
+
+    // Remove from mock array
+    mockOrders = mockOrders.filter((o) => o.id !== id);
+    memoryCache.deletePattern('orders');
+    memoryCache.deletePattern('billing');
+    memoryCache.deletePattern('accounts');
+
+    res.json({
+      success: true,
+      message: assignedWorkerId
+        ? `Order #${id} deleted. Cancellation alert sent to worker ${assignedWorkerName || assignedWorkerId}.`
+        : `Order #${id} deleted successfully.`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to delete order' });
   }
 });
 

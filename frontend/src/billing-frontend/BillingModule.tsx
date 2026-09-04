@@ -45,6 +45,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   const [customerAddress, setCustomerAddress] = useState('');
   const [teluguCustomerName, setTeluguCustomerName] = useState('');
   const [teluguCustomerAddress, setTeluguCustomerAddress] = useState('');
+  const [billDate, setBillDate] = useState<string>(() => {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  });
 
   // Auto-translate typed Customer Name and Address to Telugu dynamically for screen & receipt display
   useEffect(() => {
@@ -210,6 +213,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     setCustomerAddress('');
     setTeluguCustomerName('');
     setTeluguCustomerAddress('');
+    setBillDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
     setShowValidationErrors(false);
     setPaymentType('FULL');
     setAdvancePaidAmount('');
@@ -657,7 +661,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         {
           installment: 1,
           amount: paidVal,
-          paid_at: new Date().toISOString(),
+          paid_at: billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString(),
           note: effectivePaymentType === 'FULL' ? (isNeedToPayCustomer ? 'Paid to Customer' : 'Full Payment Done') : 'Advance / Initial Payment',
         },
       ];
@@ -667,6 +671,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         customer_phone: customerPhone,
         customer_address: customerAddress,
         transaction_type: mode,
+        bill_date: billDate,
         rates,
         items: enrichedItems,
         totalSellValue,
@@ -703,6 +708,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           ...receiptPayload,
           mode: 'ORDER',
           transaction_type: 'ORDER',
+          bill_date: billDate,
           paymentType,
           advancePaidAmount: effPaid,
           balanceDueAmount: effDue,
@@ -743,6 +749,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           return_purity_percentage: Number(primaryItem?.return_purity_percentage) || 0,
           return_pure_gold: Number(primaryItem?.return_pure_gold) || (primaryItem?.return_purity_percentage ? Number((totalNetW * (Number(primaryItem.return_purity_percentage) / 100)).toFixed(3)) : 0),
           notes: primaryItem?.item_notes || (primaryItem as any)?.notes || `JBJ-Order Item: Gross ₹${totalSellValue.toLocaleString('en-IN')}, Trade-in Old Metal -₹${totalBuyCredit.toLocaleString('en-IN')}, Net ₹${netPayable.toLocaleString('en-IN')}`,
+          bill_date: billDate,
+          created_at: billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString(),
         };
 
         const resOrder = await fetch(`${API_BASE}/work-assignment/orders`, {
@@ -789,6 +797,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           gst_percent: firstItem?.gst_percent,
           paid_amount: paidVal,
           due_amount: dueVal,
+          bill_date: billDate,
+          created_at: billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : new Date().toISOString(),
           receipt_json_data: receiptPayload,
         }),
       });
@@ -825,6 +835,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     setCustomerAddress('');
     setAdvancePaidAmount('');
     setPaymentType('FULL');
+    setBillDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
     setEditingInvoiceId(null);
     setModeItemsMap({
       SELL: getInitialItemsForMode('SELL'),
@@ -841,34 +852,102 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   };
 
   const triggerEditInvoice = (inv: any, custName?: string, custPhone?: string, custAddress?: string) => {
-    if (inv?.id) {
-      setEditingInvoiceId(String(inv.id));
+    if (inv?.id || inv?.billing_id) {
+      setEditingInvoiceId(String(inv.id || inv.billing_id));
     } else {
       setEditingInvoiceId(null);
     }
-    setCustomerName(custName || inv?.customer_name || '');
-    setCustomerPhone(custPhone || inv?.customer_phone || '');
-    setCustomerAddress(custAddress || inv?.customer_address || inv?.receipt_json_data?.customer_address || '');
 
-    const invMode = ((inv?.receipt_json_data?.transaction_type || inv?.transaction_type || 'SELL').toUpperCase()) as 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER';
+    setCustomerName(custName || inv?.customer_name || '');
+    setCustomerPhone(custPhone || (inv?.customer_phone === '-' ? '' : (inv?.customer_phone || '')));
+    setCustomerAddress(custAddress || inv?.customer_address || inv?.receipt_json_data?.customer_address || '');
+    if (inv?.bill_date || inv?.receipt_json_data?.bill_date || inv?.created_at) {
+      setBillDate((inv?.bill_date || inv?.receipt_json_data?.bill_date || inv?.created_at).split('T')[0]);
+    }
+
+    // Accurately determine transaction mode
+    const jsonMode = inv?.receipt_json_data?.transaction_type || inv?.receipt_json_data?.mode;
+    const directMode = inv?.transaction_type || inv?.bill_type;
+    let invMode = ((jsonMode || directMode || 'SELL').toUpperCase()) as 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER';
+
+    const rawItems = inv?.receipt_json_data?.items;
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      const hasBuy = rawItems.some((i: any) => (i.item_type || '').toUpperCase() === 'BUY');
+      const hasSell = rawItems.some((i: any) => (i.item_type || '').toUpperCase() === 'SELL');
+      if (invMode !== 'ORDER') {
+        if (hasBuy && hasSell) invMode = 'EXCHANGE';
+        else if (hasBuy && !hasSell) invMode = 'BUY';
+        else invMode = 'SELL';
+      }
+    }
+
     setMode(invMode);
 
-    if (inv?.receipt_json_data?.items && Array.isArray(inv.receipt_json_data.items) && inv.receipt_json_data.items.length > 0) {
-      updateActiveModeItems(() => inv.receipt_json_data.items);
+    // Set payment details
+    const dueAmount = Number(inv?.due_amount || inv?.receipt_json_data?.dueAmount || 0);
+    const paidAmount = Number(inv?.paid_amount || inv?.receipt_json_data?.paidAmount || 0);
+    if (dueAmount > 0 || (inv?.receipt_json_data?.paymentType === 'PARTIAL')) {
+      setPaymentType('PARTIAL');
+      setAdvancePaidAmount(paidAmount > 0 ? formatIndianCurrencyInput(String(paidAmount)) : '');
+    } else {
+      setPaymentType('FULL');
+      setAdvancePaidAmount('');
+    }
+
+    let itemsToSet: BillItem[] = [];
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      itemsToSet = rawItems.map((it: any, index: number) => ({
+        id: it.id || `item-${index + 1}`,
+        metal_type: (it.metal_type === 'SILVER' ? 'SILVER' : 'GOLD'),
+        product_name: it.product_name || '',
+        quantity_unit: it.quantity_unit || 'PIECES',
+        quantity_value: it.quantity_value !== undefined && it.quantity_value !== null ? String(it.quantity_value) : '1',
+        item_tag: it.item_tag || '',
+        huid: it.huid || '',
+        weight_grams: it.weight_grams !== undefined && it.weight_grams !== null ? String(it.weight_grams) : '',
+        deduction_name: it.deduction_name || '',
+        deduction_weight_grams: it.deduction_weight_grams !== undefined && it.deduction_weight_grams !== null ? String(it.deduction_weight_grams) : '',
+        purity_percentage: it.purity_percentage !== undefined && it.purity_percentage !== null ? String(it.purity_percentage) : (it.item_type === 'BUY' ? '100' : '91.6'),
+        wastage_percent: it.wastage_percent !== undefined && it.wastage_percent !== null ? String(it.wastage_percent) : '',
+        making_charges_per_gram: it.making_charges_per_gram !== undefined && it.making_charges_per_gram !== null ? String(it.making_charges_per_gram) : '',
+        additional_charges_name: it.additional_charges_name || '',
+        additional_charges_amount: it.additional_charges_amount !== undefined && it.additional_charges_amount !== null ? String(it.additional_charges_amount) : '',
+        custom_rate_per_gram: it.custom_rate_per_gram ? Number(it.custom_rate_per_gram) : undefined,
+        gst_percent: it.gst_percent !== undefined ? Number(it.gst_percent) : 3,
+        item_type: it.item_type ? (it.item_type.toUpperCase() as 'SELL' | 'BUY') : (invMode === 'BUY' ? 'BUY' : 'SELL'),
+        image_url: it.image_url || '',
+        delivery_date: it.delivery_date || '',
+        hmw_percentage: it.hmw_percentage,
+        hmw_weight: it.hmw_weight,
+        return_purity_percentage: it.return_purity_percentage,
+        return_pure_gold: it.return_pure_gold,
+        item_notes: it.item_notes || it.notes || '',
+      }));
     } else if (inv) {
-      updateActiveModeItems(() => [
+      itemsToSet = [
         {
           id: 'item-1',
           metal_type: (inv.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
           product_name: inv.product_name || '',
-          weight_grams: inv.weight_grams || 0,
-          purity_percentage: inv.purity_percentage || 91.6,
-          making_charges_per_gram: inv.making_charges_per_gram || 0,
-          gst_percent: inv.gst_percent || 3,
-          item_type: inv.transaction_type === 'BUY' ? 'BUY' : 'SELL',
+          quantity_unit: 'PIECES',
+          quantity_value: '1',
+          weight_grams: inv.weight_grams !== undefined && inv.weight_grams !== null ? String(inv.weight_grams) : '',
+          deduction_weight_grams: inv.deduction_weight_grams !== undefined && inv.deduction_weight_grams !== null ? String(inv.deduction_weight_grams) : '',
+          purity_percentage: inv.purity_percentage !== undefined && inv.purity_percentage !== null ? String(inv.purity_percentage) : (inv.transaction_type === 'BUY' ? '100' : '91.6'),
+          making_charges_per_gram: inv.making_charges_per_gram !== undefined && inv.making_charges_per_gram !== null ? String(inv.making_charges_per_gram) : '',
+          gst_percent: Number(inv.gst_percent) || 3,
+          item_type: (inv.transaction_type === 'BUY' || invMode === 'BUY') ? 'BUY' : 'SELL',
         },
-      ]);
+      ];
+    } else {
+      itemsToSet = getInitialItemsForMode(invMode);
     }
+
+    // Explicitly update modeItemsMap for this exact invMode!
+    setModeItemsMap((prev) => ({
+      ...prev,
+      [invMode]: itemsToSet,
+    }));
 
     setActiveView('POS');
     const params = new URLSearchParams(window.location.search);
@@ -1007,12 +1086,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   </span>
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditingInvoiceId(null);
-                      setCustomerName('');
-                      setCustomerPhone('');
-                      setCustomerAddress('');
-                    }}
+                    onClick={handleStartFresh}
                     style={{ background: '#ffffff', border: '1px solid #93c5fd', color: '#1e40af', padding: '2px 8px', borderRadius: '10px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                   >
                     Cancel Edit
@@ -1119,7 +1193,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
               <form onSubmit={handleCreateInvoice}>
                 {/* Customer info (Shared by ALL modes: SELL, BUY, EXCHANGE, ORDER) */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && !customerName.trim() ? '#dc2626' : '#475569' }}>
@@ -1223,6 +1297,31 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         <i className="fa-solid fa-triangle-exclamation"></i> Please enter Customer Address
                       </div>
                     )}
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
+                        <i className="fa-regular fa-calendar-days" style={{ color: '#d97706', marginRight: '4px' }}></i>
+                        {t.billDateLabel || 'Bill Date'} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                      </label>
+                    </div>
+                    <input
+                      type="date"
+                      value={billDate}
+                      onChange={(e) => setBillDate(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.50rem 0.75rem',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        marginTop: '0.2rem',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        color: '#0f172a',
+                      }}
+                      required
+                    />
                   </div>
                 </div>
 
@@ -1541,18 +1640,21 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         padding: '0.8rem 1.75rem',
                         borderRadius: '8px',
                         border: 'none',
-                        background: 'linear-gradient(135deg, #228B22 0%, #33B249 100%)',
+                        background: editingInvoiceId ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)' : 'linear-gradient(135deg, #228B22 0%, #33B249 100%)',
                         color: '#ffffff',
                         fontWeight: 700,
                         cursor: 'pointer',
                         fontSize: '0.88rem',
-                        boxShadow: '0 4px 14px rgba(51, 178, 73, 0.3)',
+                        boxShadow: editingInvoiceId ? '0 4px 14px rgba(29, 78, 216, 0.3)' : '0 4px 14px rgba(51, 178, 73, 0.3)',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
                       }}
                     >
-                      <i className="fa-solid fa-circle-check"></i> {creating ? t.savingSaleBtn : t.saleDoneBtn}
+                      <i className={editingInvoiceId ? 'fa-solid fa-pen-to-square' : 'fa-solid fa-circle-check'}></i>{' '}
+                      {creating
+                        ? (editingInvoiceId ? 'Updating Bill...' : t.savingSaleBtn)
+                        : (editingInvoiceId ? (lang === 'TE' ? 'బిల్ అప్‌డేట్ చేయండి (Update Bill)' : 'Update Bill') : t.saleDoneBtn)}
                     </button>
                   </div>
                 </div>
@@ -1580,6 +1682,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   totalSellValue={totalSellValue}
                   totalBuyCredit={totalBuyCredit}
                   netPayable={netPayable}
+                  createdDate={billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : undefined}
                   billType={activeBillType}
                   paymentType={paymentType}
                   advancePaidAmount={paidVal}
@@ -1602,9 +1705,36 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   {t.confirmSaleTitle}
                 </h3>
 
-                <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.88rem', color: '#475569', lineHeight: '1.4' }}>
+                <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: '#475569', lineHeight: '1.4' }}>
                   {t.confirmSaleDesc}
                 </p>
+
+                {/* 📅 Date Confirmation / Quick Change Field */}
+                <div style={{ background: '#f8fafc', border: '1.5px solid #bbf7d0', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem', textAlign: 'left' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
+                    <i className="fa-solid fa-calendar-days" style={{ color: '#16a34a' }}></i>
+                    <span>{t.billDateLabel || 'Bill Date'} (Confirm / Change):</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={billDate}
+                    onChange={(e) => setBillDate(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.55rem 0.75rem',
+                      borderRadius: '8px',
+                      border: '1.5px solid #16a34a',
+                      background: '#ffffff',
+                      fontSize: '0.88rem',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      outline: 'none',
+                    }}
+                  />
+                  <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px' }}>
+                    💡 Verify or change the date before finalizing this sale.
+                  </div>
+                </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
                   <button

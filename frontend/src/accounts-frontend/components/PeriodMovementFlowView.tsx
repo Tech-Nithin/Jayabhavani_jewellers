@@ -32,18 +32,21 @@ export const PeriodMovementFlowView: React.FC<PeriodMovementFlowViewProps> = ({
   const goldOut = Number(kpiMetrics.goldOut || kpiMetrics.overallMetalPuritySummary?.gold?.soldGross || 0);
   const silverOut = Number(kpiMetrics.silverOut || kpiMetrics.overallMetalPuritySummary?.silver?.soldGross || 0);
 
-  // 4. Received from Workers
+  // 4. Worker transfers
+  const goldGivenToWorkers = Number(kpiMetrics.goldGivenToWorker || 0);
+  const silverGivenToWorkers = Number(kpiMetrics.silverGivenToWorker || 0);
   const goldFromWorkers = Number(kpiMetrics.goldTakenFromWorker || 0);
   const silverFromWorkers = Number(kpiMetrics.silverTakenFromWorker || 0);
 
   // --- EXACT USER FORMULA WITH 3-DECIMAL PRECISION ---
-  const totalGoldBal = Number((opGold + goldIn - goldOut + goldFromWorkers).toFixed(3));
-  const totalSilverBal = Number((opSilver + silverIn - silverOut + silverFromWorkers).toFixed(3));
+  const totalGoldBal = Number((opGold + goldIn - goldOut - goldGivenToWorkers + goldFromWorkers).toFixed(3));
+  const totalSilverBal = Number((opSilver + silverIn - silverOut - silverGivenToWorkers + silverFromWorkers).toFixed(3));
 
-  const mainCashVal = Number(cashSummary?.current_cash ?? cashSummary?.expectedClosingCash ?? kpiMetrics.totalCashCollected ?? 0);
   const openingCashVal = Number(cashSummary?.openingCash ?? 0);
   const cashInVal = Number(kpiMetrics.cashIn || 0);
   const cashOutVal = Number(kpiMetrics.cashOut || 0);
+  const totalCashBal = Number((openingCashVal + cashInVal - cashOutVal).toFixed(2));
+  const mainCashVal = totalCashBal;
   const totalFinanceVal = Number(kpiMetrics.totalFinanceIssued || 0);
   const gotFinanceVal = Number(kpiMetrics.cashGotFromFinance || 0);
 
@@ -144,6 +147,7 @@ export const PeriodMovementFlowView: React.FC<PeriodMovementFlowViewProps> = ({
             <div>Opening: {fmtWt(opGold)}g</div>
             <div style={{ color: '#15803d', fontWeight: 700 }}>+ In (Buy, Trade-in, Order): +{fmtWt(goldIn)}g</div>
             <div style={{ color: '#b91c1c', fontWeight: 700 }}>- Out (Sells, Orders): -{fmtWt(goldOut)}g</div>
+            <div style={{ color: '#b91c1c', fontWeight: 700 }}>- To Workers: -{fmtWt(goldGivenToWorkers)}g</div>
             <div style={{ color: '#047857', fontWeight: 700 }}>+ From Workers: +{fmtWt(goldFromWorkers)}g</div>
           </div>
         </div>
@@ -172,6 +176,7 @@ export const PeriodMovementFlowView: React.FC<PeriodMovementFlowViewProps> = ({
             <div>Opening: {fmtWt(opSilver)}g</div>
             <div style={{ color: '#15803d', fontWeight: 700 }}>+ In (Buy, Trade-in, Order): +{fmtWt(silverIn)}g</div>
             <div style={{ color: '#b91c1c', fontWeight: 700 }}>- Out (Sells, Orders): -{fmtWt(silverOut)}g</div>
+            <div style={{ color: '#b91c1c', fontWeight: 700 }}>- To Workers: -{fmtWt(silverGivenToWorkers)}g</div>
             <div style={{ color: '#047857', fontWeight: 700 }}>+ From Workers: +{fmtWt(silverFromWorkers)}g</div>
           </div>
         </div>

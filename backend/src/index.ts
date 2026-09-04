@@ -11,6 +11,7 @@ import productCardRoutes from './routes/productCardRoutes';
 // Modular backend domain routers
 import dashboardRoutes from './dashboard-backend/routes/dashboardRoutes';
 import billingRoutes from './billing-backend/routes/billingRoutes';
+import accountsRoutes from './accounts-backend/index';
 import financeRoutes from './finance-backend/routes/financeRoutes';
 import inventoryRoutes from './inventory-backend/routes/inventoryRoutes';
 import workAssignmentRoutes from './work-assignment-backend/routes/workAssignmentRoutes';
@@ -81,14 +82,21 @@ app.use((req: Request, res: Response, next) => {
 
 import workerAuthRoutes from './routes/workerAuthRoutes';
 
+import metalRatesRoutes from './metal-rates-backend/index';
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/worker-auth', workerAuthRoutes);
 app.use('/api', productRoutes);
 app.use('/api/product-card', productCardRoutes);
 
-// Modular 4 Domain Endpoints
+// Modular Domain Endpoints
+app.use('/api/metal-rates', metalRatesRoutes);
+app.use('/api/rates', metalRatesRoutes);
+app.use('/api/billing/rates', metalRatesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/accounts', accountsRoutes);
+app.use('/api/billing/accounts', accountsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/inventory', inventoryRoutes);
@@ -101,7 +109,7 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'online',
     service: 'Jaya Bhavani Jewellers Central Backend',
-    modules: ['dashboard-backend', 'billing-backend', 'finance-backend', 'inventory-backend', 'work-assignment-backend'],
+    modules: ['dashboard-backend', 'accounts-backend', 'billing-backend', 'finance-backend', 'inventory-backend', 'work-assignment-backend'],
     timestamp: new Date().toISOString(),
   });
 });

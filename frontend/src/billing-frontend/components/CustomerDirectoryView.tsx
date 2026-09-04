@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
 import { SeeBillModal } from './SeeBillModal';
+import { EditInvoiceModal } from './EditInvoiceModal';
+import { DeleteInvoiceModal } from './DeleteInvoiceModal';
 import { translations } from '../../utils/translations';
 import type { Language } from '../../utils/translations';
 import { API_BASE } from '../../config/apiConfig';
@@ -38,8 +40,26 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
 }) => {
   const t = translations[lang] || translations.EN;
   const [previewImage, setPreviewImage] = useState<{ url: string; title?: string } | null>(null);
+  const [editModal, setEditModal] = useState<{
+    open: boolean;
+    invoice: any | null;
+    isSubmitting: boolean;
+  }>({
+    open: false,
+    invoice: null,
+    isSubmitting: false,
+  });
+
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    invoice: any | null;
+    isDeleting: boolean;
+  }>({
+    open: false,
+    invoice: null,
+    isDeleting: false,
+  });
   void onSelectCustomerForBill;
-  void onEditCustomerRecord;
   const [search, setSearch] = useState(() => {
     return new URLSearchParams(window.location.search).get('search') || '';
   });
@@ -1221,12 +1241,13 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               <th style={{ padding: '0.65rem 0.65rem', textAlign: 'center', width: '10%' }}>{t.thWeight}</th>
               <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '10%' }}>STATUS</th>
               <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right', width: '11%' }}>{t.thFinalAmount}</th>
+              <th style={{ padding: '0.65rem 0.5rem', textAlign: 'center', width: '90px' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {loadingRecords ? (
               <tr>
-                <td colSpan={7} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#6366f1' }}>
+                <td colSpan={8} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#6366f1' }}>
                   <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', marginBottom: '8px', display: 'block', color: '#6366f1' }}></i>
                   <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>Fetching records from database...</span>
                 </td>
@@ -1473,73 +1494,102 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                     })()}
 
 
-                    {/* 6. Final Amount (Normal font weight) */}
-                    {(() => {
-                      const inv = cust.latestInvoice;
-                      const txnType = (inv?.transaction_type || mode).toUpperCase();
-                      const storedPayload = inv?.receipt_json_data;
-                      const sellVal = Number(storedPayload?.totalSellValue ?? 0);
-                      const buyVal = Number(storedPayload?.totalBuyCredit ?? 0);
-                      const isJbjPaid = txnType === 'BUY' || (txnType === 'EXCHANGE' && buyVal > sellVal);
-                      const netPay = storedPayload?.netPayable ?? inv?.final_amount;
-                      const displayAmt = netPay !== undefined && Number(netPay) >= 0 ? Number(netPay) : (cust.totalSpent || 0);
+                    {/* 7. FINAL AMOUNT Column */}
+                    <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', verticalAlign: 'middle' }}>
+                      {(() => {
+                        const inv = cust.latestInvoice;
+                        const receiptData = inv?.receipt_json_data || {};
+                        const grandTotalVal = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+                        const isBuy = (inv?.transaction_type || mode).toUpperCase() === 'BUY';
+                        return (
+                          <span style={{ fontWeight: 800, fontSize: '0.82rem', color: isBuy ? '#0369a1' : '#0f172a' }}>
+                            {isBuy ? `+ ₹${grandTotalVal.toLocaleString('en-IN')}` : `₹${grandTotalVal.toLocaleString('en-IN')}`}
+                          </span>
+                        );
+                      })()}
+                    </td>
 
-                      return (
-                        <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'right' }}>
-                          <div className="customer-history-amt" style={{ fontWeight: 500, color: isJbjPaid ? '#0369a1' : '#0f172a', fontSize: '0.85rem' }}>
-                            ₹{displayAmt.toLocaleString('en-IN')}
-                          </div>
-                          <div style={{ fontSize: '0.60rem', color: isJbjPaid ? '#0284c7' : '#64748b', fontWeight: 400, marginTop: '1px' }}>
-                            {isJbjPaid ? t.needToPayCustomerTag : t.customerPaidTag}
-                          </div>
-                        </td>
-                      );
-                    })()}
-
-                    {/* 6. PAYMENT STATUS Column (Paid vs Due + Paid? Settlement Button) */}
-                    {/* {(() => {
-                      const inv = cust.latestInvoice;
-                      const receiptData = inv?.receipt_json_data || {};
-                      const grandTotalVal = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
-                      const dueAmount = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
-                      const paidAmount = inv?.paid_amount !== undefined ? Number(inv.paid_amount) : Number(receiptData?.advancePaidAmount || grandTotalVal);
-                      const isDue = dueAmount > 0;
-
-                      return (
-                        <td style={{ padding: '0.65rem 0.5rem', verticalAlign: 'middle', textAlign: 'center' }}>
-                          {!isDue ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 8px', borderRadius: '10px', background: '#dcfce7', color: '#15803d', fontWeight: 800, fontSize: '0.68rem' }}>
-                              <i className="fa-solid fa-circle-check"></i> Paid
-                            </span>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                              <div style={{ display: 'inline-flex', gap: '3px', background: '#f1f5f9', padding: '2px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                                <span style={{ padding: '3px 6px', borderRadius: '4px', background: '#d97706', color: '#ffffff', fontSize: '0.68rem', fontWeight: 800 }}>
-                                  Due
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenSettlementModal(cust);
-                                  }}
-                                  style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', background: '#ffffff', color: '#16a34a', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
-                                >
-                                  Paid?
-                                </button>
-                              </div>
-
-                              <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '2px', textAlign: 'center' }}>
-                                <span style={{ color: '#16a34a' }}>Paid: ₹{paidAmount.toLocaleString('en-IN')}</span>
-                                {dueAmount > 0 && (
-                                  <span style={{ color: '#dc2626', marginLeft: '4px', fontWeight: 800 }}>Due: ₹{dueAmount.toLocaleString('en-IN')}</span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })()} */}
+                    {/* 8. ACTIONS Column (Edit, Delete, View Bill) */}
+                    <td
+                      style={{ padding: '0.65rem 0.5rem', textAlign: 'center', verticalAlign: 'middle' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onViewInvoiceDetails) onViewInvoiceDetails(cust);
+                          }}
+                          title="View Bill / Receipt"
+                          style={{
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            background: '#f8fafc',
+                            color: '#475569',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.72rem',
+                          }}
+                        >
+                          <i className="fa-solid fa-eye" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onEditCustomerRecord) {
+                              onEditCustomerRecord(cust);
+                            } else {
+                              setEditModal({ open: true, invoice: cust, isSubmitting: false });
+                            }
+                          }}
+                          title="Edit Invoice"
+                          style={{
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '6px',
+                            border: '1px solid #fde68a',
+                            background: '#fef3c7',
+                            color: '#b45309',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.72rem',
+                          }}
+                        >
+                          <i className="fa-solid fa-pen" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteModal({ open: true, invoice: cust, isDeleting: false });
+                          }}
+                          title="Delete Invoice permanently"
+                          style={{
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '6px',
+                            border: '1px solid #fecaca',
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.72rem',
+                          }}
+                        >
+                          <i className="fa-solid fa-trash" />
+                        </button>
+                      </div>
+                    </td>
 
 
 
@@ -1672,6 +1722,70 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
           onClose={() => setPreviewImage(null)}
         />
       )}
+
+      {/* ── EDIT INVOICE MODAL ── */}
+      <EditInvoiceModal
+        open={editModal.open}
+        invoice={editModal.invoice}
+        isSubmitting={editModal.isSubmitting}
+        onClose={() => setEditModal({ open: false, invoice: null, isSubmitting: false })}
+        onSave={async (updatedFields: any) => {
+          if (!editModal.invoice) return;
+          const inv = editModal.invoice.latestInvoice || editModal.invoice;
+          const invId = inv.billing_id || inv.customer_billing_uuid || inv.id || editModal.invoice.id;
+          setEditModal((prev) => ({ ...prev, isSubmitting: true }));
+          try {
+            const res = await fetch(`${API_BASE}/billing/invoices/${invId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatedFields),
+            });
+            const data = await res.json();
+            if (data.success) {
+              setEditModal({ open: false, invoice: null, isSubmitting: false });
+              alert(`✅ Invoice #${invId} updated successfully!`);
+              fetchOnDemand();
+            } else {
+              alert('Failed to update invoice: ' + (data.message || 'Unknown error'));
+            }
+          } catch (err: any) {
+            alert('Error updating invoice: ' + err.message);
+          } finally {
+            setEditModal((prev) => ({ ...prev, isSubmitting: false }));
+          }
+        }}
+      />
+
+      {/* ── DELETE INVOICE MODAL ── */}
+      <DeleteInvoiceModal
+        open={deleteModal.open}
+        invoice={deleteModal.invoice}
+        isDeleting={deleteModal.isDeleting}
+        onClose={() => setDeleteModal({ open: false, invoice: null, isDeleting: false })}
+        onConfirm={async () => {
+          if (!deleteModal.invoice) return;
+          const inv = deleteModal.invoice.latestInvoice || deleteModal.invoice;
+          const invId = inv.billing_id || inv.customer_billing_uuid || inv.id || deleteModal.invoice.id;
+          setDeleteModal((prev) => ({ ...prev, isDeleting: true }));
+          try {
+            const res = await fetch(`${API_BASE}/billing/invoices/${invId}`, {
+              method: 'DELETE',
+            });
+            const data = await res.json();
+            if (data.success) {
+              setDeleteModal({ open: false, invoice: null, isDeleting: false });
+              alert(`✅ Invoice #${invId} deleted permanently from all registers!`);
+              fetchOnDemand();
+            } else {
+              alert('Failed to delete invoice: ' + (data.message || 'Unknown error'));
+            }
+          } catch (err: any) {
+            alert('Error deleting invoice: ' + err.message);
+          } finally {
+            setDeleteModal((prev) => ({ ...prev, isDeleting: false }));
+          }
+        }}
+      />
 
       {/* ── INVOICE SETTLEMENT MODAL (UPGRADE / INSTALLMENT PAYMENT) ── */}
       {settlementModal.open && settlementModal.cust && (

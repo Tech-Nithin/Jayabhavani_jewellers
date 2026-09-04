@@ -55,8 +55,8 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
       return true;
     })
     .sort((a: any, b: any) => {
-      const timeA = new Date(a.created_at || a.date || 0).getTime();
-      const timeB = new Date(b.created_at || b.date || 0).getTime();
+      const timeA = new Date(a.bill_date ? `${String(a.bill_date).split('T')[0]}T12:00:00` : (a.created_at || a.date || 0)).getTime();
+      const timeB = new Date(b.bill_date ? `${String(b.bill_date).split('T')[0]}T12:00:00` : (b.created_at || b.date || 0)).getTime();
       return timeB - timeA;
     });
 
@@ -179,7 +179,7 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
 
       {filteredScrapItems.length === 0 ? (
         <p style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center', padding: '1.5rem 0' }}>
-          No customer {metalFilter === 'ALL' ? 'scrap' : metalFilter.toLowerCase()} items were bought today.
+          No customer {metalFilter === 'ALL' ? 'scrap' : metalFilter.toLowerCase()} items were bought in this period.
         </p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
@@ -201,17 +201,30 @@ export const OldMetalVaultView: React.FC<OldMetalVaultProps> = ({ scrapSummary, 
               {filteredScrapItems.map((sc, idx) => {
                 const metalType = (sc.metal_type || sc.category || 'GOLD').toUpperCase();
                 const isGold = metalType.includes('GOLD');
-                const createdStr = sc.created_at || sc.date
-                  ? new Date(sc.created_at || sc.date).toLocaleString('en-IN', {
-                    timeZone: 'Asia/Kolkata',
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true,
-                  })
-                  : '-';
+                const billDateStr = sc.bill_date || (sc.created_at ? sc.created_at.split('T')[0] : sc.date);
+                let createdStr = '-';
+                if (billDateStr) {
+                  try {
+                    const d = new Date(`${String(billDateStr).split('T')[0]}T12:00:00`);
+                    const datePart = d.toLocaleDateString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                    });
+                    const timePart = sc.created_at
+                      ? new Date(sc.created_at).toLocaleTimeString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                      : '';
+                    createdStr = timePart ? `${datePart} ${timePart}` : datePart;
+                  } catch {
+                    createdStr = String(billDateStr);
+                  }
+                }
 
                 return (
                   <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
