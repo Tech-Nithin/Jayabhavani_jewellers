@@ -5,7 +5,7 @@ export interface InventoryMovementParams {
   itemId: string;
   itemName?: string;
   itemType: 'GOLD' | 'SILVER';
-  eventType: 'OPENING' | 'RESTOCK' | 'SALE' | 'CUSTOMER_RETURN' | 'KARIGAR_OUT' | 'KARIGAR_IN' | 'ADJUSTMENT';
+  eventType: 'OPENING' | 'RESTOCK' | 'SALE' | 'CUSTOMER_RETURN' | 'SALE_REVERSAL' | 'KARIGAR_OUT' | 'KARIGAR_IN' | 'ADJUSTMENT';
   weightDeltaGrams: number; // Positive = added to shop, Negative = removed from shop
   referenceId?: string;    // e.g. 'INV-1004', 'ORD-9529', 'WTX-101'
   referenceType?: 'INVOICE' | 'ORDER' | 'WORKER_TXN' | 'MANUAL' | 'SCRAP';
@@ -50,83 +50,44 @@ export async function recordInventoryMovement(params: InventoryMovementParams): 
     // Calculate new running stock balance
     const weightAfterGrams = Math.max(0, Number((currentStockWeight + delta).toFixed(3)));
 
-    // 2. Insert row into inventory_ledger
-    const { error: ledgerErr } = await supabase
-      .from('inventory_ledger')
+    // 2. Insert row into inventory_stock_logs
+    const { error: logErr } = await supabase
+      .from('inventory_stock_logs')
       .insert([{
         item_id: params.itemId,
         item_name: resolvedItemName,
-        item_type: resolvedItemType,
-        event_type: params.eventType,
-        weight_delta_grams: delta,
-        weight_after_grams: weightAfterGrams,
-        reference_id: params.referenceId || null,
-        reference_type: params.referenceType || null,
-        notes: params.notes || null,
-        recorded_date: todayStr,
+        metal_category: resolvedItemType,
+        item_category: prod?.category || 'General',
+        previous_stock_weight: currentStockWeight,
+        new_stock_weight: weightAfterGrams,
+        notes: params.notes || `${params.eventType}: ${delta > 0 ? '+' : ''}${delta}g (${params.referenceType || 'MANUAL'} ${params.referenceId || ''})`,
         created_at: recordTimestamp,
       }]);
 
-    if (ledgerErr) {
-      console.warn('⚠️ Error inserting into inventory_ledger:', ledgerErr.message);
+    if (logErr) {
+      console.warn('⚠️ Error inserting into inventory_stock_logs:', logErr.message);
     }
 
-    // 3. Upsert into inventory_daily_snapshots
-    try {
-      const { data: existingSnapshot } = await supabase
-        .from('inventory_daily_snapshots')
-        .select('*')
-        .eq('snapshot_date', todayStr)
-        .eq('item_id', params.itemId)
-        .single();
-
-      const isSale = params.eventType === 'SALE';
-      const isAdd = delta > 0;
-
-      if (!existingSnapshot) {
-        // Create new daily snapshot for this item
-        await supabase
-          .from('inventory_daily_snapshots')
-          .insert([{
-            snapshot_date: todayStr,
-            item_id: params.itemId,
-            item_name: resolvedItemName,
-            item_type: resolvedItemType,
-            opening_weight_grams: currentStockWeight,
-            closing_weight_grams: weightAfterGrams,
-            total_sold_grams: isSale ? Math.abs(delta) : 0,
-            total_added_grams: isAdd ? delta : 0,
-            sell_count: isSale ? 1 : 0,
-            created_at: recordTimestamp,
-          }]);
-      } else {
-        // Update existing daily snapshot
-        const updatedSoldGrams = Number((Number(existingSnapshot.total_sold_grams || 0) + (isSale ? Math.abs(delta) : 0)).toFixed(3));
-        const updatedAddedGrams = Number((Number(existingSnapshot.total_added_grams || 0) + (isAdd ? delta : 0)).toFixed(3));
-        const updatedSellCount = Number(existingSnapshot.sell_count || 0) + (isSale ? 1 : 0);
-
-        await supabase
-          .from('inventory_daily_snapshots')
-          .update({
-            closing_weight_grams: weightAfterGrams,
-            total_sold_grams: updatedSoldGrams,
-            total_added_grams: updatedAddedGrams,
-            sell_count: updatedSellCount,
-          })
-          .eq('snapshot_date', todayStr)
-          .eq('item_id', params.itemId);
-      }
-    } catch (snapErr: any) {
-      console.warn('⚠️ Daily snapshot warning:', snapErr.message);
-    }
-
-    // 4. Update live inventory_products table
+    // 3. Update live inventory_products table
     if (prod) {
       const currentSoldQty = Number(prod.sold_quantity || 0);
       const currentSellCount = Number(prod.sell_count || 0);
 
-      const updatedSoldQty = params.eventType === 'SALE' ? Number((currentSoldQty + Math.abs(delta)).toFixed(3)) : currentSoldQty;
-      const updatedSellCount = params.eventType === 'SALE' ? currentSellCount + 1 : currentSellCount;
+      let updatedSoldQty = currentSoldQty;
+      let updatedSellCount = currentSellCount;
+
+      if (params.eventType === 'SALE') {
+        updatedSoldQty = Number((currentSoldQty + Math.abs(delta)).toFixed(3));
+        updatedSellCount = currentSellCount + 1;
+      } else if (
+        params.eventType === 'SALE_REVERSAL' ||
+        params.eventType === 'CUSTOMER_RETURN' ||
+        (params.eventType === 'ADJUSTMENT' && params.referenceType === 'INVOICE')
+      ) {
+        // Roll back previously recorded sale
+        updatedSoldQty = Math.max(0, Number((currentSoldQty - Math.abs(delta)).toFixed(3)));
+        updatedSellCount = Math.max(0, currentSellCount - 1);
+      }
 
       await supabase
         .from('inventory_products')
@@ -137,7 +98,7 @@ export async function recordInventoryMovement(params: InventoryMovementParams): 
         })
         .eq('id', params.itemId);
 
-      console.log(`📦 Synced item '${resolvedItemName}': Stock ${currentStockWeight}g ➔ ${weightAfterGrams}g (${delta > 0 ? '+' : ''}${delta}g ${params.eventType})`);
+      console.log(`📦 Synced item '${resolvedItemName}': Stock ${currentStockWeight}g ➔ ${weightAfterGrams}g | Sold: ${currentSoldQty}g ➔ ${updatedSoldQty}g | Count: ${currentSellCount} ➔ ${updatedSellCount} (${params.eventType})`);
     }
 
     return {

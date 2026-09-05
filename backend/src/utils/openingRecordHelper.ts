@@ -57,7 +57,8 @@ export async function getOrInitOpeningRecord(
       ?? 0
     );
 
-    // 2. Try reading from daily_opening_records table
+    // [STATIC TABLE DISCONNECTED] - Dynamic Calculation Engine replaces static daily_opening_records table
+    /*
     const { data: existing } = await supabase
       .from('daily_opening_records')
       .select('*')
@@ -69,7 +70,6 @@ export async function getOrInitOpeningRecord(
       let silver = Number(existing.opening_silver ?? existing.opening_silver_grams ?? 0);
       let cash = Number(existing.opening_cash ?? existing.opening_cash_amount ?? 0);
 
-      // If existing DB row has 0, but dynamic calculation or yesterday's closing had non-zero, carry it forward
       if (gold === 0 && prevGold > 0) gold = prevGold;
       if (silver === 0 && prevSilver > 0) silver = prevSilver;
       if (cash === 0 && prevCash !== 0) cash = prevCash;
@@ -83,6 +83,7 @@ export async function getOrInitOpeningRecord(
         loadedSilverGrams: Number(existing.loaded_silver_grams || loadedToday.silverGrams || 0),
       };
     }
+    */
 
     const openingGoldGrams = Number((prevGold + (loadedToday.goldGrams || 0)).toFixed(3));
     const openingSilverGrams = Number((prevSilver + (loadedToday.silverGrams || 0)).toFixed(3));
@@ -110,13 +111,15 @@ export async function getOrInitOpeningRecord(
 }
 
 /**
- * Dynamically adds loaded stock/cash into today's opening_records row
+ * Dynamically adds loaded stock/cash into today's opening balances (100% Dynamic in-memory / ledger)
  */
 export async function updateOpeningOnLoad(
   dateStr: string,
   load: { goldGrams?: number; silverGrams?: number; cashAmount?: number }
 ): Promise<void> {
   try {
+    // [STATIC TABLE DISCONNECTED] - Static upserts commented out in favor of dynamic ledger queries
+    /*
     const existing = await getOrInitOpeningRecord(
       dateStr,
       { goldGrams: 0, silverGrams: 0, cashAmount: 0 },
@@ -142,6 +145,7 @@ export async function updateOpeningOnLoad(
     } catch {
       // Table may not exist yet
     }
+    */
   } catch (err: any) {
     console.warn(`⚠️ Failed to update opening record on load:`, err?.message);
   }

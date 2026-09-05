@@ -199,16 +199,16 @@ router.post('/products', async (req: Request, res: Response) => {
       id,
       item_name: itemName,
       category: finalCategory,
-      item_type: item_type || 'GOLD',
+      item_type: (item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
       weight_from_grams: finalWeightFrom,
       weight_to_grams: finalWeightTo,
-      current_stock_weight: 0,
+      current_stock_weight: finalTotalWeight,
       sold_quantity: 0.000,
       sell_count: 0,
       img: cloudinaryWebpUrl,
       price: Number(price || 0),
+      bill_date: getTodayIST(),
       created_at: getNowISTISO(),
-      updated_at: getNowISTISO(),
     };
 
     try {
@@ -222,49 +222,26 @@ router.post('/products', async (req: Request, res: Response) => {
       } else {
         console.log('✨ Successfully inserted into inventory_products table:', data);
         
-        if (finalTotalWeight > 0) {
-          try {
-            const { recordInventoryMovement } = await import('../../utils/inventoryLedgerHelper');
-            await recordInventoryMovement({
-              itemId: id,
-              itemName,
-              itemType: (item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
-              eventType: 'OPENING',
-              weightDeltaGrams: finalTotalWeight,
-              referenceType: 'MANUAL',
-              notes: `Initial stock loaded (${finalTotalWeight}g)`,
-            });
-
-            // Update today's opening_records table with loaded stock
-            const { updateOpeningOnLoad } = await import('../../utils/openingRecordHelper');
-            const todayStr = getTodayIST();
-            const isSilver = (item_type || 'GOLD').toUpperCase().includes('SILVER');
-            await updateOpeningOnLoad(todayStr, {
-              goldGrams: isSilver ? 0 : finalTotalWeight,
-              silverGrams: isSilver ? finalTotalWeight : 0,
-            });
-          } catch (invLedgerErr: any) {
-            console.warn('⚠️ Inventory ledger opening stock notice:', invLedgerErr.message);
-          }
-        }
-
         // Insert opening log into inventory_stock_logs (item_id is Foreign Key to inventory_products.id)
-        const { error: logErr } = await supabase
-          .from('inventory_stock_logs')
-          .insert([{
-            item_id: id,
-            item_name: itemName,
-            metal_category: item_type || 'GOLD',
-            item_category: finalCategory,
-            previous_stock_weight: 0.000,
-            new_stock_weight: finalTotalWeight,
-            notes: `Initial stock loaded (${finalTotalWeight}g)`,
-          }]);
+        if (finalTotalWeight > 0) {
+          const { error: logErr } = await supabase
+            .from('inventory_stock_logs')
+            .insert([{
+              item_id: id,
+              item_name: itemName,
+              metal_category: (item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
+              item_category: finalCategory,
+              previous_stock_weight: 0.000,
+              new_stock_weight: finalTotalWeight,
+              notes: `Initial stock loaded (${finalTotalWeight}g)`,
+              created_at: getNowISTISO(),
+            }]);
 
-        if (logErr) {
-          console.warn('⚠️ Stock log insert warning:', logErr.message);
-        } else {
-          console.log(`✨ Successfully created initial stock log for item_id: ${id}`);
+          if (logErr) {
+            console.warn('⚠️ Stock log insert warning:', logErr.message);
+          } else {
+            console.log(`✨ Successfully created initial stock log for item_id: ${id}`);
+          }
         }
       }
     } catch (dbErr) {

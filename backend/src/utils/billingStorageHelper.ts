@@ -32,6 +32,8 @@ export interface BillingStorageInput {
   item_length_inches?: string;
   image_url?: string;
   notes?: string;
+  is_item_submitted?: 'yes' | 'no' | string;
+  item_submitted_at?: string | null;
 }
 
 /**
@@ -68,11 +70,14 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
 
     // Compute Totals
     const totalAmount = Number(
-      input.total_amount ??
-      input.final_amount ??
-      receiptData.final_amount ??
-      receiptData.grand_total ??
-      receiptData.total_amount ??
+      input.total_amount ||
+      input.final_amount ||
+      receiptData.grandTotal ||
+      receiptData.grand_total ||
+      receiptData.netPayable ||
+      receiptData.final_amount ||
+      receiptData.total_amount ||
+      (Number(input.paid_amount || 0) + Number(input.due_amount || 0)) ||
       0
     );
 
@@ -148,6 +153,12 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
     }
 
     // 2. LINE-ITEMS BREAKDOWN TABLE: billing_sell_buy_records
+    // Fetch previous line items before deleting so we can restore previously deducted stock!
+    const { data: previousLineRecords } = await supabase
+      .from('billing_sell_buy_records')
+      .select('*')
+      .eq('customer_billing_uuid', customerBillingUuid);
+
     // Delete existing line items for this invoice (if updating) to avoid duplicates
     await supabase
       .from('billing_sell_buy_records')
@@ -184,8 +195,15 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
 
         const resolvedBillingMode = cleanBillType === 'EXCHANGE' ? 'TRADE_IN' : cleanBillType;
         const isOrderSell = resolvedBillingMode === 'ORDER' && itemType === 'SELL';
-        const isSubmittedVal = !isOrderSell;
-        const submittedTimeVal = isSubmittedVal ? createdAt : null;
+        
+        let isSubmittedVal = true;
+        let submittedTimeVal: string | null = createdAt;
+
+        if (isOrderSell) {
+          const isSubOrder = String(input.is_item_submitted ?? receiptData.submitted ?? receiptData.is_item_submitted ?? 'no').toLowerCase() === 'yes';
+          isSubmittedVal = isSubOrder;
+          submittedTimeVal = isSubOrder ? (input.item_submitted_at || receiptData.item_submitted_at || createdAt) : null;
+        }
 
         lineRecordsToInsert.push({
           customer_billing_uuid: customerBillingUuid,
@@ -230,8 +248,15 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       const fallbackAddCost = Number(input.additional_cost ?? receiptData.additional_cost ?? receiptData.additional_charges_amount ?? receiptData.additional_charge_value ?? 0);
       const resolvedBillingMode = cleanBillType === 'EXCHANGE' ? 'TRADE_IN' : cleanBillType;
       const isOrderSellSingle = resolvedBillingMode === 'ORDER' && singleType === 'SELL';
-      const isSubmittedSingle = !isOrderSellSingle;
-      const submittedTimeSingle = isSubmittedSingle ? createdAt : null;
+      
+      let isSubmittedSingle = true;
+      let submittedTimeSingle: string | null = createdAt;
+
+      if (isOrderSellSingle) {
+        const isSubOrderSingle = String(input.is_item_submitted ?? receiptData.submitted ?? receiptData.is_item_submitted ?? 'no').toLowerCase() === 'yes';
+        isSubmittedSingle = isSubOrderSingle;
+        submittedTimeSingle = isSubOrderSingle ? (input.item_submitted_at || receiptData.item_submitted_at || createdAt) : null;
+      }
 
       lineRecordsToInsert.push({
         customer_billing_uuid: customerBillingUuid,
@@ -273,9 +298,57 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         console.log(`✅ Stored ${lineRecordsToInsert.length} line records in billing_sell_buy_records for ${billingId}`);
       }
 
-      // 4. INVENTORY PRODUCT STOCK DEDUCTION: Update inventory_ledger & daily snapshots for SELL transactions
+      // 4. INVENTORY PRODUCT STOCK DEDUCTION (Differential Delta Management):
+      // A. Restore previously deducted items back into inventory (if editing an existing bill)
+      if (previousLineRecords && previousLineRecords.length > 0) {
+        for (const prev of previousLineRecords) {
+          const isOrderMode = (prev.billing_mode || '').toUpperCase() === 'ORDER';
+          const isSubmitted = (prev.is_item_submitted || 'no').toLowerCase() === 'yes';
+          if (prev.transaction_type === 'SELL' && (!isOrderMode || isSubmitted) && Number(prev.item_weight) > 0) {
+            try {
+              const itemName = (prev.item_name || '').trim();
+              const cleanMetal = (prev.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+
+              const { data: invMatches } = await supabase
+                .from('inventory_products')
+                .select('*')
+                .eq('item_type', cleanMetal);
+
+              if (invMatches && invMatches.length > 0) {
+                const matched = invMatches.find((p: any) => {
+                  const pName = (p.item_name || '').toLowerCase();
+                  const pCat = (p.category || '').toLowerCase();
+                  const target = itemName.toLowerCase();
+                  return pName === target || pCat === target || target.includes(pName) || pName.includes(target);
+                });
+
+                if (matched) {
+                  const { recordInventoryMovement } = await import('./inventoryLedgerHelper');
+                  await recordInventoryMovement({
+                    itemId: matched.id,
+                    itemName: matched.item_name,
+                    itemType: cleanMetal,
+                    eventType: 'SALE_REVERSAL',
+                    weightDeltaGrams: Number(prev.item_weight),
+                    referenceId: billingId,
+                    referenceType: 'INVOICE',
+                    notes: `Stock refunded (+${prev.item_weight}g) before updating invoice #${billingId}`,
+                  });
+                }
+              }
+            } catch (restoreErr) {
+              console.warn('⚠️ Inventory restore warning:', restoreErr);
+            }
+          }
+        }
+      }
+
+      // B. Deduct new line items from inventory
       for (const r of lineRecordsToInsert) {
-        if (r.transaction_type === 'SELL' && r.item_weight > 0) {
+        const isOrderMode = (r.billing_mode || '').toUpperCase() === 'ORDER';
+        const isSubmitted = (r.is_item_submitted || 'no').toLowerCase() === 'yes';
+
+        if (r.transaction_type === 'SELL' && (!isOrderMode || isSubmitted) && Number(r.item_weight) > 0) {
           try {
             const itemName = (r.item_name || '').trim();
             const cleanMetal = (r.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
@@ -303,7 +376,7 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
                   weightDeltaGrams: -Number(r.item_weight),
                   referenceId: billingId,
                   referenceType: 'INVOICE',
-                  notes: `Sold in bill ${billingId} to ${input.customer_name || 'Customer'}`,
+                  notes: `Sold in invoice #${billingId} to ${input.customer_name || 'Customer'}`,
                 });
               }
             }
@@ -314,48 +387,32 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       }
     }
 
-    // 3. PAYMENT / INSTALLMENT TABLE: billing_payment_history (Record Initial Payment / Update Installment #1)
+    // 3. PAYMENT / INSTALLMENT TABLE: billing_payment_history (Record Initial Payment only if not already recorded)
     const paymentMode = input.payment_mode || receiptData.payment_mode || 'CASH';
     const { data: existingPayments } = await supabase
       .from('billing_payment_history')
       .select('payment_uuid')
-      .eq('customer_billing_uuid', customerBillingUuid)
-      .eq('installment_number', 1);
+      .eq('customer_billing_uuid', customerBillingUuid);
 
-    if (existingPayments && existingPayments.length > 0) {
-      const { error: payUpdErr } = await supabase
-        .from('billing_payment_history')
-        .update({
+    // Only insert initial installment #1 if NO payment history exists yet for this bill/order
+    if (!existingPayments || existingPayments.length === 0) {
+      if (paidAmount > 0) {
+        const { error: payInsErr } = await supabase.from('billing_payment_history').insert([{
+          customer_billing_uuid: customerBillingUuid,
+          installment_number: 1,
           amount_paid: paidAmount,
           payment_mode: paymentMode,
           payment_status: paymentStatus,
           remaining_due: dueAmount,
           bill_date: billDate,
           notes: cleanBillType === 'ORDER' ? 'Initial Advance during Order Placement' : 'Initial Invoice Payment',
-        })
-        .eq('payment_uuid', existingPayments[0].payment_uuid);
-
-      if (payUpdErr) {
-        console.error('❌ Error updating billing_payment_history:', payUpdErr.message);
-      } else {
-        console.log(`✅ Updated billing_payment_history installment #1 for ${billingId} (Paid: ₹${paidAmount}, Due: ₹${dueAmount})`);
-      }
-    } else if (paidAmount > 0) {
-      const { error: payInsErr } = await supabase.from('billing_payment_history').insert([{
-        customer_billing_uuid: customerBillingUuid,
-        installment_number: 1,
-        amount_paid: paidAmount,
-        payment_mode: paymentMode,
-        payment_status: paymentStatus,
-        remaining_due: dueAmount,
-        bill_date: billDate,
-        notes: cleanBillType === 'ORDER' ? 'Initial Advance during Order Placement' : 'Initial Invoice Payment',
-        created_at: createdAt,
-      }]);
-      if (payInsErr) {
-        console.error('❌ Error inserting billing_payment_history:', payInsErr.message);
-      } else {
-        console.log(`✅ Inserted billing_payment_history installment #1 for ${billingId} (Paid: ₹${paidAmount})`);
+          created_at: createdAt,
+        }]);
+        if (payInsErr) {
+          console.error('❌ Error inserting billing_payment_history:', payInsErr.message);
+        } else {
+          console.log(`✅ Inserted billing_payment_history installment #1 for ${billingId} (Paid: ₹${paidAmount})`);
+        }
       }
     }
 

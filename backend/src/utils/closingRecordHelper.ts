@@ -378,6 +378,8 @@ export async function generateClosingRecord(targetDate?: string): Promise<any> {
  */
 export async function saveClosingRecord(date: string, data: any): Promise<{ success: boolean; error?: string }> {
   try {
+    // [STATIC TABLE DISCONNECTED] - Static upserts commented out in favor of dynamic calculation
+    /*
     const { error } = await supabase
       .from('daily_closing_records')
       .upsert([{
@@ -390,6 +392,7 @@ export async function saveClosingRecord(date: string, data: any): Promise<{ succ
       console.warn('⚠️ Error saving closing record:', error.message);
       return { success: false, error: error.message };
     }
+    */
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -397,10 +400,12 @@ export async function saveClosingRecord(date: string, data: any): Promise<{ succ
 }
 
 /**
- * Fetches the saved closing record for a specific date
+ * Fetches the closing record for a specific date (100% Dynamic calculation on the fly)
  */
 export async function getClosingRecord(date: string): Promise<any | null> {
   try {
+    // [STATIC TABLE DISCONNECTED] - Instead of reading static row, compute 100% dynamically
+    /*
     const { data, error } = await supabase
       .from('daily_closing_records')
       .select('*')
@@ -409,7 +414,17 @@ export async function getClosingRecord(date: string): Promise<any | null> {
 
     if (error || !data) return null;
     return data;
-  } catch {
+    */
+
+    const dynamicClosing = await generateClosingRecord(date);
+    return {
+      record_date: date,
+      closing_data: dynamicClosing,
+      created_at: getNowISTISO(),
+      updated_at: getNowISTISO(),
+    };
+  } catch (err: any) {
+    console.warn(`⚠️ Dynamic getClosingRecord notice for ${date}:`, err?.message);
     return null;
   }
 }
@@ -419,6 +434,8 @@ export async function getClosingRecord(date: string): Promise<any | null> {
  */
 export async function listClosingRecords(): Promise<any[]> {
   try {
+    // [STATIC TABLE DISCONNECTED] - Static queries commented out
+    /*
     const { data, error } = await supabase
       .from('daily_closing_records')
       .select('id, record_date, created_at, updated_at')
@@ -426,6 +443,8 @@ export async function listClosingRecords(): Promise<any[]> {
 
     if (error || !data) return [];
     return data;
+    */
+    return [];
   } catch {
     return [];
   }

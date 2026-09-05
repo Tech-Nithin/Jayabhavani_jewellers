@@ -4,7 +4,7 @@ interface UdhaariCustomerDuesViewProps {
   logBookTimeline: any[];
   onSelectBill: (item: any) => void;
   selectedDate?: string;
-  formatISTDateTime: (isoString?: string, fallbackTime?: string) => string;
+  formatISTDateTime: (isoString?: string, fallbackTime?: string, billDateStr?: string) => string;
 }
 
 export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = ({
@@ -26,8 +26,8 @@ export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = (
         return activeDue > 0.01;
       })
       .sort((a: any, b: any) => {
-        const timeA = new Date(a.created_at || a.date || 0).getTime();
-        const timeB = new Date(b.created_at || b.date || 0).getTime();
+        const timeA = new Date(a.bill_date || a.raw_invoice?.bill_date || a.created_at || a.date || 0).getTime();
+        const timeB = new Date(b.bill_date || b.raw_invoice?.bill_date || b.created_at || b.date || 0).getTime();
         return timeB - timeA;
       })
       .map((item: any, idx: number) => {
@@ -244,7 +244,7 @@ export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = (
                     >
                       <td style={{ padding: '10px', fontWeight: 800, color: '#64748b' }}>#{item.originalSNo || idx + 1}</td>
                       <td style={{ padding: '10px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>
-                        {formatISTDateTime(item.created_at, item.time)}
+                        {formatISTDateTime(item.created_at, item.time, item.bill_date || item.raw_invoice?.bill_date)}
                       </td>
                       <td style={{ padding: '10px' }}>
                         <div style={{ fontWeight: 800, color: '#0f172a' }}>{item.title || 'Guest Customer'}</div>

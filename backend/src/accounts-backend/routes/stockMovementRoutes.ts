@@ -21,15 +21,40 @@ router.get('/stock-movement', async (req: Request, res: Response) => {
       supabase.from('worker_transactions').select('*').order('created_at', { ascending: true }),
     ]);
 
-    const addedProductsToday = (dbProducts || []).filter((p) => matchesDateFilterIST(p.created_at, targetDate, startDate, endDate));
-    const matchedBillingRecords = (dbBillingRecords || []).filter((r) => matchesDateFilterIST(r.bill_date || r.created_at, targetDate, startDate, endDate));
+    const addedProductsToday = (dbProducts || []).filter((p) => matchesDateFilterIST(p.bill_date || p.created_at, targetDate, startDate, endDate));
+    
+    // Filter billing records strictly by their transaction nature:
+    // BUY (scrap metal received) -> bill_date (when scrap was taken into shop)
+    // SELL (counter direct sale) -> bill_date
+    // SELL (custom order)        -> ONLY when submitted=yes (delivery date item_submitted_at)
+    const matchedBillingRecords = (dbBillingRecords || []).filter((r) => {
+      const type = (r.transaction_type || '').toUpperCase();
+      const isOrderMode = (r.billing_mode || '').toUpperCase() === 'ORDER';
+      const isSubmitted = (r.is_item_submitted || 'no').toLowerCase() === 'yes';
+
+      if (type === 'BUY' || type === 'EXCHANGE_BUY') {
+        return matchesDateFilterIST(r.bill_date || r.created_at, targetDate, startDate, endDate);
+      }
+
+      if (type === 'SELL') {
+        if (isOrderMode) {
+          if (!isSubmitted) return false;
+          const deliveryDate = r.item_submitted_at || r.bill_date || r.created_at;
+          return matchesDateFilterIST(deliveryDate, targetDate, startDate, endDate);
+        }
+        return matchesDateFilterIST(r.bill_date || r.created_at, targetDate, startDate, endDate);
+      }
+
+      return matchesDateFilterIST(r.bill_date || r.created_at, targetDate, startDate, endDate);
+    });
+
     const matchedWorkerTxns = (workerTxns || []).filter((tx) => matchesDateFilterIST(tx.created_at, targetDate, startDate, endDate));
 
     let currentGoldShowcase = 0;
     let currentSilverShowcase = 0;
     (dbProducts || []).forEach((p: any) => {
       const metal = (p.item_type || p.metal_type || 'GOLD').toUpperCase();
-      const wt = Number(p.stock_quantity || p.weight_grams || p.weight_from_grams || 0);
+      const wt = Number(p.current_stock_weight ?? p.weight_from_grams ?? 0);
       if (metal.includes('SILVER')) currentSilverShowcase += wt;
       else currentGoldShowcase += wt;
     });
@@ -55,11 +80,11 @@ router.get('/stock-movement', async (req: Request, res: Response) => {
 
     const goldLoadedToday = addedProductsToday
       .filter((p: any) => !(p.item_type || 'GOLD').toUpperCase().includes('SILVER'))
-      .reduce((sum: number, p: any) => sum + Number(p.stock_quantity || p.weight_grams || 0), 0);
+      .reduce((sum: number, p: any) => sum + Number(p.current_stock_weight ?? p.weight_from_grams ?? 0), 0);
 
     const silverLoadedToday = addedProductsToday
       .filter((p: any) => (p.item_type || 'GOLD').toUpperCase().includes('SILVER'))
-      .reduce((sum: number, p: any) => sum + Number(p.stock_quantity || p.weight_grams || 0), 0);
+      .reduce((sum: number, p: any) => sum + Number(p.current_stock_weight ?? p.weight_from_grams ?? 0), 0);
 
     const stockSummary = [
       {
@@ -81,14 +106,14 @@ router.get('/stock-movement', async (req: Request, res: Response) => {
     ];
 
     const eodReorderList = (dbProducts || [])
-      .filter((p: any) => Number(p.stock_quantity || p.weight_grams || 0) <= 5)
+      .filter((p: any) => Number(p.current_stock_weight ?? p.weight_from_grams ?? 0) <= 5)
       .map((p: any) => ({
         id: p.id,
         item_name: p.item_name,
         category: p.category,
         metal_type: p.item_type || 'GOLD',
-        current_weight: Number(p.stock_quantity || p.weight_grams || 0),
-        reorder_status: Number(p.stock_quantity || p.weight_grams || 0) === 0 ? 'OUT_OF_STOCK' : 'LOW_STOCK',
+        current_weight: Number(p.current_stock_weight ?? p.weight_from_grams ?? 0),
+        reorder_status: Number(p.current_stock_weight ?? p.weight_from_grams ?? 0) === 0 ? 'OUT_OF_STOCK' : 'LOW_STOCK',
       }));
 
     res.json({

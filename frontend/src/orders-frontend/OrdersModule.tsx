@@ -301,7 +301,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
     }
   };
 
-  const handleToggleSubmittedStatus = async (order: OrderItem, newSubmitted: 'yes' | 'no') => {
+  const handleToggleSubmittedStatus = async (order: OrderItem, newSubmitted: 'yes' | 'no', customDate?: string | null) => {
     if (newSubmitted === 'yes' && order.returned_from_worker !== 'yes') {
       alert("First mark 'Return from worker' as 'YES', then mark this column as 'YES'!");
       return;
@@ -312,12 +312,13 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           submitted: newSubmitted,
+          item_submitted_at: customDate || (newSubmitted === 'yes' ? new Date().toISOString() : null),
         }),
       });
       const data = await res.json();
       if (data.success) {
         setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? { ...o, submitted: newSubmitted } : o))
+          prev.map((o) => (o.id === order.id ? { ...o, submitted: newSubmitted, item_submitted_at: customDate || (newSubmitted === 'yes' ? (o.item_submitted_at || new Date().toISOString()) : null) } : o))
         );
       } else {
         alert('Failed to update submitted status: ' + (data.message || 'Error'));

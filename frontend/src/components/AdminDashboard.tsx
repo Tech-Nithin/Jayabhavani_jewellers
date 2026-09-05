@@ -17,7 +17,9 @@ interface AdminDashboardProps {
   user?: { name: string; email: string };
   onLogout: () => void;
   onBackToStore?: () => void;
-  activeModule?: 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'accounts';
+  // activeModule?: 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'accounts';
+
+  activeModule?: 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'accounts';
 }
 
 
@@ -109,14 +111,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const t = translations[lang];
 
   const navItems: Array<{ id: string; label: string; icon: string; imgSrc?: string }> = [
-    { id: 'dashboard', label: t.dashboard, icon: 'fa-solid fa-chart-pie' },
     { id: 'billing', label: t.billing, icon: 'fa-solid fa-receipt' },
     { id: 'orders', label: lang === 'TE' ? 'ఆర్డర్లు' : 'Orders', icon: 'fa-solid fa-dolly' },
     { id: 'workers', label: t.workAssignment, icon: 'fa-solid fa-users-gear' },
     { id: 'finance', label: t.finance, icon: 'fa-solid fa-hand-holding-dollar' },
     { id: 'inventory', label: t.inventory, icon: 'fa-solid fa-store' },
     { id: 'accounts', label: lang === 'TE' ? 'ఖాతాలు (రోజ్మేల్)' : 'Accounts', icon: 'fa-solid fa-book-bookmark' },
-
   ];
 
   return (

@@ -678,23 +678,20 @@ async function deductInventoryStockOnSale(invoice: any) {
             await supabase
               .from('inventory_products')
               .update({
-                stock_quantity: newStock,
                 sold_quantity: newSold,
                 current_stock_weight: newWeight,
                 sell_count: newSellCount,
-                updated_at: getNowISTISO(),
               })
               .eq('id', prod.id);
 
             await supabase.from('inventory_stock_logs').insert([{
-              product_id: prod.id,
-              product_name: prod.name || prod.category,
-              log_type: 'SALE_DEDUCTION',
-              quantity_change: -qtySold,
-              weight_change_grams: -weightSold,
-              previous_stock: currentStock,
-              new_stock: newStock,
-              notes: `Sold in ${invoice.transaction_type || 'SELL'} Invoice #${invoice.id} to ${invoice.customer_name || 'Customer'}`,
+              item_id: prod.id,
+              item_name: prod.item_name || prod.name || prod.category,
+              metal_category: prod.item_type || 'GOLD',
+              item_category: prod.category || 'General',
+              previous_stock_weight: currentWeight,
+              new_stock_weight: newWeight,
+              notes: `Sold in ${invoice.transaction_type || 'SELL'} Invoice #${invoice.id} to ${invoice.customer_name || 'Customer'} (-${weightSold}g)`,
               created_at: getNowISTISO(),
             }]);
           }
@@ -706,14 +703,13 @@ async function deductInventoryStockOnSale(invoice: any) {
         if (scrapWeight > 0) {
           try {
             await supabase.from('inventory_stock_logs').insert([{
-              product_id: null,
-              product_name: `Old ${cleanMetal} Scrap / Buy-in`,
-              log_type: 'OLD_GOLD_PURCHASE',
-              quantity_change: 1,
-              weight_change_grams: scrapWeight,
-              previous_stock: 0,
-              new_stock: 0,
-              notes: `Scrap ${cleanMetal} received in ${invoice.transaction_type || 'BUY'} Invoice #${invoice.id} from ${invoice.customer_name || 'Customer'}`,
+              item_id: `scrap-${Date.now()}`,
+              item_name: `Old ${cleanMetal} Scrap / Buy-in`,
+              metal_category: cleanMetal,
+              item_category: 'Scrap Metal',
+              previous_stock_weight: 0,
+              new_stock_weight: scrapWeight,
+              notes: `Scrap ${cleanMetal} received in ${invoice.transaction_type || 'BUY'} Invoice #${invoice.id} from ${invoice.customer_name || 'Customer'} (+${scrapWeight}g)`,
               created_at: getNowISTISO(),
             }]);
           } catch (logErr) {
@@ -1337,6 +1333,52 @@ router.delete('/invoices/:id', async (req: Request, res: Response) => {
         .from('billing_payment_history')
         .delete()
         .or(`customer_billing_uuid.eq.${uuid},notes.ilike.%${bId}%`);
+
+      // 1. Fetch line items from billing_sell_buy_records before deletion to refund inventory stock
+      const { data: sellRecordsToRefund } = await supabase
+        .from('billing_sell_buy_records')
+        .select('*')
+        .or(`customer_billing_uuid.eq.${uuid},customer_billing_uuid.eq.${bId}`)
+        .eq('transaction_type', 'SELL');
+
+      if (sellRecordsToRefund && sellRecordsToRefund.length > 0) {
+        try {
+          const { recordInventoryMovement } = await import('../../utils/inventoryLedgerHelper');
+          for (const sr of sellRecordsToRefund) {
+            const isOrderMode = (sr.billing_mode || '').toUpperCase() === 'ORDER';
+            const isSubmitted = (sr.is_item_submitted || 'no').toLowerCase() === 'yes';
+            if ((!isOrderMode || isSubmitted) && Number(sr.item_weight) > 0) {
+              const cleanMetal = (sr.metal_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+              const { data: invMatches } = await supabase
+                .from('inventory_products')
+                .select('*')
+                .eq('item_type', cleanMetal);
+
+              const matched = (invMatches || []).find((p: any) => {
+                const pName = (p.item_name || '').toLowerCase();
+                const pCat = (p.category || '').toLowerCase();
+                const target = (sr.item_name || '').toLowerCase();
+                return pName === target || pCat === target || target.includes(pName) || pName.includes(target);
+              });
+
+              if (matched) {
+                await recordInventoryMovement({
+                  itemId: matched.id,
+                  itemName: matched.item_name,
+                  itemType: cleanMetal,
+                  eventType: 'CUSTOMER_RETURN',
+                  weightDeltaGrams: Number(sr.item_weight),
+                  referenceId: bId,
+                  referenceType: 'INVOICE',
+                  notes: `Stock refunded (+${sr.item_weight}g) due to deleted invoice #${bId}`,
+                });
+              }
+            }
+          }
+        } catch (refundErr) {
+          console.warn('⚠️ Inventory refund on delete warning:', refundErr);
+        }
+      }
 
       // Delete line items from billing_sell_buy_records
       await supabase

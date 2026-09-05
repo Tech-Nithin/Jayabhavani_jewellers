@@ -14,7 +14,7 @@ interface OrdersHistoryTableProps {
   onUnassignOrder?: (order: OrderItem) => void;
   onMarkOrderCompleted?: (order: OrderItem) => void;
   onToggleReturnStatus?: (order: OrderItem, status: 'yes' | 'no', customDateTime?: string | null) => void;
-  onToggleSubmittedStatus?: (order: OrderItem, submitted: 'yes' | 'no') => void;
+  onToggleSubmittedStatus?: (order: OrderItem, submitted: 'yes' | 'no', customDateTime?: string | null) => void;
   onViewDetail?: (order: OrderItem, showBill?: boolean) => void;
   onViewSeeBill?: (order: OrderItem) => void;
   onViewOrderDetails?: (order: OrderItem) => void;
@@ -66,11 +66,29 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
     selectedDateTime: '',
   });
 
+  const [submissionDateModal, setSubmissionDateModal] = useState<{
+    open: boolean;
+    order: OrderItem | null;
+    selectedDateTime: string;
+  }>({
+    open: false,
+    order: null,
+    selectedDateTime: '',
+  });
+
   const handleOpenReturnCalendar = (order: OrderItem) => {
     setReturnDateModal({
       open: true,
       order,
       selectedDateTime: getCurrentDatetimeLocalString(order.returned_at),
+    });
+  };
+
+  const handleOpenSubmissionCalendar = (order: OrderItem) => {
+    setSubmissionDateModal({
+      open: true,
+      order,
+      selectedDateTime: getCurrentDatetimeLocalString(order.item_submitted_at),
     });
   };
 
@@ -361,6 +379,11 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
                       onChange={(e) => {
                         const val = e.target.value as 'yes' | 'no';
                         if (val === 'yes') {
+                          const hasWorker = !!(ord.assigned_worker_id || ord.assigned_worker_name || (ord as any).worker_id || (ord as any).worker_name);
+                          if (!hasWorker) {
+                            alert('⚠️ Please assign a worker to this order before marking it as "Returned from Worker".');
+                            return;
+                          }
                           handleOpenReturnCalendar(ord);
                         } else if (val === 'no' && onToggleReturnStatus) {
                           onToggleReturnStatus(ord, 'no', null);
@@ -442,8 +465,10 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
                       value={ord.submitted === 'yes' ? 'yes' : 'no'}
                       onChange={(e) => {
                         const val = e.target.value as 'yes' | 'no';
-                        if (onToggleSubmittedStatus) {
-                          onToggleSubmittedStatus(ord, val);
+                        if (val === 'yes') {
+                          handleOpenSubmissionCalendar(ord);
+                        } else if (val === 'no' && onToggleSubmittedStatus) {
+                          onToggleSubmittedStatus(ord, 'no', null);
                         }
                       }}
                       style={{
@@ -690,6 +715,131 @@ export const OrdersHistoryTable: React.FC<OrdersHistoryTableProps> = ({
           </div>
         </div>
       )}
+
+      {/* SUBMISSION TO CUSTOMER DATE PICKER MODAL */}
+      {submissionDateModal.open && submissionDateModal.order && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            animation: 'fadeIn 0.15s ease-out',
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '1.75rem',
+              width: '90%',
+              maxWidth: '420px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.2rem',
+                }}
+              >
+                <i className="fa-solid fa-hand-holding-heart"></i>
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Item Submitted to Customer
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                  Select the actual date & time of item handover to customer
+                </p>
+              </div>
+            </div>
+
+            {/* Order Details Card */}
+            <div
+              style={{
+                background: '#f8fafc',
+                borderRadius: '10px',
+                padding: '0.85rem 1rem',
+                border: '1px solid #e2e8f0',
+                marginBottom: '1.25rem',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.85rem' }}>
+                📦 Order #{(submissionDateModal.order as any).order_number || submissionDateModal.order.id} • {submissionDateModal.order.customer_name || 'Customer'}
+              </div>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '2px' }}>
+                Item: {submissionDateModal.order.item_name} ({(submissionDateModal.order as any).item_type || submissionDateModal.order.metal_type || 'Gold'})
+              </div>
+            </div>
+
+            {/* Date & Time Input */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                📅 Actual Date & Time Submitted to Customer:
+              </label>
+              <input
+                type="datetime-local"
+                value={submissionDateModal.selectedDateTime}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSubmissionDateModal((prev) => ({ ...prev, selectedDateTime: val }));
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '8px',
+                  border: '2px solid #2563eb',
+                  fontSize: '0.95rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  background: '#ffffff',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setSubmissionDateModal({ open: false, order: null, selectedDateTime: '' })}
+                style={{ padding: '0.6rem 1rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!submissionDateModal.order) return;
+                  const iso = new Date(submissionDateModal.selectedDateTime).toISOString();
+                  if (onToggleSubmittedStatus) {
+                    onToggleSubmittedStatus(submissionDateModal.order, 'yes', iso);
+                  }
+                  setSubmissionDateModal({ open: false, order: null, selectedDateTime: '' });
+                }}
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#ffffff', fontWeight: 800, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)' }}
+              >
+                Confirm Submission Date & Time
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FULL IMAGE PREVIEW MODAL */}
       {previewImage && (
         <FullImagePreviewModal

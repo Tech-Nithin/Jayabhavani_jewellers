@@ -127,6 +127,8 @@ app.post('/api/health/purge-cache', (req: Request, res: Response) => {
 });
 
 // Daily 11:55 PM IST EOD Auto-Scheduler
+// [STATIC TABLE DISCONNECTED] - Midnight snapshot scheduler commented out in favor of 100% dynamic calculation
+/*
 let lastScheduledRunDate = '';
 setInterval(async () => {
   try {
@@ -168,6 +170,7 @@ setInterval(async () => {
     console.warn(`⚠️ [11:55 PM IST Scheduler Warning]:`, err?.message);
   }
 }, 60000);
+*/
 
 if (process.env.VERCEL !== '1') {
   app.listen(PORT, () => {

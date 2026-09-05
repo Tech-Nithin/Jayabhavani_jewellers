@@ -16,50 +16,59 @@ router.get('/scrap-vault', async (req: Request, res: Response) => {
     const endDate = req.query.endDate as string;
 
     const [{ data: dbInvoices }, { data: dbBillingRecords }] = await Promise.all([
-      supabase.from('customer_billing').select('*').order('created_at', { ascending: false }),
-      supabase.from('billing_sell_buy_records').select('*').eq('transaction_type', 'BUY').order('created_at', { ascending: false }),
+      supabase.from('customer_billing').select('customer_billing_uuid, billing_id, customer_name, customer_phone'),
+      supabase.from('billing_sell_buy_records').select('*').order('created_at', { ascending: false }),
     ]);
+
+    const customerMap = new Map<string, any>();
+    (dbInvoices || []).forEach((inv: any) => {
+      if (inv.customer_billing_uuid) customerMap.set(String(inv.customer_billing_uuid).toLowerCase(), inv);
+      if (inv.billing_id) customerMap.set(String(inv.billing_id).toLowerCase(), inv);
+    });
 
     const oldMetalVaultItems: any[] = [];
     let oldGoldBoughtWeight = 0;
     let oldSilverBoughtWeight = 0;
     let totalScrapPayout = 0;
 
-    (dbInvoices || []).forEach((inv: any) => {
-      const isDateMatch = matchesDateFilterIST(inv.bill_date || inv.created_at, targetDate, startDate, endDate);
+    (dbBillingRecords || []).forEach((r: any) => {
+      const type = (r.transaction_type || '').toUpperCase();
+      if (type !== 'BUY' && type !== 'EXCHANGE_BUY') return;
+
+      const isDateMatch = matchesDateFilterIST(r.bill_date || (r.created_at ? String(r.created_at).split('T')[0] : null), targetDate, startDate, endDate);
       if (!isDateMatch) return;
 
-      const receipt = typeof inv.bill_json === 'string' ? JSON.parse(inv.bill_json) : (inv.bill_json || {});
-      const items = Array.isArray(receipt.items) ? receipt.items : [];
-      const buyRecs = receipt.buy_records || receipt.old_metal || items.filter((it: any) => it.item_type === 'BUY' || it.item_type === 'EXCHANGE_BUY');
+      const metal = (r.metal_type || 'GOLD').toUpperCase();
+      const wt = Number(r.item_weight || 0);
+      const purity = Number(r.item_quality_percentage || r.purity_percentage || 100);
+      const pureWt = Number(r.pure_metal_weight || round3Decimals(wt * (purity / 100)));
+      const payout = Number(r.total_item_price || 0);
 
-      (buyRecs || []).forEach((it: any) => {
-        const wt = Number(it.weight_grams || it.item_weight || 0);
-        const purity = Number(it.purity_percentage || it.purity || it.touch_percentage || 91.6);
-        const pureWt = round3Decimals(wt * (purity / 100));
-        const metal = (it.metal_type || 'GOLD').toUpperCase();
-        const payout = Number(it.total_price || it.total_item_price || it.price || 0);
+      if (metal.includes('SILVER')) {
+        oldSilverBoughtWeight += wt;
+      } else {
+        oldGoldBoughtWeight += wt;
+      }
+      totalScrapPayout += payout;
 
-        if (metal.includes('SILVER')) {
-          oldSilverBoughtWeight += wt;
-        } else {
-          oldGoldBoughtWeight += wt;
-        }
-        totalScrapPayout += payout;
+      const custUuid = String(r.customer_billing_uuid || '').toLowerCase();
+      const matchedCust = customerMap.get(custUuid);
 
-        oldMetalVaultItems.push({
-          id: `scrap-${inv.customer_billing_uuid || inv.billing_id}-${it.id || Math.random()}`,
-          customer_name: inv.customer_name || 'Customer',
-          customer_phone: inv.customer_phone || '-',
-          bill_date: inv.bill_date || inv.created_at?.split('T')[0],
-          created_at: inv.created_at,
-          item_name: it.product_name || it.item_name || `${metal} Scrap`,
-          metal_type: metal,
-          gross_weight: wt,
-          purity_percentage: purity,
-          pure_weight: pureWt,
-          payout_amount: payout,
-        });
+      oldMetalVaultItems.push({
+        id: `scrap-${r.record_uuid || r.id || Math.random()}`,
+        record_uuid: r.record_uuid,
+        customer_billing_uuid: r.customer_billing_uuid,
+        customer_name: matchedCust?.customer_name || 'Customer',
+        customer_phone: matchedCust?.customer_phone || '-',
+        bill_date: r.bill_date || (r.created_at ? String(r.created_at).split('T')[0] : targetDate),
+        created_at: r.created_at,
+        item_name: r.item_name || `${metal.includes('SILVER') ? 'Silver' : 'Gold'} Scrap`,
+        metal_type: metal.includes('SILVER') ? 'SILVER' : 'GOLD',
+        gross_weight: wt,
+        only_metal_weight: Number(r.only_metal_weight || wt),
+        purity_percentage: purity,
+        pure_weight: pureWt,
+        payout_amount: payout,
       });
     });
 

@@ -416,14 +416,13 @@ router.post('/orders', async (req: Request, res: Response) => {
                 }]);
 
                 await supabase.from('inventory_stock_logs').insert([{
-                  product_id: null,
-                  product_name: `Old ${cleanMetal} Scrap / Buy-in`,
-                  log_type: 'OLD_GOLD_PURCHASE',
-                  quantity_change: 1,
-                  weight_change_grams: scrapWeight,
-                  previous_stock: 0,
-                  new_stock: 0,
-                  notes: `Scrap ${cleanMetal} received towards Order #${newOrder.id} from ${newOrder.customer_name}`,
+                  item_id: `scrap-ord-${newOrder.id || Date.now()}`,
+                  item_name: `Old ${cleanMetal} Scrap / Buy-in`,
+                  metal_category: cleanMetal,
+                  item_category: 'Scrap Metal',
+                  previous_stock_weight: 0,
+                  new_stock_weight: scrapWeight,
+                  notes: `Scrap ${cleanMetal} received towards Order #${newOrder.id} from ${newOrder.customer_name} (+${scrapWeight}g)`,
                   created_at: getNowISTISO(),
                 }]);
               }
@@ -720,8 +719,9 @@ router.put('/orders/:id/return-status', async (req: Request, res: Response) => {
 router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { sold_status, submitted, paid_now, remaining_due, payment_date, bill_date } = req.body;
+    const { sold_status, submitted, paid_now, remaining_due, payment_date, bill_date, item_submitted_at, submitted_at } = req.body;
     const resolvedPaymentDate = String(payment_date || bill_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })).trim();
+    const resolvedCustomSubmittedDate = item_submitted_at || submitted_at;
 
     let order = mockOrders.find((o) => o.id === id);
 
@@ -803,10 +803,8 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
 
     order.receipt_json_data = updatedReceiptJSON;
 
-    let invoicePersisted = false;
-
     const submittedTimestamp = newSubmitted === 'yes'
-      ? (order.item_submitted_at || getNowISTISO())
+      ? (resolvedCustomSubmittedDate ? toISTTimestamp(resolvedCustomSubmittedDate) : (order.item_submitted_at || getNowISTISO()))
       : null;
 
     // 1. Always update Supabase orders table with latest paid_amount, due_amount, item_submitted_at, and receipt_json_data
@@ -830,28 +828,32 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       // 1b. Simultaneously update billing_sell_buy_records for line items of this order
       const orderIdStr = String(order.id);
       const isSub = newSubmitted === 'yes';
-      const subTime = isSub ? (submittedTimestamp || getNowISTISO()) : null;
+      const subTime = isSub ? submittedTimestamp : null;
 
-      const { data: cbRow } = await supabase
+      const { data: cbRows } = await supabase
         .from('customer_billing')
         .select('customer_billing_uuid')
-        .eq('billing_id', orderIdStr)
-        .maybeSingle();
+        .eq('billing_id', orderIdStr);
 
-      if (cbRow?.customer_billing_uuid) {
+      const targetUuids = (cbRows || []).map((r: any) => r.customer_billing_uuid).filter(Boolean);
+      targetUuids.push(orderIdStr);
+
+      for (const targetUuid of targetUuids) {
         await supabase
           .from('billing_sell_buy_records')
           .update({
             is_item_submitted: isSub ? 'yes' : 'no',
             item_submitted_at: subTime,
           })
-          .eq('customer_billing_uuid', cbRow.customer_billing_uuid)
+          .eq('customer_billing_uuid', targetUuid)
           .eq('transaction_type', 'SELL');
       }
     } catch (e) {
       console.warn('Supabase orders table update notice:', e);
     }
     memoryCache.deletePattern('orders');
+
+    let invoicePersisted = false;
 
     // 2. Record installment payment in billing_payment_history on the custom selected payment date
     if (pNow > 0) {
@@ -877,13 +879,12 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
       if (newSubmitted === 'yes') {
         try {
           const { storeBillingTransaction } = await import('../../utils/billingStorageHelper');
-          storeBillingTransaction({
+          await storeBillingTransaction({
             billing_id: String(order.id),
             bill_type: 'ORDER',
             customer_name: order.customer_name,
             customer_phone: order.customer_phone,
-            customer_address: order.customer_address,
-            total_amount: Number((order as any).total_amount || order.final_amount || order.paid_amount) || 0,
+            total_amount: Number(finalAmt || order.final_amount || (order as any).total_amount || (Number(order.paid_amount || 0) + Number(order.due_amount || 0))) || 0,
             paid_amount: Number(order.paid_amount || 0),
             due_amount: Number(order.due_amount || 0),
             receipt_json_data: updatedReceiptJSON,
@@ -893,7 +894,9 @@ router.put('/orders/:id/sold-status', async (req: Request, res: Response) => {
             product_name: order.item_name,
             image_url: order.image_url,
             notes: order.notes,
-          }).catch(() => {});
+            is_item_submitted: 'yes',
+            item_submitted_at: submittedTimestamp,
+          });
           invoicePersisted = true;
         } catch (e) {
           console.warn('⚠️ storeBillingTransaction order trigger warning:', e);
