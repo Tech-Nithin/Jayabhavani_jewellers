@@ -17,9 +17,7 @@ interface AdminDashboardProps {
   user?: { name: string; email: string };
   onLogout: () => void;
   onBackToStore?: () => void;
-  // activeModule?: 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'accounts';
-
-  activeModule?: 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'accounts';
+  activeModule?: 'dashboard' | 'billing' | 'orders' | 'finance' | 'inventory' | 'work-assignment' | 'accounts';
 }
 
 
