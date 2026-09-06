@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../../config/apiConfig';
 import type { LoanRecord, LoanPayment, MetalRates } from '../types';
-import type { Language } from '../financeTranslations';
+import { getFinanceTranslation, type Language } from '../financeTranslations';
 import { FinanceReceiptView } from './FinanceReceiptView';
 
 interface LoanPassbookPayViewProps {
@@ -15,10 +15,11 @@ interface LoanPassbookPayViewProps {
 export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
   loan,
   metalRates,
-  lang: _lang = 'EN',
+  lang = 'EN',
   onBack,
   onPaymentSuccess,
 }) => {
+  const t = getFinanceTranslation(lang);
   const [liveLoan, setLiveLoan] = useState<LoanRecord>(loan);
   const [paymentHistory, setPaymentHistory] = useState<LoanPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,14 +140,14 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
               boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             }}
           >
-            <i className="fa-solid fa-arrow-left"></i> Back to Loans List
+            <i className="fa-solid fa-arrow-left"></i> {t.backToLoansBtn}
           </button>
 
           <div>
             <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              Installment Passbook & Receipt
+              {t.passbookScreenTitle}
               <span style={{ fontSize: '0.72rem', background: isCash ? '#ecfdf5' : '#fffbeb', color: isCash ? '#047857' : '#b45309', border: isCash ? '1px solid #a7f3d0' : '1px solid #fde68a', padding: '3px 9px', borderRadius: '6px', fontWeight: 800 }}>
-                {isCash ? '💵 CASH LOAN' : `💍 ${liveLoan.item_metal_type || 'GOLD'} LOAN`}
+                {isCash ? t.cashLoanBadge : (liveLoan.item_metal_type?.toUpperCase() === 'SILVER' ? t.silverLoanBadge : t.goldLoanBadge)}
               </span>
             </h2>
             <span style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 600 }}>
@@ -160,7 +161,7 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
           onClick={fetchDetails}
           style={{ padding: '6px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
         >
-          <i className={`fa-solid fa-rotate ${loading ? 'fa-spin' : ''}`}></i> Refresh
+          <i className={`fa-solid fa-rotate ${loading ? 'fa-spin' : ''}`}></i> {t.refreshBtn}
         </button>
       </div>
 
@@ -178,36 +179,34 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.85rem', marginBottom: '1.15rem' }}>
                 {/* 1st Card: Total Payable Amount */}
                 <div style={{ background: '#faf5ff', border: '1.5px solid #e9d5ff', borderRadius: '10px', padding: '0.85rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', display: 'block' }}>Total Payable Amount</span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', display: 'block' }}>{t.totalPayableAmountCard}</span>
                   <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#6d28d9' }}>₹{totalPayableNow.toLocaleString('en-IN')}</span>
                   <span style={{ fontSize: '0.65rem', color: '#6d28d9', fontWeight: 700, display: 'block', marginTop: '3px' }}>
-                    (Principal ₹{currentPrincipal.toLocaleString('en-IN')} + Int Due ₹{interestDue.toLocaleString('en-IN')})
+                    ({t.principalAmountLabel.replace(/[\(₹\)\*]/g, '').trim()} ₹{currentPrincipal.toLocaleString('en-IN')} + {t.calculatedDueText.replace(':', '')} ₹{interestDue.toLocaleString('en-IN')})
                   </span>
                 </div>
 
                 {/* 2nd Card: Total Interest Paid Till Today */}
                 <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '10px', padding: '0.85rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', display: 'block' }}>Total Interest Paid Till Today</span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', display: 'block' }}>{t.totalInterestPaidCard}</span>
                   <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#16a34a' }}>₹{totalInterestPaid.toLocaleString('en-IN')}</span>
                   <span style={{ fontSize: '0.65rem', color: '#15803d', fontWeight: 700, display: 'block', marginTop: '3px' }}>
-                    Rate: {interestRate}% (₹{Math.round(currentPrincipal * (interestRate / 100)).toLocaleString('en-IN')}/mo)
+                    {t.ratePerMonthText} {interestRate}% (₹{Math.round(currentPrincipal * (interestRate / 100)).toLocaleString('en-IN')}/{t.perMonthText})
                   </span>
                 </div>
-
 
                 {/* 3rd Card: Total Principal Amount Paid */}
                 <div style={{ background: '#f0f9ff', border: '1.5px solid #bae6fd', borderRadius: '10px', padding: '0.85rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block' }}>Total Principal Paid</span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block' }}>{t.totalPrincipalPaidCard}</span>
                   <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0284c7' }}>₹{totalPrincipalPaid.toLocaleString('en-IN')}</span>
                   <span style={{ fontSize: '0.65rem', color: '#0369a1', fontWeight: 700, display: 'block', marginTop: '3px' }}>
-                    Initial Principal: ₹{originalPrincipal.toLocaleString('en-IN')}
+                    {t.initialPrincipalText} ₹{originalPrincipal.toLocaleString('en-IN')}
                   </span>
                 </div>
 
-
                 {/* 4th Card: Empty Card */}
                 <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '10px', padding: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>- Empty -</span>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>{t.emptyCardText}</span>
                 </div>
               </div>
             );
@@ -217,10 +216,10 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
           <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '1.15rem', marginBottom: '1.25rem', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
             <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#0f172a', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <i className="fa-solid fa-cash-register" style={{ color: '#10b981' }}></i> Receive Installment Payment
+                <i className="fa-solid fa-cash-register" style={{ color: '#10b981' }}></i> {t.receiveInstallmentTitle}
               </div>
               <span style={{ fontSize: '0.74rem', color: '#6366f1', background: '#eef2ff', padding: '3px 8px', borderRadius: '6px', fontWeight: 800 }}>
-                Estimated Monthly Interest: ₹{Math.round(currentPrincipal * (interestRate / 100)).toLocaleString('en-IN')} ({interestRate}%)
+                {t.estimatedMonthlyInterest} ₹{Math.round(currentPrincipal * (interestRate / 100)).toLocaleString('en-IN')} ({interestRate}%)
               </span>
             </div>
 
@@ -230,7 +229,7 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
                 {/* Field 1 (FIRST): Principal Amount Paying — ORANGE THEME */}
                 <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '10px', padding: '0.85rem' }}>
                   <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 800, color: '#b45309', marginBottom: '4px' }}>
-                    1. Principal Amount Paying (₹) *
+                    {t.principalPayingField}
                   </label>
                   <input
                     type="number"
@@ -247,14 +246,14 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
                       onClick={() => setPrincipalPayingInput(String(currentPrincipal))}
                       style={{ padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a', background: '#ffffff', color: '#b45309', fontSize: '0.64rem', fontWeight: 800, cursor: 'pointer' }}
                     >
-                      Full Principal (₹{currentPrincipal.toLocaleString('en-IN')})
+                      {t.fullPrincipalBtn} (₹{currentPrincipal.toLocaleString('en-IN')})
                     </button>
                     <button
                       type="button"
                       onClick={() => setPrincipalPayingInput('0')}
                       style={{ padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0', background: '#ffffff', color: '#64748b', fontSize: '0.64rem', fontWeight: 800, cursor: 'pointer' }}
                     >
-                      Zero (₹0)
+                      {t.zeroBtn}
                     </button>
                   </div>
                 </div>
@@ -262,7 +261,7 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
                 {/* Field 2 (SECOND): Interest Amount Paying */}
                 <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '10px', padding: '0.85rem' }}>
                   <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 800, color: '#15803d', marginBottom: '4px' }}>
-                    2. Interest Amount Paying (₹) *
+                    {t.interestPayingField}
                   </label>
                   <input
                     type="number"
@@ -274,13 +273,13 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '2px solid #16a34a', fontSize: '1.1rem', fontWeight: 900, color: '#15803d', outline: 'none', background: '#fff', boxSizing: 'border-box' }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>
-                    <span>Calculated Due: <strong>₹{interestDue.toLocaleString('en-IN')}</strong></span>
+                    <span>{t.calculatedDueText} <strong>₹{interestDue.toLocaleString('en-IN')}</strong></span>
                     <button
                       type="button"
                       onClick={() => setInterestPayingInput(String(interestDue))}
                       style={{ padding: '2px 6px', borderRadius: '4px', border: '1px solid #bbf7d0', background: '#ffffff', color: '#16a34a', fontSize: '0.64rem', fontWeight: 800, cursor: 'pointer' }}
                     >
-                      Fill Due
+                      {t.fillDueBtn}
                     </button>
                   </div>
                 </div>
@@ -289,14 +288,14 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
                 <div style={{ background: '#faf5ff', border: '1.5px solid #e9d5ff', borderRadius: '10px', padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
                     <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', display: 'block' }}>
-                      3. Total Aggregation Amount (₹)
+                      {t.totalAggregationField}
                     </span>
                     <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#6d28d9', display: 'block', marginTop: '4px' }}>
                       ₹{totalTransactionPay.toLocaleString('en-IN')}
                     </span>
                   </div>
                   <span style={{ fontSize: '0.65rem', color: '#7c3aed', fontWeight: 700, display: 'block', marginTop: '4px' }}>
-                    (Principal ₹{numPrincipalPaying.toLocaleString('en-IN')} + Interest ₹{numInterestPaying.toLocaleString('en-IN')})
+                    ({t.principalAmountLabel.replace(/[\(₹\)\*]/g, '').trim()} ₹{numPrincipalPaying.toLocaleString('en-IN')} + {t.monthlyRateCol} ₹{numInterestPaying.toLocaleString('en-IN')})
                   </span>
                 </div>
               </div>
@@ -305,11 +304,11 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.85rem', alignItems: 'center', marginBottom: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Notes / Payment Description (Optional)
+                    {t.notesField}
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Cash payment at store counter"
+                    placeholder={t.notesPlaceholder}
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#fff', boxSizing: 'border-box' }}
@@ -322,7 +321,7 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
                     disabled={submitting}
                     style={{ width: '100%', padding: '11px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#ffffff', fontWeight: 900, fontSize: '0.88rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.25)', marginTop: '18px' }}
                   >
-                    {submitting ? 'Recording Payment...' : `✅ Save Payment (₹${totalTransactionPay.toLocaleString('en-IN')})`}
+                    {submitting ? t.recordingPaymentBtn : `✅ ${t.recordPaymentBtn} (₹${totalTransactionPay.toLocaleString('en-IN')})`}
                   </button>
                 </div>
               </div>
@@ -330,23 +329,23 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
               {/* LIVE FINANCIAL IMPACT SUMMARY */}
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.85rem' }}>
                 <div style={{ fontWeight: 800, color: '#334155', fontSize: '0.78rem', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <i className="fa-solid fa-calculator"></i> Live Financial Impact After Payment:
+                  <i className="fa-solid fa-calculator"></i> {t.liveFinancialImpactTitle}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', fontSize: '0.75rem' }}>
                   <div>
-                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>Total Amount Paying Now:</span>
+                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>{t.totalPayingNowText}</span>
                     <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>₹{totalTransactionPay.toLocaleString('en-IN')}</strong>
                   </div>
                   <div>
-                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>Interest Paying Portion:</span>
+                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>{t.interestPortionText}</span>
                     <strong style={{ color: '#16a34a', fontSize: '0.88rem' }}>₹{numInterestPaying.toLocaleString('en-IN')}</strong>
                   </div>
                   <div>
-                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>Principal Reducing Portion:</span>
+                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>{t.principalPortionText}</span>
                     <strong style={{ color: '#0284c7', fontSize: '0.88rem' }}>₹{numPrincipalPaying.toLocaleString('en-IN')}</strong>
                   </div>
                   <div>
-                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>New Outstanding Principal:</span>
+                    <span style={{ color: '#475569', display: 'block', fontSize: '0.68rem' }}>{t.newOutstandingPrincipalText}</span>
                     <strong style={{ color: '#b45309', fontSize: '0.88rem' }}>
                       ₹{Math.max(0, currentPrincipal - numPrincipalPaying).toLocaleString('en-IN')}
                     </strong>
@@ -364,12 +363,12 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
           {/* 3. FULL PASSBOOK PAYMENT HISTORY LOG TABLE */}
           <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '1.15rem', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
             <h4 style={{ margin: '0 0 0.85rem 0', fontSize: '0.95rem', color: '#0f172a', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              📜 Installment Passbook History ({paymentHistory.length})
+              📜 {t.passbookHistoryTitle} ({paymentHistory.length})
             </h4>
 
             {paymentHistory.length === 0 ? (
               <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', fontSize: '0.82rem' }}>
-                No installment payments recorded yet for this loan.
+                {t.noInstallmentsText}
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
@@ -377,11 +376,11 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '1px solid #cbd5e1', color: '#475569', fontWeight: 800, textAlign: 'left' }}>
                       <th style={{ padding: '8px 10px' }}>#</th>
-                      <th style={{ padding: '8px 10px' }}>Paid Date & Time</th>
-                      <th style={{ padding: '8px 10px' }}>Payment Mode</th>
-                      <th style={{ padding: '8px 10px' }}>Total Paying Amount</th>
-                      <th style={{ padding: '8px 10px' }}>Interest Paying Amount</th>
-                      <th style={{ padding: '8px 10px' }}>Principal Amount Paying</th>
+                      <th style={{ padding: '8px 10px' }}>{t.paidDateCol}</th>
+                      <th style={{ padding: '8px 10px' }}>{t.paymentModeCol}</th>
+                      <th style={{ padding: '8px 10px' }}>{t.totalPayingCol}</th>
+                      <th style={{ padding: '8px 10px' }}>{t.interestPayingCol}</th>
+                      <th style={{ padding: '8px 10px' }}>{t.principalPayingCol}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -417,6 +416,7 @@ export const LoanPassbookPayView: React.FC<LoanPassbookPayViewProps> = ({
         {/* RIGHT COLUMN (30% STICKY): REAL-TIME LIVE THERMAL RECEIPT */}
         <div style={{ position: 'sticky', top: '1rem' }}>
           <FinanceReceiptView
+            lang={lang}
             data={{
               customer_name: liveLoan.customer_name || '',
               customer_phone: liveLoan.customer_phone || '',

@@ -103,8 +103,8 @@ export const ExchangeModeForm: React.FC<ModeFormProps> = ({
         const purityPct = Number(it.purity_percentage) || 0;
         const pureW = (netW * purityPct) / 100;
 
-        const retPurityPct = Number(it.return_purity_percentage) || 0;
-        const calculatedRetPureG = (netW * retPurityPct) / 100;
+        // const retPurityPct = Number(it.return_purity_percentage) || 0;
+        // const calculatedRetPureG = (netW * retPurityPct) / 100;
 
         const netWeightLabel = it.metal_type === 'SILVER' ? t.onlySilverWeightLabel : t.onlyGoldWeightLabel;
         const pureMetalWeightLabel = it.metal_type === 'SILVER' ? t.pureSilverWeightLabel : t.pureGoldWeightLabel;
@@ -479,52 +479,7 @@ export const ExchangeModeForm: React.FC<ModeFormProps> = ({
               </div>
             )}
 
-            {/* Row 7 (Return Purity for SELL) */}
-            {isSellItem && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6d28d9', margin: 0 }}>
-                      {t.returnPurityLabel}
-                    </label>
-                  </div>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="e.g. 91.6"
-                      onFocus={(e) => e.target.select()}
-                      value={it.return_purity_percentage ?? ''}
-                      onChange={(e) => handleUpdateItem(it.id, 'return_purity_percentage', e.target.value)}
-                      style={{ width: '100%', padding: '0.55rem 1.8rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                    />
-                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>
-                      %
-                    </span>
-                  </div>
-                </div>
 
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6d28d9', margin: 0 }}>
-                      {t.returnPureGoldLabel}
-                    </label>
-                  </div>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      readOnly
-                      placeholder="0.000"
-                      value={grossW > 0 && retPurityPct > 0 ? formatMax3Decimals(calculatedRetPureG) : (it.return_pure_gold || '')}
-                      style={{ width: '100%', padding: '0.55rem 2.2rem 0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #ddd6fe', background: '#f5f3ff', fontWeight: 700, color: '#6d28d9', fontSize: '0.85rem' }}
-                    />
-                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', fontWeight: 700, color: '#7c3aed', pointerEvents: 'none' }}>
-                      g
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Subtotal line */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0' }}>

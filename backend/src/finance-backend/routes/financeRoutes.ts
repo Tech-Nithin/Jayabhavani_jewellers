@@ -614,24 +614,164 @@ router.post('/:uuid/pay', async (req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PATCH /api/finance/:uuid/update — Edit loan details
+// PATCH /api/finance/:uuid/update or /api/finance/debt/:uuid/update — Edit loan details
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch('/:uuid/update', async (req: Request, res: Response) => {
+router.patch(['/:uuid/update', '/debt/:uuid/update'], async (req: Request, res: Response) => {
   const { uuid } = req.params;
-  const allowed = [
-    'customer_id', 'customer_name', 'customer_phone', 'customer_address',
-    'item_name', 'item_weight', 'item_deduction_name', 'item_deduction_weight',
-    'touch', 'pure_metal_weight', 'metal_value_per_gram', 'total_value_of_item',
-    'item_image_url', 'interest_rate_percent', 'timeline_months', 'debt_date', 'debt_category',
-  ];
+  const rawDebtDate = req.body.debt_date || req.body.loan_date;
+  const rawInterestStart = req.body.interest_start_from || rawDebtDate;
+
   const updateFields: any = { updated_at: getNowISTISO() };
-  allowed.forEach((key) => {
-    if (req.body[key] !== undefined) updateFields[key] = req.body[key];
-  });
+
+  if (req.body.customer_id !== undefined) updateFields.customer_id = req.body.customer_id;
+  if (req.body.customer_name !== undefined) updateFields.customer_name = String(req.body.customer_name).trim();
+  if (req.body.customer_phone !== undefined) updateFields.customer_phone = String(req.body.customer_phone).trim();
+  if (req.body.customer_address !== undefined) updateFields.customer_address = req.body.customer_address ? String(req.body.customer_address).trim() : null;
+  if (req.body.item_name !== undefined) updateFields.item_name = req.body.item_name ? String(req.body.item_name).trim() : null;
+  if (req.body.item_weight !== undefined || req.body.item_weight_grams !== undefined) {
+    updateFields.item_weight = Number(req.body.item_weight ?? req.body.item_weight_grams ?? 0);
+  }
+  if (req.body.item_deduction_name !== undefined) updateFields.item_deduction_name = req.body.item_deduction_name ? String(req.body.item_deduction_name).trim() : null;
+  if (req.body.item_deduction_weight !== undefined || req.body.item_deduction_weight_grams !== undefined) {
+    updateFields.item_deduction_weight = Number(req.body.item_deduction_weight ?? req.body.item_deduction_weight_grams ?? 0);
+  }
+  if (req.body.touch !== undefined || req.body.item_purity_percent !== undefined) {
+    updateFields.touch = Number(req.body.touch ?? req.body.item_purity_percent ?? 0);
+  }
+  if (req.body.pure_metal_weight !== undefined) updateFields.pure_metal_weight = Number(req.body.pure_metal_weight || 0);
+  if (req.body.metal_value_per_gram !== undefined || req.body.item_metal_rate_per_gram !== undefined) {
+    updateFields.metal_value_per_gram = Number(req.body.metal_value_per_gram ?? req.body.item_metal_rate_per_gram ?? 0);
+  }
+  if (req.body.total_value_of_item !== undefined) updateFields.total_value_of_item = Number(req.body.total_value_of_item || 0);
+  if (req.body.item_image_url !== undefined) updateFields.item_image_url = req.body.item_image_url || null;
+  if (req.body.interest_rate_percent !== undefined) updateFields.interest_rate_percent = Number(req.body.interest_rate_percent);
+  if (req.body.timeline_months !== undefined) updateFields.timeline_months = Number(req.body.timeline_months);
+  if (req.body.debt_category !== undefined || req.body.item_metal_type !== undefined) {
+    updateFields.debt_category = (req.body.debt_category || req.body.item_metal_type || 'GOLD').toUpperCase();
+  }
+
+  // Update debt_date and interest_start_from together
+  if (rawDebtDate) {
+    updateFields.debt_date = rawDebtDate;
+  }
+  if (rawInterestStart) {
+    updateFields.interest_start_from = rawInterestStart;
+  }
+
+  // If loan amount is updated on an open record with no payments
+  if (req.body.customer_debt_money !== undefined || req.body.amount !== undefined) {
+    const newAmt = Number(req.body.customer_debt_money ?? req.body.amount);
+    updateFields.customer_debt_money = newAmt;
+
+    const { data: payments } = await supabase
+      .from('finance_payment_history')
+      .select('payment_uuid')
+      .or(`finance_uuid.eq.${uuid}`);
+
+    if (!payments || payments.length === 0) {
+      updateFields.current_principal = newAmt;
+    }
+  }
 
   try {
-    const { data, error } = await supabase.from('finance').update(updateFields).eq('finance_uuid', uuid).select().single();
+    const isNumericId = /^\d+$/.test(uuid);
+    const query = supabase.from('finance').update(updateFields);
+    const { data, error } = isNumericId
+      ? await query.eq('id', Number(uuid)).select().single()
+      : await query.eq('finance_uuid', uuid).select().single();
+
     if (error) return res.status(500).json({ success: false, message: error.message });
+
+    // Synchronize with cash_transaction_ledger
+    try {
+      const { syncCashHistoryDayRow, getISTTimestamp } = await import('../../utils/cashLedgerHelper');
+      const loanUuid = data.finance_uuid || uuid;
+      const effectiveDate = data.debt_date || rawDebtDate;
+      const effectiveAmount = Number(data.customer_debt_money || data.amount || 0);
+
+      // Find initial disbursement entry in cash_transaction_ledger across possible ID matches
+      const { data: existingLedgerRows } = await supabase
+        .from('cash_transaction_ledger')
+        .select('*')
+        .or(`transaction_id.eq.${loanUuid},transaction_id.eq.${uuid},transaction_id.eq.${data.id}`)
+        .eq('flow_type', 'OUT');
+
+      // Helper to resolve/create target cash_history bucket
+      let targetCashHistoryUuid: string | null = null;
+      if (effectiveDate) {
+        const { data: targetDays } = await supabase
+          .from('cash_history')
+          .select('cash_history_uuid')
+          .eq('date', effectiveDate)
+          .order('created_at', { ascending: false });
+
+        if (targetDays && targetDays.length > 0) {
+          targetCashHistoryUuid = targetDays[0].cash_history_uuid;
+        } else {
+          const { data: createdDay } = await supabase
+            .from('cash_history')
+            .insert([{
+              date: effectiveDate,
+              current_cash: 0,
+              no_of_transactions: 0,
+              created_at: getISTTimestamp(effectiveDate),
+              updated_at: getNowISTISO(),
+            }])
+            .select()
+            .single();
+          if (createdDay) targetCashHistoryUuid = createdDay.cash_history_uuid;
+        }
+      }
+
+      const metalType = (data.debt_category === 'SILVER' ? 'SILVER' : 'GOLD');
+      const notes = `Loan disbursed ₹${effectiveAmount.toLocaleString('en-IN')} to ${data.customer_name || 'Customer'}`;
+
+      if (existingLedgerRows && existingLedgerRows.length > 0) {
+        for (const ledgerRow of existingLedgerRows) {
+          const oldCashHistoryUuid = ledgerRow.cash_history_uuid;
+          const newCashHistoryUuid = targetCashHistoryUuid || oldCashHistoryUuid;
+
+          await supabase
+            .from('cash_transaction_ledger')
+            .update({
+              cash_history_uuid: newCashHistoryUuid,
+              transaction_cash_total: effectiveAmount,
+              metal_type: metalType,
+              item_type: `Pledge Loan: ${data.item_name || 'Ornament'}`,
+              notes: notes,
+              created_at: getISTTimestamp(effectiveDate),
+              bill_date: effectiveDate,
+            })
+            .eq('uuid', ledgerRow.uuid);
+
+          // Re-sync daily balances for old and new day buckets
+          if (oldCashHistoryUuid) await syncCashHistoryDayRow(oldCashHistoryUuid);
+          if (newCashHistoryUuid && newCashHistoryUuid !== oldCashHistoryUuid) {
+            await syncCashHistoryDayRow(newCashHistoryUuid);
+          }
+        }
+      } else if (targetCashHistoryUuid && effectiveAmount > 0) {
+        // If no ledger entry existed yet, insert one now
+        await supabase
+          .from('cash_transaction_ledger')
+          .insert([{
+            cash_history_uuid: targetCashHistoryUuid,
+            transaction_id: loanUuid,
+            transaction_type: 'FINANCE',
+            flow_type: 'OUT',
+            transaction_cash_total: effectiveAmount,
+            metal_type: metalType,
+            item_type: `Pledge Loan: ${data.item_name || 'Ornament'}`,
+            notes: notes,
+            created_at: getISTTimestamp(effectiveDate),
+            bill_date: effectiveDate,
+          }]);
+        await syncCashHistoryDayRow(targetCashHistoryUuid);
+      }
+    } catch (syncErr) {
+      console.warn('⚠️ Cash ledger update sync error on loan update:', syncErr);
+    }
+
     memoryCache.clear();
     res.json({ success: true, message: 'Loan updated successfully.', record: data });
   } catch (err: any) {
@@ -648,13 +788,31 @@ router.delete('/:uuid', async (req: Request, res: Response) => {
     // 1. Delete all installment payments from payment history
     await supabase.from('finance_payment_history').delete().eq('finance_uuid', uuid);
 
-    // 2. Delete any matching entries from cash_transaction_ledger
+    // 2. Capture affected cash_history_uuids before deleting
+    const { data: affectedLedgerRows } = await supabase
+      .from('cash_transaction_ledger')
+      .select('cash_history_uuid')
+      .or(`transaction_id.eq.${uuid},notes.ilike.%${uuid}%`);
+
+    const affectedDayUuids = Array.from(new Set((affectedLedgerRows || []).map((r: any) => r.cash_history_uuid).filter(Boolean)));
+
+    // 3. Delete any matching entries from cash_transaction_ledger
     await supabase
       .from('cash_transaction_ledger')
       .delete()
       .or(`transaction_id.eq.${uuid},notes.ilike.%${uuid}%`);
 
-    // 3. Delete master loan record from finance table
+    // 4. Re-sync affected daily cash balances
+    try {
+      const { syncCashHistoryDayRow } = await import('../../utils/cashLedgerHelper');
+      for (const dayUuid of affectedDayUuids) {
+        await syncCashHistoryDayRow(dayUuid as string);
+      }
+    } catch (syncErr) {
+      console.warn('⚠️ Cash ledger re-sync warning on loan delete:', syncErr);
+    }
+
+    // 5. Delete master loan record from finance table
     const { error } = await supabase.from('finance').delete().eq('finance_uuid', uuid);
     if (error) return res.status(500).json({ success: false, message: error.message });
 

@@ -66,9 +66,9 @@ export const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ mode = 'bann
           title="Download & Install Admin Application APK"
         >
           <img
-            src="/JB_logo.png"
+            src="/jb_logo-symmetric.png"
             alt="JBJ Logo"
-            style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover', background: '#fff' }}
+            style={{ width: '18px', height: '18px', objectFit: 'contain' }}
           />
           <span>Install Admin App</span>
         </button>
@@ -185,9 +185,9 @@ export const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ mode = 'bann
         title="Install Jayabhavani Jewellers application"
       >
         <img
-          src="/JB_logo.png"
+          src="/jb_logo-symmetric.png"
           alt="JBJ Logo"
-          style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover', background: '#fff' }}
+          style={{ width: '20px', height: '20px', objectFit: 'contain' }}
         />
         <span>Install JBJ App</span>
         <i className="fa-solid fa-download" style={{ fontSize: '0.8rem' }} />

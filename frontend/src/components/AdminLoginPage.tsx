@@ -109,13 +109,12 @@ export default function AdminLoginPage({ onSuccess }: AdminLoginPageProps) {
             }}
           >
             <img
-              src="/JB_logo.png"
+              src="/jb_logo-symmetric.png"
               alt="Jaya Bhavani Jewellers Logo"
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
-                borderRadius: '50%',
               }}
             />
           </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../../config/apiConfig';
 import type { LoanRecord, MetalRates } from '../types';
 import { INTEREST_RATES, TIMELINE_MONTHS } from '../types';
-import type { Language } from '../financeTranslations';
+import { financeTranslations, type Language } from '../financeTranslations';
 import { FinanceReceiptView } from './FinanceReceiptView';
 import { CreatablePresetSelect } from '../../billing-frontend/components/modes/modeUtils';
 import { convertImageToWebPBlob } from '../../utils/imageUtils';
@@ -61,6 +61,9 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
   onBack,
   onSaveSuccess,
 }) => {
+  const normalizedLang = (lang || 'EN').toUpperCase() as 'EN' | 'TE';
+  const t = financeTranslations[normalizedLang] || financeTranslations.EN;
+
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -379,7 +382,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '0.5rem' }}>
           <h2 className="admin-page-title" style={{ fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif", fontSize: '1.35rem', color: '#181310', fontWeight: 800, margin: 0, letterSpacing: '-0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-solid fa-hand-holding-dollar" style={{ color: '#4f46e5' }}></i>
-            {editingRecord ? `Editing Loan: ${editingRecord.customer_name}` : 'Issue New Girvi Loan'}
+            {editingRecord ? (normalizedLang === 'TE' ? `గిర్వీ లోన్ సవరణ: ${editingRecord.customer_name}` : `Editing Loan: ${editingRecord.customer_name}`) : t.issueGirviLoanTitle}
           </h2>
 
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
@@ -402,20 +405,20 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                 whiteSpace: 'nowrap',
               }}
             >
-              <i className="fa-solid fa-arrow-left" style={{ fontSize: '0.74rem' }}></i> {lang === 'TE' ? 'వెనుకకు' : 'Back to Ledger'}
+              <i className="fa-solid fa-arrow-left" style={{ fontSize: '0.74rem' }}></i> {t.backToLedgerBtn}
             </button>
 
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', color: '#b45309', fontWeight: 700 }}>
-              🥇 Gold: ₹{metalRates.gold_rate_per_gram.toLocaleString('en-IN')}/g
+              🥇 {t.goldCategory}: ₹{metalRates.gold_rate_per_gram.toLocaleString('en-IN')}/g
             </div>
             <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', color: '#475569', fontWeight: 700 }}>
-              🥈 Silver: ₹{metalRates.silver_rate_per_gram.toLocaleString('en-IN')}/g
+              🥈 {t.silverCategory}: ₹{metalRates.silver_rate_per_gram.toLocaleString('en-IN')}/g
             </div>
           </div>
         </div>
 
         <p style={{ margin: '2px 0 0 0', color: '#786a5e', fontSize: '0.76rem' }}>
-          Enter customer details, pledged ornament weights & purity, and set financial terms.
+          {normalizedLang === 'TE' ? 'కస్టమర్ వివరాలు, తాకట్టు వస్తువు బరువు మరియు ఆర్థిక నిబంధనలను నమోదు చేయండి.' : 'Enter customer details, pledged ornament weights & purity, and set financial terms.'}
         </p>
       </div>
 
@@ -450,7 +453,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                   transition: 'all 0.15s',
                 }}
               >
-                {cat === 'GOLD' ? '🥇 Gold Loan' : cat === 'SILVER' ? '🥈 Silver Loan' : '💵 Cash Loan'}
+                {cat === 'GOLD' ? `🥇 ${t.goldCategory} ${normalizedLang === 'TE' ? 'రుణం' : 'Loan'}` : cat === 'SILVER' ? `🥈 ${t.silverCategory} ${normalizedLang === 'TE' ? 'రుణం' : 'Loan'}` : `💵 ${t.cashCategory} ${normalizedLang === 'TE' ? 'రుణం' : 'Loan'}`}
               </button>
             ))}
           </div>
@@ -462,18 +465,18 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                 ════════════════════════════════════════════════════════════════ */}
             <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '1rem', marginBottom: '1.15rem' }}>
               <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0f172a', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <i className="fa-solid fa-user" style={{ color: '#4f46e5' }}></i> 1. Customer Details
+                <i className="fa-solid fa-user" style={{ color: '#4f46e5' }}></i> {t.customerInfoSection}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.85rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Customer Name *
+                    {t.customerFullNameLabel}
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Ramesh Konda"
+                    placeholder={t.fullNamePlaceholder}
                     value={form.customer_name}
                     onChange={e => setForm({ ...form, customer_name: toStartCase(e.target.value) })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#fff', boxSizing: 'border-box', textTransform: 'capitalize' }}
@@ -482,32 +485,32 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Phone Number *
+                    {t.phoneLabel}
                   </label>
                   <input
                     type="tel"
                     required
                     maxLength={10}
-                    placeholder="e.g. 9876543210"
+                    placeholder={t.phonePlaceholder}
                     value={form.customer_phone}
                     onChange={e => setForm({ ...form, customer_phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: form.customer_phone && form.customer_phone.length < 10 ? '1.5px solid #ef4444' : '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#fff', boxSizing: 'border-box' }}
                   />
                   {form.customer_phone.length > 0 && form.customer_phone.length < 10 && (
                     <div style={{ color: '#ef4444', fontSize: '0.68rem', fontWeight: 700, marginTop: '3px' }}>
-                      ⚠️ Please fill 10 numbers ({form.customer_phone.length}/10)
+                      {normalizedLang === 'TE' ? `⚠️ దయచేసి 10 అంకెలు నమోదు చేయండి (${form.customer_phone.length}/10)` : `⚠️ Please fill 10 numbers (${form.customer_phone.length}/10)`}
                     </div>
                   )}
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Address *
+                    {t.addressLabel}
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Main Bazaar, Suryapet"
+                    placeholder={t.addressPlaceholder}
                     value={form.customer_address}
                     onChange={e => setForm({ ...form, customer_address: toStartCase(e.target.value) })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#fff', boxSizing: 'border-box', textTransform: 'capitalize' }}
@@ -525,11 +528,11 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
             <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '1rem', marginBottom: '1.15rem' }}>
               <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0f172a', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <i className="fa-solid fa-gem" style={{ color: '#d97706' }}></i> 2. Pledged Asset Details
+                  <i className="fa-solid fa-gem" style={{ color: '#d97706' }}></i> {t.pledgedAssetSection}
                 </div>
                 {!isCash && (
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '6px' }}>
-                    Rate: ₹{ratePerGram.toLocaleString('en-IN')}/g
+                    {normalizedLang === 'TE' ? 'ధర' : 'Rate'}: ₹{ratePerGram.toLocaleString('en-IN')}/g
                   </span>
                 )}
               </div>
@@ -540,12 +543,12 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                   {/* ── ROW 1 ── */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                      Ornament Name *
+                      {t.ornamentNameLabel}
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. 22K Gold Bangle Set"
+                      placeholder={t.itemNamePlaceholder}
                       value={form.item_name}
                       onChange={e => setForm({ ...form, item_name: toStartCase(e.target.value) })}
                       style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#fff', boxSizing: 'border-box', textTransform: 'capitalize' }}
@@ -554,7 +557,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                      Item Weight (Gross Wt g) *
+                      {t.grossWeightLabel}
                     </label>
                     <input
                       type="number"
@@ -571,14 +574,14 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                   {/* ── ROW 2 (50% - 50% split for Deduction Name & Deduction Weight) ── */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                      Deduction Name & Weight (g)
+                      {t.deductionNameAndWeightLabel}
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                       <CreatablePresetSelect
                         value={form.item_deduction_name ?? ''}
                         onChange={(val) => setForm({ ...form, item_deduction_name: toStartCase(val) })}
                         options={deductionPresets}
-                        placeholder="Deduction Name"
+                        placeholder={t.itemDeductionPlaceholder}
                         categoryName="deduction_name"
                         onAddNewPreset={(name) => handleAddNewPreset(name)}
                         style={{ fontSize: '0.78rem', padding: '6px 8px', fontWeight: 600 }}
@@ -597,7 +600,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#1e40af', marginBottom: '4px' }}>
-                      Only Metal Weight (Net Wt g)
+                      {t.netWeightLabel}
                     </label>
                     <input
                       type="text"
@@ -610,7 +613,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                   {/* ── ROW 3 ── */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                      Touch / Purity Percentage (%) *
+                      {t.touchPurityLabel}
                     </label>
                     <input
                       type="number"
@@ -626,7 +629,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#b45309', marginBottom: '4px' }}>
-                      Pure Metal Weight (Pure Wt g)
+                      {t.pureWeightLabel}
                     </label>
                     <input
                       type="text"
@@ -646,27 +649,27 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                   onClick={() => startWebcam('environment')}
                   style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #818cf8', background: '#eef2ff', color: '#4338ca', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <i className="fa-solid fa-camera" style={{ color: '#4338ca' }} /> Back Camera
+                  <i className="fa-solid fa-camera" style={{ color: '#4338ca' }} /> {normalizedLang === 'TE' ? 'వెనుక కెమెరా' : 'Back Camera'}
                 </button>
                 <button
                   type="button"
                   onClick={() => startWebcam('user')}
                   style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #c084fc', background: '#faf5ff', color: '#7e22ce', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <i className="fa-solid fa-camera-rotate" style={{ color: '#7e22ce' }} /> Front Camera
+                  <i className="fa-solid fa-camera-rotate" style={{ color: '#7e22ce' }} /> {normalizedLang === 'TE' ? 'ముందు కెమెరా' : 'Front Camera'}
                 </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <i className="fa-solid fa-arrow-up-from-bracket" style={{ color: '#64748b' }} /> Upload Photo
+                  <i className="fa-solid fa-arrow-up-from-bracket" style={{ color: '#64748b' }} /> {t.uploadPhotoBtn}
                 </button>
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} style={{ display: 'none' }} />
                 {imageConverting && (
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#d97706', background: '#fffbeb', padding: '4px 10px', borderRadius: '6px', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <i className="fa-solid fa-spinner fa-spin"></i> Converting image to WebP...
+                    <i className="fa-solid fa-spinner fa-spin"></i> {normalizedLang === 'TE' ? 'చిత్రాన్ని WebP కి మారుస్తోంది...' : 'Converting image to WebP...'}
                   </div>
                 )}
                 {imageUploading && (
@@ -684,7 +687,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                 {/* Live Item Value Badge inside the image upload line */}
                 {!isCash && (
                   <div style={{ marginLeft: 'auto', background: '#fffbeb', border: '1.5px solid #fde68a', padding: '6px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 900, color: '#78350f', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '0.7rem', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Item Value:</span>
+                    <span style={{ fontSize: '0.7rem', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>{t.itemValuationLabel}:</span>
                     <span>₹{liveItemValue.toLocaleString('en-IN')}</span>
                   </div>
                 )}
@@ -696,18 +699,18 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                 ════════════════════════════════════════════════════════════════ */}
             <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '1rem', marginBottom: '1.15rem' }}>
               <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0f172a', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <i className="fa-solid fa-coins" style={{ color: '#10b981' }}></i> 3. Loan Financial Terms
+                <i className="fa-solid fa-coins" style={{ color: '#10b981' }}></i> {t.loanTermsSection}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.85rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Principal Amount Disbursed (₹) *
+                    {t.principalAmountLabel}
                   </label>
                   <input
                     type="number"
                     required
-                    placeholder="e.g. 30000"
+                    placeholder={t.principalPlaceholder}
                     value={form.amount}
                     onWheel={(e) => (e.target as HTMLElement).blur()}
                     onChange={e => setForm({ ...form, amount: e.target.value })}
@@ -726,14 +729,14 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                   />
                   {!isCash && liveItemValue > 0 && Number(form.amount || 0) > liveItemValue && (
                     <div style={{ color: '#dc2626', fontSize: '0.7rem', fontWeight: 800, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      ⚠️ Amount exceeding item value (Max: ₹{liveItemValue.toLocaleString('en-IN')})
+                      {normalizedLang === 'TE' ? `⚠️ మొత్తం వస్తువు విలువను మించిపోయింది (గరిష్టం: ₹${liveItemValue.toLocaleString('en-IN')})` : `⚠️ Amount exceeding item value (Max: ₹${liveItemValue.toLocaleString('en-IN')})`}
                     </div>
                   )}
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Interest Rate (%) *
+                    {t.interestRateLabel}
                   </label>
                   <select
                     value={form.interest_rate_percent}
@@ -741,14 +744,14 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 700, color: '#1e293b', outline: 'none', background: '#fff' }}
                   >
                     {INTEREST_RATES.map(r => (
-                      <option key={r} value={r}>{r}% / mo (₹{Math.round((Number(form.amount || 0) * r) / 100).toLocaleString('en-IN')})</option>
+                      <option key={r} value={r}>{r}% / {t.perMonthText} (₹{Math.round((Number(form.amount || 0) * r) / 100).toLocaleString('en-IN')})</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Timeline (Months) *
+                    {t.timelineMonthsLabel}
                   </label>
                   <select
                     value={form.timeline_months}
@@ -756,14 +759,14 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 700, color: '#1e293b', outline: 'none', background: '#fff' }}
                   >
                     {TIMELINE_MONTHS.map(m => (
-                      <option key={m} value={m}>{m} Month{m > 1 ? 's' : ''}</option>
+                      <option key={m} value={m}>{m} {m > 1 ? (normalizedLang === 'TE' ? 'నెలలు' : 'Months') : (normalizedLang === 'TE' ? 'నెల' : 'Month')}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Loan Date *
+                    {t.loanDateLabel}
                   </label>
                   <input
                     type="date"
@@ -783,14 +786,14 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                 onClick={onBack}
                 style={{ padding: '8px 18px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 700, fontSize: '0.80rem', cursor: 'pointer' }}
               >
-                Cancel
+                {t.cancelBtn}
               </button>
               <button
                 type="submit"
                 disabled={submitting || imageUploading}
                 style={{ padding: '8px 24px', borderRadius: '6px', border: 'none', background: editingRecord ? 'linear-gradient(135deg, #d97706 0%, #b45309 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#ffffff', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.25)' }}
               >
-                {submitting ? 'Saving...' : editingRecord ? 'Update Record' : 'Approve & Issue Loan'}
+                {submitting ? t.savingLoanBtn : editingRecord ? t.updateLoanBtn : t.issueLoanAndBillBtn}
               </button>
             </div>
           </form>
@@ -820,6 +823,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
               loan_id: editingRecord?.finance_uuid || editingRecord?.id,
             }}
             compact
+            lang={lang}
           />
         </div>
       </div>
@@ -830,7 +834,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
           <div style={{ background: '#fff', borderRadius: '20px', padding: '1.25rem', maxWidth: '640px', width: '100%', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
               <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="fa-solid fa-video" style={{ color: '#4f46e5' }} /> Live Camera Capture
+                <i className="fa-solid fa-video" style={{ color: '#4f46e5' }} /> {normalizedLang === 'TE' ? 'లైవ్ కెమెరా ఫోటో' : 'Live Camera Capture'}
               </h4>
               {/* Front / Back Camera Switch Toggle */}
               <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
@@ -852,7 +856,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <i className="fa-solid fa-camera" /> Back
+                  <i className="fa-solid fa-camera" /> {normalizedLang === 'TE' ? 'వెనుక' : 'Back'}
                 </button>
                 <button
                   type="button"
@@ -872,7 +876,7 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <i className="fa-solid fa-camera-rotate" /> Front
+                  <i className="fa-solid fa-camera-rotate" /> {normalizedLang === 'TE' ? 'ముందు' : 'Front'}
                 </button>
               </div>
             </div>
@@ -910,14 +914,14 @@ export const IssueNewLoanView: React.FC<IssueNewLoanViewProps> = ({
                 onClick={stopWebcam}
                 style={{ padding: '9px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
               >
-                Cancel
+                {t.cancelBtn}
               </button>
               <button
                 type="button"
                 onClick={capturePhoto}
                 style={{ padding: '9px 24px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)', color: '#fff', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.35)' }}
               >
-                <i className="fa-solid fa-circle-dot" /> Take Photo
+                <i className="fa-solid fa-circle-dot" /> {t.capturePhotoBtn}
               </button>
             </div>
           </div>

@@ -31,6 +31,7 @@ interface ReceiptPreviewProps {
   paymentHistory?: any[];
   lang?: Language;
   onDownloadPNG?: () => void;
+  onPrint?: () => void;
 }
 
 const formatReceiptDateTime = (isoOrStr?: string) => {
@@ -251,6 +252,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   paymentHistory,
   lang = 'EN',
   onDownloadPNG,
+  onPrint,
 }) => {
   const t = translations[lang] || translations.EN;
 
@@ -322,6 +324,14 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
     }
   };
 
+  const handleThermalPrint = () => {
+    if (onPrint) {
+      onPrint();
+    } else {
+      printReceipt80mm(receiptId);
+    }
+  };
+
   const isNeedToPayCustomer = mode === 'BUY' || totalBuyCredit > totalSellValue;
   const isPartialOrDue = !isNeedToPayCustomer && ((balanceDueAmount !== undefined && balanceDueAmount > 0) || paymentType === 'PARTIAL');
 
@@ -340,7 +350,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         fontFamily: "'Courier New', Courier, monospace",
       }}
     >
-      {/* 25% Opacity Watermark Logo Background */}
+      {/* 20% Opacity Watermark Logo Background */}
       <div
         style={{
           position: 'absolute',
@@ -348,43 +358,63 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           left: '50%',
           transform: 'translate(-50%, -50%)',
           pointerEvents: 'none',
-          opacity: 0.25,
+          opacity: 0.20,
           zIndex: 0,
         }}
       >
         <img
-          src="/JB_logo.png"
+          src="/jb_logo-symmetric.png"
           alt="JB Watermark"
           style={{ width: '220px', height: '220px', objectFit: 'contain' }}
         />
       </div>
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        {/* Thermal Store Header & Download Action */}
+        {/* Thermal Store Header & Actions */}
         <div style={{ textAlign: 'center', borderBottom: '1px dashed #94a3b8', paddingBottom: '1.25rem', marginBottom: '1rem', position: 'relative' }}>
-          <button
-            type="button"
-            onClick={handleDownload}
-            title="Download Receipt PNG Image"
-            style={{
-              position: 'absolute',
-              right: 0,
-              top: 0,
-              padding: '4px 8px',
-              borderRadius: '6px',
-              border: '1px solid #a13003ff',
-              background: '#f8fafc',
-              color: '#a13003ff',
-              fontWeight: 700,
-              fontSize: '0.65rem',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <i className="fa-solid fa-download" style={{ color: '#a13003ff' }}></i> Bill
-          </button>
+          <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: '4px' }}>
+            <button
+              type="button"
+              onClick={handleDownload}
+              title="Download Receipt PNG Image"
+              style={{
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #a13003',
+                background: '#f8fafc',
+                color: '#a13003',
+                fontWeight: 700,
+                fontSize: '0.65rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <i className="fa-solid fa-download" style={{ color: '#a13003' }}></i> Bill
+            </button>
+
+            <button
+              type="button"
+              onClick={handleThermalPrint}
+              title="Print Direct 80mm Thermal Receipt"
+              style={{
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #4f46e5',
+                background: '#eef2ff',
+                color: '#4338ca',
+                fontWeight: 700,
+                fontSize: '0.65rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <i className="fa-solid fa-print"></i>
+            </button>
+          </div>
 
           <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.5px' }}>
             {t.storeName}
@@ -394,49 +424,92 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           </p>
         </div>
 
-        <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#475569', fontWeight: 700, marginBottom: '0.85rem' }}>
-          <div>
-            <span style={{ color: '#0f172a' }}>{mode === 'ORDER' ? 'ORDER BOOKED DATE:' : t.dateLabel}</span>{' '}
-            {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
+        {/* Date, Mode & Customer Info with Goddess Artwork in the middle */}
+        <div style={{ position: 'relative', borderBottom: '1px dashed #94a3b8', paddingBottom: '0.85rem', marginBottom: '0.85rem', fontSize: '0.7rem' }}>
+          {/* Goddess Orange Artwork centered across the entire Date-to-Address section */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+              opacity: 0.85,
+              zIndex: 0,
+            }}
+          >
+            <img
+              src="/jbj-godess-orange.png"
+              alt="Goddess Bhavani"
+              style={{ width: '95px', height: '95px', objectFit: 'contain', filter: 'saturate(1.4) contrast(1.1)' }}
+            />
           </div>
-          {mode === 'ORDER' && itemSubmittedAt && (
-            <div style={{ color: '#15803d', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <i className="fa-solid fa-circle-check" style={{ fontSize: '0.6rem' }}></i>
-              DELIVERED ON: {formatReceiptDateTime(itemSubmittedAt)}
-            </div>
-          )}
-          {updatedDate && updatedDate !== createdDate && !itemSubmittedAt && (
-            <div style={{ color: '#d97706', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <i className="fa-solid fa-pen-to-square" style={{ fontSize: '0.6rem' }}></i>
-              {t.lastUpdated} {formatReceiptDateTime(updatedDate)}
-            </div>
-          )}
-        </div>
 
-        {/* Transaction Mode & Customer Info */}
-        <div style={{ borderBottom: '1px dashed #94a3b8', paddingBottom: '1rem', marginBottom: '1rem', fontSize: '0.7rem', color: '#334155' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ color: '#0f172a', fontWeight: 700 }}>{t.modeLabel}</span>
-            <strong style={{ color: billType === 'ESTIMATION' ? '#d97706' : (mode === 'ORDER' ? '#d97706' : mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5') }}>
-              [{billType === 'ESTIMATION' ? t.estimationBill : (mode === 'ORDER' ? ((t as any).orderBill || 'JBJ CUSTOM ORDER BILL') : mode === 'SELL' ? t.sellingBill : mode === 'BUY' ? t.buyingBill : t.exchangeBill)}]
-            </strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 700 }}>{t.customerLabel}</span>
-            <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerName ? teluguCustomerName : customerName) || t.walkInCustomer}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 700 }}>{t.phoneLabel}</span>
-            <strong style={{ color: '#0f172a' }}>{customerPhone || 'N/A'}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 700 }}>{t.addressLabel}</span>
-            <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerAddress ? teluguCustomerAddress : customerAddress) || (lang === 'TE' ? 'సిద్దిపేట, తెలంగాణ' : 'Siddipet, Telangana')}</strong>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            {/* Mode line */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 700 }}>{t.modeLabel || 'BILL MODE:'}</span>
+              <strong style={{ color: billType === 'ESTIMATION' ? '#d97706' : (mode === 'ORDER' ? '#d97706' : mode === 'SELL' ? '#b45309' : mode === 'BUY' ? '#0369a1' : '#4f46e5') }}>
+                [{(() => {
+                  const baseTitle = mode === 'ORDER'
+                    ? ((t as any).orderBill || 'JBJ CUSTOM ORDER BILL')
+                    : mode === 'SELL'
+                      ? t.sellingBill
+                      : mode === 'BUY'
+                        ? t.buyingBill
+                        : t.exchangeBill;
+                  const estTag = lang === 'TE' ? '(ఎస్టిమేషన్)' : '(Estimation)';
+                  return billType === 'ESTIMATION' ? `${baseTitle} ${estTag}` : baseTitle;
+                })()}]
+              </strong>
+            </div>
+
+            {/* Date line */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.68rem' }}>
+              <span style={{ fontWeight: 700, color: '#334155' }}>{mode === 'ORDER' ? 'ORDER BOOKED DATE:' : t.dateLabel}</span>
+              <strong style={{ color: '#0f172a' }}>
+                {createdDate ? formatReceiptDateTime(createdDate) : `${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
+              </strong>
+            </div>
+            {mode === 'ORDER' && itemSubmittedAt && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.68rem', color: '#15803d' }}>
+                <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <i className="fa-solid fa-circle-check" style={{ fontSize: '0.6rem' }}></i> DELIVERED ON:
+                </span>
+                <strong>{formatReceiptDateTime(itemSubmittedAt)}</strong>
+              </div>
+            )}
+            {updatedDate && updatedDate !== createdDate && !itemSubmittedAt && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.68rem', color: '#d97706' }}>
+                <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <i className="fa-solid fa-pen-to-square" style={{ fontSize: '0.6rem' }}></i> {t.lastUpdated}:
+                </span>
+                <strong>{formatReceiptDateTime(updatedDate)}</strong>
+              </div>
+            )}
+
+            {/* Customer name */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 700 }}>{t.customerLabel}</span>
+              <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerName ? teluguCustomerName : customerName) || t.walkInCustomer}</strong>
+            </div>
+
+            {/* Phone */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 700 }}>{t.phoneLabel}</span>
+              <strong style={{ color: '#0f172a' }}>{customerPhone || 'N/A'}</strong>
+            </div>
+
+            {/* Address */}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 700 }}>{t.addressLabel}</span>
+              <strong style={{ color: '#0f172a' }}>{(lang === 'TE' && teluguCustomerAddress ? teluguCustomerAddress : customerAddress) || (lang === 'TE' ? 'సిద్దిపేట, తెలంగాణ' : 'Siddipet, Telangana')}</strong>
+            </div>
           </div>
         </div>
 
         {/* Live Active Rates Snapshot Box */}
-        <div style={{ background: 'rgba(248, 250, 252, 0.65)', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0.5rem 0.75rem', marginBottom: '1rem', fontSize: '0.65rem' }}>
+        <div style={{ background: 'rgba(248, 250, 252, 0.65)', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0.5rem 0.75rem', marginBottom: '0.85rem', fontSize: '0.65rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 700, marginBottom: '2px' }}>
             <span>JBJ GOLD SELL/BUY:</span>
             <span>₹{rates?.gold_sell_value || 0} / ₹{rates?.gold_buy_value || 0}</span>
@@ -700,19 +773,12 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           )}
         </div>
 
-        {/* Thermal Barcode Graphic Footer */}
-        <div style={{ textAlign: 'center', marginTop: '0.2rem', paddingTop: '0.2rem', borderTop: '1px dashed #94a3b8' }}>
-          <div style={{ letterSpacing: '4px', fontSize: '1.1rem', fontFamily: 'monospace', color: '#334155', opacity: 0.8 }}>
-            ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
+        {/* Thermal Receipt Footer */}
+        <div style={{ textAlign: 'center', marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px dashed #94a3b8' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#181f30', opacity: 0.8 }}>
+            ⭐⭐⭐⭐⭐⭐ Bill End ⭐⭐⭐⭐⭐⭐
           </div>
-          <div style={{ margin: '2px 0 2px 0', display: 'flex', justifyContent: 'center' }}>
-            <img
-              src="/Jaya_Bhavani_Jewellers_QR.svg"
-              alt="Jaya Bhavani Jewellers QR Code"
-              style={{ width: '100px', height: '100px', objectFit: 'contain' }}
-            />
-          </div>
-          <small style={{ fontSize: '0.7rem', color: '#181f30ff', display: 'block', marginTop: '2px' }}>
+          <small style={{ fontSize: '0.7rem', color: '#181f30', display: 'block', marginTop: '4px', fontWeight: 700 }}>
             {t.thankYouMessage}
           </small>
         </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
-import { ReceiptPreview, downloadReceiptAsPNG } from './ReceiptPreview';
+import { ReceiptPreview, downloadReceiptAsPNG, printReceipt80mm } from './ReceiptPreview';
 import { translations } from '../../utils/translations';
 import type { Language } from '../../utils/translations';
 import { getTeluguTransliterationSync } from '../../utils/transliterate';
@@ -155,6 +155,26 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
             }}
           >
             <i className="fa-solid fa-download"></i> {t.downloadPngBtn}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => printReceipt80mm(`centered-details-receipt-${inv?.id || '1'}`)}
+            style={{
+              padding: '9px 18px',
+              borderRadius: '8px',
+              border: '1px solid #4f46e5',
+              background: '#eef2ff',
+              color: '#4338ca',
+              fontWeight: 700,
+              fontSize: '0.84rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <i className="fa-solid fa-print"></i> {lang === 'TE' ? 'ప్రింట్ బిల్లు' : 'Print Bill'}
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { CustomerDirectoryRecord, GlobalRates } from '../types';
-import { ReceiptPreview, downloadReceiptAsPNG } from './ReceiptPreview';
+import { ReceiptPreview, downloadReceiptAsPNG, printReceipt80mm } from './ReceiptPreview';
 import { getTeluguTransliterationSync } from '../../utils/transliterate';
 
 const API_BASE = '/api';
@@ -118,21 +118,42 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
             </span>
           </div>
 
-          <button
-            onClick={onClose}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
-              color: '#64748b',
-              fontWeight: 700,
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-            }}
-          >
-            <i className="fa-solid fa-xmark"></i> Close
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => printReceipt80mm('see-bill-modal-receipt')}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid #4f46e5',
+                background: '#eef2ff',
+                color: '#4338ca',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <i className="fa-solid fa-print"></i> Print
+            </button>
+
+            <button
+              onClick={onClose}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                background: '#f8fafc',
+                color: '#64748b',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+              }}
+            >
+              <i className="fa-solid fa-xmark"></i> Close
+            </button>
+          </div>
         </div>
 
         {/* Embedded Receipt Component */}

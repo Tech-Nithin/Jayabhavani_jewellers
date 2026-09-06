@@ -11,7 +11,7 @@ import { PaymentSettlementModal } from './components/PaymentSettlementModal';
 import { EditOrderModal } from './components/EditOrderModal';
 import { DeleteOrderModal } from './components/DeleteOrderModal';
 import { OrderDetailView } from './components/OrderDetailDrawer';
-import { ReceiptPreview, downloadReceiptAsPNG } from '../billing-frontend/components/ReceiptPreview';
+import { ReceiptPreview, downloadReceiptAsPNG, printReceipt80mm } from '../billing-frontend/components/ReceiptPreview';
 import { formatDDMMYYYY } from '../utils/dateUtils';
 
 const formatIndianCurrencyInput = (val: string): string => {
@@ -725,6 +725,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
             itemSubmittedAt={selectedOrder.item_submitted_at || (selectedOrder.submitted === 'yes' ? selectedOrder.updated_at : undefined)}
             lang={lang}
             onDownloadPNG={() => downloadReceiptAsPNG(`see-bill-receipt-${selectedOrder.id}`, selectedOrder.customer_name)}
+            onPrint={() => printReceipt80mm(`see-bill-receipt-${selectedOrder.id}`)}
           />
         </div>
       </div>

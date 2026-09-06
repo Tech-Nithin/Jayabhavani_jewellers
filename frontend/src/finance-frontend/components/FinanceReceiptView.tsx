@@ -1,5 +1,6 @@
 import React from 'react';
 import html2canvas from 'html2canvas';
+import { getFinanceTranslation, type Language } from '../financeTranslations';
 
 interface FinanceReceiptViewProps {
   data: {
@@ -28,6 +29,7 @@ interface FinanceReceiptViewProps {
     receipt_json?: any;
   };
   compact?: boolean;
+  lang?: Language;
 }
 
 const formatReceiptDateTime = (loanDate?: string) => {
@@ -213,7 +215,8 @@ export const downloadFinanceReceiptAsPNG = async (receiptId: string, customerNam
   }
 };
 
-export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, compact = false }) => {
+export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, compact = false, lang = 'EN' }) => {
+  const t = getFinanceTranslation(lang);
   const isCash = data.item_metal_type === 'CASH';
   const grossWt = Number(data.item_weight_grams || 0);
   const dedWt = Number(data.item_deduction_weight || 0);
@@ -250,6 +253,25 @@ export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, co
         fontWeight: 800,
       }}
     >
+      {/* 20% Opacity Watermark Logo Background */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none',
+          opacity: 0.20,
+          zIndex: 0,
+        }}
+      >
+        <img
+          src="/jb_logo-symmetric.png"
+          alt="JB Watermark"
+          style={{ width: '220px', height: '220px', objectFit: 'contain' }}
+        />
+      </div>
+
       <div style={{ position: 'relative', zIndex: 1 }}>
 
         {/* 1. Store Header — Matching Billing Receipt Exactly */}
@@ -300,56 +322,16 @@ export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, co
           </div>
 
           <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 900, color: '#0f172a', letterSpacing: '0.5px' }}>
-            JAYA BHAVANI JEWELLERS
+            {t.receiptStoreName}
           </h4>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.62rem', color: '#0f172a', fontWeight: 800, maxWidth: '280px', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.3 }}>
-            4-3-4/A, Old bustand to kaman road, Patelpura, Siddipet, Telangana, 502103
+            {t.receiptStoreAddress}
           </p>
         </div>
 
-        {/* 2. Date Line */}
-        <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#0f172a', fontWeight: 800, marginBottom: '0.85rem' }}>
-          <div>DATE: {formatReceiptDateTime(data.loan_date)}</div>
-        </div>
-
-        {/* 3. Transaction Mode & Customer Info Box */}
-        <div style={{ borderBottom: '1px dashed #94a3b8', paddingBottom: '1rem', marginBottom: '1rem', fontSize: '0.72rem', color: '#0f172a' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ color: '#0f172a', fontWeight: 800 }}>MODE:</span>
-            <strong style={{ color: '#b45309', fontWeight: 900 }}>
-              [Finance/Girvi Loan]
-            </strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>CUSTOMER:</span>
-            <strong style={{ color: '#0f172a', fontWeight: 900 }}>{data.customer_name || 'Walk-in Customer'}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>PHONE:</span>
-            <strong style={{ color: '#0f172a', fontWeight: 900 }}>{data.customer_phone || 'N/A'}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>ADDRESS:</span>
-            <strong style={{ color: '#0f172a', fontWeight: 900 }}>{data.customer_address || 'Siddipet, Telangana'}</strong>
-          </div>
-        </div>
-
-        {/* 4. Active Rates Snapshot Box */}
-        <div style={{ background: 'rgba(248, 250, 252, 0.65)', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0.5rem 0.75rem', marginBottom: '0.85rem', fontSize: '0.68rem', fontWeight: 800 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800, marginBottom: '2px' }}>
-            <span style={{ fontWeight: 800 }}>JBJ GOLD RATE:</span>
-            <span style={{ fontWeight: 900 }}>₹{ratePerGram ? ratePerGram.toLocaleString('en-IN') : '15,000'} / g</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
-            <span style={{ fontWeight: 800 }}>JBJ SILVER RATE:</span>
-            <span style={{ fontWeight: 900 }}>₹250 / g</span>
-          </div>
-        </div>
-
-        {/* 5. Pledged Item Card */}
-        <div style={{ border: '1px solid #cbd5e1', borderRadius: '10px', padding: '0.75rem', background: '#ffffff', position: 'relative', overflow: 'hidden', marginBottom: '0.85rem' }}>
-
-          {/* Watermark Logo inside Item Card */}
+        {/* 2. Date, Mode & Customer Info with Goddess Artwork in the middle */}
+        <div style={{ position: 'relative', borderBottom: '1px dashed #94a3b8', paddingBottom: '0.85rem', marginBottom: '0.85rem', fontSize: '0.72rem', color: '#0f172a' }}>
+          {/* Goddess Orange Artwork centered across the whole Date-to-Address section */}
           <div
             style={{
               position: 'absolute',
@@ -357,59 +339,106 @@ export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, co
               left: '50%',
               transform: 'translate(-50%, -50%)',
               pointerEvents: 'none',
-              opacity: 0.15,
+              opacity: 0.85,
               zIndex: 0,
             }}
           >
             <img
-              src="/JB_logo.png"
-              alt="JB Watermark"
-              style={{ width: '220px', height: '220px', objectFit: 'contain' }}
+              src="/jbj-godess-orange.png"
+              alt="Goddess Bhavani"
+              style={{ width: '95px', height: '95px', objectFit: 'contain', filter: 'saturate(1.4) contrast(1.1)' }}
             />
           </div>
 
           <div style={{ position: 'relative', zIndex: 1 }}>
+            {/* Mode line */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{t.modeLabel || 'BILL TYPE:'}</span>
+              <strong style={{ color: '#b45309', fontWeight: 900 }}>[{t.receiptGirviTag.replace(/[\[\]]/g, '') || 'Finance/Girvi Loan'}]</strong>
+            </div>
+
+            {/* Date line */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.68rem' }}>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{t.receiptDateLabel}</span>
+              <strong style={{ color: '#0f172a', fontWeight: 900 }}>{formatReceiptDateTime(data.loan_date)}</strong>
+            </div>
+
+            {/* Customer name */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{t.receiptCustomerLabel}</span>
+              <strong style={{ color: '#0f172a', fontWeight: 900 }}>{data.customer_name || 'Walk-in Customer'}</strong>
+            </div>
+
+            {/* Phone */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{t.receiptPhoneLabel}</span>
+              <strong style={{ color: '#0f172a', fontWeight: 900 }}>{data.customer_phone || 'N/A'}</strong>
+            </div>
+
+            {/* Address */}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 800, color: '#0f172a' }}>{t.receiptAddressLabel}</span>
+              <strong style={{ color: '#0f172a', fontWeight: 900 }}>{data.customer_address || (lang?.toUpperCase() === 'TE' ? 'సిద్దిపేట, తెలంగాణ' : 'Siddipet, Telangana')}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Active Rates Snapshot Box */}
+        <div style={{ background: 'rgba(248, 250, 252, 0.65)', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0.5rem 0.75rem', marginBottom: '0.85rem', fontSize: '0.68rem', fontWeight: 800 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800, marginBottom: '2px' }}>
+            <span style={{ fontWeight: 800 }}>{t.receiptGoldRate}</span>
+            <span style={{ fontWeight: 900 }}>₹{ratePerGram ? ratePerGram.toLocaleString('en-IN') : '15,000'} / g</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontWeight: 800 }}>
+            <span style={{ fontWeight: 800 }}>{t.receiptSilverRate}</span>
+            <span style={{ fontWeight: 900 }}>₹250 / g</span>
+          </div>
+        </div>
+
+        {/* 5. Pledged Item Card */}
+        <div style={{ border: '1px solid #cbd5e1', borderRadius: '10px', padding: '0.75rem', background: 'rgba(255, 255, 255, 0.7)', position: 'relative', marginBottom: '0.85rem' }}>
+          <div>
             {/* Item Card Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '0.78rem', fontWeight: 900 }}>
-              <span style={{ color: '#0f172a' }}>#1 {data.item_name || (isCash ? 'Cash Loan' : 'Pledged Ornament')}</span>
-              <span style={{ color: '#b45309' }}>[GIRVI / FINANCE]</span>
+              <span style={{ color: '#0f172a' }}>#1 {data.item_name || (isCash ? t.receiptCashCardTitle : t.receiptItemCardTitle)}</span>
+              <span style={{ color: '#b45309' }}>{t.receiptGirviTag}</span>
             </div>
 
             <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '6px', fontSize: '0.72rem', color: '#0f172a', fontWeight: 800, display: 'grid', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 800 }}>Metal Category:</span>
-                <span style={{ fontWeight: 900 }}>{data.item_metal_type || 'Gold'}</span>
+                <span style={{ fontWeight: 800 }}>{t.receiptMetalCategory}</span>
+                <span style={{ fontWeight: 900 }}>{data.item_metal_type === 'SILVER' ? t.silverCategory : data.item_metal_type === 'CASH' ? t.cashCategory : t.goldCategory}</span>
               </div>
 
               {!isCash && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 800 }}>Gross Item Weight:</span>
+                    <span style={{ fontWeight: 800 }}>{t.receiptGrossWeight}</span>
                     <span style={{ fontWeight: 900 }}>{grossWt.toFixed(3)} gm</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 800 }}>Deduction ({data.item_deduction_name || 'Stones'}):</span>
+                    <span style={{ fontWeight: 800 }}>{t.receiptDeduction} ({data.item_deduction_name || 'Stones'}):</span>
                     <span style={{ fontWeight: 900 }}>- {dedWt.toFixed(3)} gm</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, color: '#1e40af' }}>
-                    <span>Only Metal Weight:</span>
+                    <span>{t.receiptNetWeight}</span>
                     <span>{netWt.toFixed(3)} gm</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 800 }}>Touch:</span>
+                    <span style={{ fontWeight: 800 }}>{t.receiptTouchPurity}</span>
                     <span style={{ fontWeight: 900 }}>{purityPct}%</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, color: '#b45309' }}>
-                    <span>Pure Metal Weight:</span>
+                    <span>{t.receiptPureMetalWeight}</span>
                     <span>{pureWt.toFixed(3)} gm</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '4px', marginTop: '2px', fontWeight: 900, color: '#0f172a', fontSize: '0.78rem' }}>
-                    <span>Item Value (₹{ratePerGram.toLocaleString('en-IN')}/g):</span>
+                    <span>{t.receiptTotalItemValue} (₹{ratePerGram.toLocaleString('en-IN')}/g):</span>
                     <span style={{ color: '#059669' }}>₹{itemValue.toLocaleString('en-IN')}</span>
                   </div>
                 </>
@@ -446,43 +475,43 @@ export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, co
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 900, color: '#047857', fontSize: '0.9rem' }}>
-            <span>Customer Taken Amount:</span>
+            <span>{t.receiptLoanAmount}</span>
             <span>₹{Number(data.amount || 0).toLocaleString('en-IN')}</span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontWeight: 800, color: '#0f172a', fontSize: '0.74rem' }}>
-            <span>MONTHLY INTEREST RATE:</span>
-            <span style={{ fontWeight: 900 }}>{data.interest_rate_percent || 1.5}% per month</span>
+            <span>{t.receiptMonthlyInterestRate}</span>
+            <span style={{ fontWeight: 900 }}>{data.interest_rate_percent || 1.5}% {t.perMonthText}</span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontWeight: 900, color: '#059669', fontSize: '0.8rem' }}>
-            <span>EST. MONTHLY INTEREST DUE:</span>
-            <span>₹{monthlyInterest.toLocaleString('en-IN')} / month</span>
+            <span>{t.livePerMonthInterest}:</span>
+            <span>₹{monthlyInterest.toLocaleString('en-IN')} / {t.perMonthText}</span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: '#0f172a', fontSize: '0.72rem', marginTop: '2px' }}>
-            <span>LOAN DURATION TIMELINE:</span>
-            <span style={{ fontWeight: 900 }}>{data.timeline_months || 1} Month(s)</span>
+            <span>{t.receiptTimelineMonths}</span>
+            <span style={{ fontWeight: 900 }}>{data.timeline_months || 1} {Number(data.timeline_months) === 1 ? t.monthTimelineUnit : t.monthsTimelineUnit}</span>
           </div>
 
           {/* Optional Installment Payments & Passbook Summary */}
           {((data.payment_history && data.payment_history.length > 0) || (data.current_principal !== undefined && data.current_principal < data.amount)) && (
             <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '6px', marginTop: '6px', fontSize: '0.72rem' }}>
               <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: '3px', display: 'flex', justifyContent: 'space-between' }}>
-                <span>PASSBOOK SUMMARY:</span>
-                <span style={{ color: '#0284c7' }}>REMAINING: ₹{Number(data.current_principal ?? data.amount).toLocaleString('en-IN')}</span>
+                <span>{t.passbookHistoryTitle}:</span>
+                <span style={{ color: '#0284c7' }}>₹{Number(data.current_principal ?? data.amount).toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontWeight: 800 }}>
-                <span>Total Principal Paid:</span>
+                <span>{t.receiptTotalPrincipalPaid}</span>
                 <span>₹{Number(data.total_principal_paid || (data.amount - (data.current_principal ?? data.amount))).toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7c3aed', fontWeight: 800 }}>
-                <span>Total Interest Paid:</span>
+                <span>{t.receiptTotalInterestPaid}</span>
                 <span>₹{Number(data.total_interest_paid || 0).toLocaleString('en-IN')}</span>
               </div>
               {Array.isArray(data.payment_history) && data.payment_history.length > 0 && (
                 <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px dotted #cbd5e1' }}>
-                  <div style={{ fontWeight: 900, color: '#334155', fontSize: '0.68rem', marginBottom: '3px', textTransform: 'uppercase' }}>Installment Payments Log ({data.payment_history.length}):</div>
+                  <div style={{ fontWeight: 900, color: '#334155', fontSize: '0.68rem', marginBottom: '3px', textTransform: 'uppercase' }}>{t.receiptInstallmentHistory} ({data.payment_history.length}):</div>
                   {data.payment_history.map((p: any, pIdx: number) => (
                     <div key={pIdx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#1e293b', marginBottom: '2px', fontWeight: 800 }}>
                       <span>#{p.installment_number || pIdx + 1} ({new Date(p.paid_at || p.date || Date.now()).toLocaleDateString('en-IN')})</span>
@@ -500,20 +529,13 @@ export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, co
           <strong>PLEDGE TERMS:</strong> 1. Monthly interest payable on due date. 2. Ornaments returned upon full principal + interest settlement. 3. Interest resets on remaining principal after partial payments.
         </div>
 
-        {/* 8. QR Code & Footer */}
+        {/* 8. Receipt Footer */}
         <div style={{ textAlign: 'center', paddingTop: '0.4rem', borderTop: '1px dashed #94a3b8' }}>
-          <div style={{ letterSpacing: '4px', fontSize: '0.9rem', color: '#334155', opacity: 0.8 }}>
-            ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
+          <div style={{ letterSpacing: '4px', fontSize: '0.8rem', fontWeight: 800, color: '#0c0c0cff', opacity: 0.8 }}>
+            {t.receiptBillEnd}
           </div>
-          <div style={{ margin: '4px 0', display: 'flex', justifyContent: 'center' }}>
-            <img
-              src="/Jaya_Bhavani_Jewellers_QR.svg"
-              alt="Jaya Bhavani Jewellers QR Code"
-              style={{ width: '85px', height: '85px', objectFit: 'contain' }}
-            />
-          </div>
-          <small style={{ fontSize: '0.65rem', color: '#181f30', display: 'block', fontWeight: 800, marginTop: '2px' }}>
-            Thank You for Visiting Jaya Bhavani Jewellers!
+          <small style={{ fontSize: '0.65rem', color: '#181f30', display: 'block', fontWeight: 800, marginTop: '4px' }}>
+            {t.receiptThankYou}
           </small>
         </div>
       </div>

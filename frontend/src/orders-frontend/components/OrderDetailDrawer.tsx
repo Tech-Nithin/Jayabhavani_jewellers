@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { OrderItem } from '../types';
-import { ReceiptPreview, downloadReceiptAsPNG } from '../../billing-frontend/components/ReceiptPreview';
+import { ReceiptPreview, downloadReceiptAsPNG, printReceipt80mm } from '../../billing-frontend/components/ReceiptPreview';
 import { getOrdersTranslation, type Language } from '../ordersTranslations';
 
 interface OrderDetailViewProps {
@@ -363,13 +363,19 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   onClick={() => downloadReceiptAsPNG(`order-bill-receipt-${order.id}`, order.customer_name)}
-                  style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #d97706', background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer' }}
+                  style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #d97706', background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
                   <i className="fa-solid fa-download" /> Download
                 </button>
                 <button
+                  onClick={() => printReceipt80mm(`order-bill-receipt-${order.id}`)}
+                  style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #4f46e5', background: '#eef2ff', color: '#4338ca', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <i className="fa-solid fa-print" /> Print
+                </button>
+                <button
                   onClick={() => setShowBill(false)}
-                  style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#64748b', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer' }}
+                  style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#64748b', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
                   <i className="fa-solid fa-xmark" /> Close
                 </button>

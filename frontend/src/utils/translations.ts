@@ -216,7 +216,7 @@ export const translations = {
     estimationBill: 'ESTIMATION BILL',
     dateLabel: 'DATE:',
     lastUpdated: 'LAST UPDATED:',
-    modeLabel: 'MODE:',
+    modeLabel: 'BILL TYPE:',
     customerLabel: 'CUSTOMER:',
     phoneLabel: 'PHONE:',
     addressLabel: 'ADDRESS:',
@@ -497,7 +497,7 @@ export const translations = {
     capturePhotoBtn: 'ఫోటో తీయండి',
 
     // Receipt Titles & Headers
-    storeName: 'జయా భవాని జ్యువెలర్స్',
+    storeName: 'జయ భవాని జ్యువెలర్స్',
     storeAddress: '4-3-4/A, ఓల్డ్ బస్టాండ్ నుండి కామన్ రోడ్డు, పటేల్‌పురా, సిద్ధిపేట, తెలంగాణ, 502103',
     sellingBill: 'JBJ అమ్మకం బిల్లు',
     buyingBill: 'JBJ కొనుగోలు బిల్లు',
@@ -506,7 +506,7 @@ export const translations = {
     estimationBill: 'అంచనా బిల్లు',
     dateLabel: 'తేదీ:',
     lastUpdated: 'చివరి అప్‌డేట్:',
-    modeLabel: 'రకం:',
+    modeLabel: 'బిల్లు రకం:',
     customerLabel: 'కస్టమర్:',
     phoneLabel: 'ఫోన్:',
     addressLabel: 'చిరునామా:',
@@ -536,7 +536,7 @@ export const translations = {
     grandTotal: 'మొత్తం చెల్లించవలసినది:',
     customerShouldPay: '(కస్టమర్ చెల్లించవలసినది)',
     needToPayCustomer: '(కస్టమర్కు ఇవ్వవలసినది)',
-    thankYouMessage: 'జయా భవాని జ్యువెలర్స్ ని సందర్శించినందుకు ధన్యవాదాలు!',
+    thankYouMessage: 'జయ భవాని జ్యువెలర్స్ ని సందర్శించినందుకు ధన్యవాదాలు!',
 
     // Actions & Buttons
     estimationBtn: 'అంచనా బిల్లు',
