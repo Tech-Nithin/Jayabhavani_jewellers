@@ -42,6 +42,12 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
   const expandedMetalEvents: any[] = [];
 
   logBookTimeline.forEach((entry: any) => {
+    const rawType = (entry.type || '').toUpperCase();
+    // Exclude Finance / Girvi loan collateral from physical store metal stock movements
+    if (rawType === 'FINANCE' || rawType === 'FINANCE_LOAN' || rawType === 'FINANCE_REPAYMENT' || entry.payment_mode === 'FINANCE_LOAN' || (entry.id && String(entry.id).startsWith('log-fin-'))) {
+      return;
+    }
+
     const rawInv = entry.raw_invoice || entry.raw_order;
     let rData: any = rawInv?.receipt_json_data;
     if (typeof rData === 'string') {

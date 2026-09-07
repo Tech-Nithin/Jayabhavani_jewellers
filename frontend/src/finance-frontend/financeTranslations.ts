@@ -206,7 +206,7 @@ export const financeTranslations = {
 
     // Thermal Receipt Specific Labels
     receiptStoreName: 'JAYA BHAVANI JEWELLERS',
-    receiptStoreAddress: '4-3-4/A, Old bustand to kaman road, Patelpura, Siddipet, Telangana, 502103',
+    receiptStoreAddress: '4-3-56/1, Old bustand to shubodaya school road, Patelpura, Siddipet, Telangana, 502103',
     receiptBillMode: 'BILL TYPE: [Finance/Girvi Loan]',
     receiptDateLabel: 'DATE:',
     receiptCustomerLabel: 'CUSTOMER:',
@@ -434,8 +434,8 @@ export const financeTranslations = {
     principalPayingCol: 'చెల్లించిన అసలు',
 
     // Thermal Receipt Specific Labels
-    receiptStoreName: 'జయ భవాని జ్యువెలర్స్',
-    receiptStoreAddress: '4-3-4/A, ఓల్డ్ బస్టాండ్ నుండి కామన్ రోడ్డు, పటేల్‌పురా, సిద్ధిపేట, తెలంగాణ, 502103',
+    receiptStoreName: 'జయ భవాని జువెలర్స్',
+    receiptStoreAddress: '4-3-56/1, ఓల్డ్ బస్టాండ్ నుండి శుబోదయ స్కూల్ రోడ్డు, పటేల్‌పురా, సిద్ధిపేట, తెలంగాణ, 502103',
     receiptBillMode: 'బిల్లు రకం: [ఫైనాన్స్ / గిర్వి లోన్]',
     receiptDateLabel: 'తేదీ:',
     receiptCustomerLabel: 'కస్టమర్:',
@@ -461,7 +461,7 @@ export const financeTranslations = {
     receiptTotalPrincipalPaid: 'ఇప్పటివరకు చెల్లించిన అసలు:',
     receiptCurrentPrincipalRemaining: 'ప్రస్తుతం మిగిలిన అసలు బకాయి:',
     receiptInstallmentHistory: 'వాయిదాల చరిత్ర (చెల్లింపు లెడ్జర్):',
-    receiptThankYou: 'జయ భవాని జ్యువెలర్స్ ని సందర్శించినందుకు ధన్యవాదాలు!',
+    receiptThankYou: 'జయ భవాని జువెలర్స్ ని సందర్శించినందుకు ధన్యవాదాలు!',
     receiptBillEnd: '⭐⭐⭐⭐⭐⭐ బిల్లు సమాప్తం ⭐⭐⭐⭐⭐⭐',
   },
 };

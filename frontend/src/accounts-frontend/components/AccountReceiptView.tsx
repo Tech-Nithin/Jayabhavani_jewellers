@@ -47,13 +47,13 @@ export const AccountReceiptView: React.FC<AccountReceiptViewProps> = ({
 
   const formattedDate = item.created_at
     ? new Date(item.created_at).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
     : `${item.time || ''}`;
 
   // Thermal PNG Download Handler
@@ -189,7 +189,7 @@ export const AccountReceiptView: React.FC<AccountReceiptViewProps> = ({
             🏛️ JAYA BHAVANI JEWELLERS
           </h2>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: '#475569', fontWeight: 700 }}>
-            4-3-4/A, Old busstand to kaman road, Patelpura, Siddipet, Telangana, 502103
+            4-3-56/1, Old busstand to shubodaya school road, Patelpura, Siddipet, Telangana, 502103
           </p>
         </div>
 

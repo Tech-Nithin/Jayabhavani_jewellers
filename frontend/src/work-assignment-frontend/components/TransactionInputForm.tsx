@@ -635,20 +635,22 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                   </select>
                 </div>
 
-                <div style={{ flex: '1 1 110px', minWidth: '100px' }}>
-                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                    Rate per gram <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="eg 14500"
-                    value={appliedRatePerGram}
-                    onChange={(e) => setAppliedRatePerGram(e.target.value)}
-                    required
-                    min="1"
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
-                  />
-                </div>
+                {cashMetalLink !== 'GENERAL_CASH' && (
+                  <div style={{ flex: '1 1 110px', minWidth: '100px' }}>
+                    <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                      Rate per gram <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="eg 14500"
+                      value={appliedRatePerGram}
+                      onChange={(e) => setAppliedRatePerGram(e.target.value)}
+                      required
+                      min="1"
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                    />
+                  </div>
+                )}
 
                 <div style={{ flex: '1.4 1 150px', minWidth: '140px' }}>
                   <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>

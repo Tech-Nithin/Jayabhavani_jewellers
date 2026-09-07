@@ -1473,7 +1473,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                     />
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: editCashMetalLink !== 'GENERAL_CASH' ? '1fr 1fr' : '1fr', gap: '8px' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
                         Cash Link
@@ -1488,18 +1488,20 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
                         <option value="FOR_SILVER">For Silver</option>
                       </select>
                     </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
-                        Applied Rate
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="e.g. 14500"
-                        value={editAppliedRate}
-                        onChange={(e) => setEditAppliedRate(e.target.value)}
-                        style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem' }}
-                      />
-                    </div>
+                    {editCashMetalLink !== 'GENERAL_CASH' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>
+                          Applied Rate
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 14500"
+                          value={editAppliedRate}
+                          onChange={(e) => setEditAppliedRate(e.target.value)}
+                          style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.80rem' }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </>
               )}

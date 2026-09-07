@@ -208,7 +208,7 @@ export const translations = {
 
     // Receipt Titles & Headers
     storeName: 'JAYA BHAVANI JEWELLERS',
-    storeAddress: '4-3-4/A, Old bustand to kaman road, Patelpura, Siddipet, Telangana, 502103',
+    storeAddress: '4-3-56/1, Old bustand to shubodaya school road, Patelpura, Siddipet, Telangana, 502103',
     sellingBill: 'JBJ SELLING BILL',
     buyingBill: 'JBJ BUYING BILL',
     exchangeBill: 'JBJ TRADE-IN EXCHANGE BILL',
@@ -355,13 +355,13 @@ export const translations = {
     makingChargesLabel: 'తయారీ కూలి (₹)',
     itemTotalLabel: 'వస్తువు మొత్తం విలువ (₹)',
     itemQualityLabel: 'వస్తువు క్వాలిటీ (%)',
-    pureWeightLabel: 'సోక్కం లోహం బరువు',
-    pureGoldWeightLabel: 'సోక్కం బంగారం బరువు',
-    pureSilverWeightLabel: 'సోక్కం వెండి బరువు',
+    pureWeightLabel: 'చొక్కం లోహం బరువు',
+    pureGoldWeightLabel: 'చొక్కం బంగారం బరువు',
+    pureSilverWeightLabel: 'చొక్కం వెండి బరువు',
     returnPurityLabel: 'రిటర్న్ ప్యూరిటీ (%)',
-    returnPureGoldLabel: 'రిటర్న్ సోక్కం బంగారం బరువు',
-    returnPureSilverLabel: 'రిటర్న్ సోక్కం వెండి బరువు',
-    pureMetalWeightLabel: 'సోక్కం లోహం బరువు',
+    returnPureGoldLabel: 'రిటర్న్ చొక్కం బంగారం బరువు',
+    returnPureSilverLabel: 'రిటర్న్ చొక్కం వెండి బరువు',
+    pureMetalWeightLabel: 'చొక్కం లోహం బరువు',
     // POS Bottom Calculation Bar
     calculatedSubtotal: 'లెక్కింపు ఉపమొత్తం:',
     grossSellingTotal: 'మొత్తం అమ్మకం వెల:',
@@ -497,8 +497,8 @@ export const translations = {
     capturePhotoBtn: 'ఫోటో తీయండి',
 
     // Receipt Titles & Headers
-    storeName: 'జయ భవాని జ్యువెలర్స్',
-    storeAddress: '4-3-4/A, ఓల్డ్ బస్టాండ్ నుండి కామన్ రోడ్డు, పటేల్‌పురా, సిద్ధిపేట, తెలంగాణ, 502103',
+    storeName: 'జయ భవాని జువెలర్స్',
+    storeAddress: '4-3-56/1, ఓల్డ్ బస్టాండ్ నుండి శుబోదయ స్కూల్ రోడ్డు, పటేల్‌పురా, సిద్ధిపేట, తెలంగాణ, 502103',
     sellingBill: 'JBJ అమ్మకం బిల్లు',
     buyingBill: 'JBJ కొనుగోలు బిల్లు',
     exchangeBill: 'JBJ ఎక్స్ఛేంజ్ బిల్లు',
@@ -518,8 +518,8 @@ export const translations = {
     metalCategoryReceipt: 'లోహం వర్గం:',
     grossItemWeightReceipt: 'వస్తువు మొత్తం బరువు:',
     deductionReceipt: 'తీసివేత',
-    netGoldWeightReceipt: 'సోక్కం బంగారం బరువు:',
-    netSilverWeightReceipt: 'సోక్కం వెండి బరువు:',
+    netGoldWeightReceipt: 'చొక్కం బంగారం బరువు:',
+    netSilverWeightReceipt: 'చొక్కం వెండి బరువు:',
     itemQualityReceipt: 'వస్తువు క్వాలిటీ:',
     pureMetalWeightReceipt: 'వట్టి లోహం బరువు',
     goldValueReceipt: 'బంగారం విలువ',
@@ -536,7 +536,7 @@ export const translations = {
     grandTotal: 'మొత్తం చెల్లించవలసినది:',
     customerShouldPay: '(కస్టమర్ చెల్లించవలసినది)',
     needToPayCustomer: '(కస్టమర్కు ఇవ్వవలసినది)',
-    thankYouMessage: 'జయ భవాని జ్యువెలర్స్ ని సందర్శించినందుకు ధన్యవాదాలు!',
+    thankYouMessage: 'జయ భవాని జువెలర్స్ ని సందర్శించినందుకు ధన్యవాదాలు!',
 
     // Actions & Buttons
     estimationBtn: 'అంచనా బిల్లు',
