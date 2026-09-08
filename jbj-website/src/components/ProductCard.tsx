@@ -45,20 +45,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const todayRates = useMetalRates();
 
-  const isSilver = product.category?.toLowerCase().includes('silver') ||
+  const isSilver = product.metalType === 'SILVER' ||
+                   (product as any).item_type === 'SILVER' ||
+                   product.category?.toLowerCase().includes('silver') ||
                    product.name?.toLowerCase().includes('silver') ||
                    product.category?.toLowerCase().includes('999') ||
-                   product.category?.toLowerCase().includes('925');
+                   product.category?.toLowerCase().includes('925') ||
+                   product.category?.toLowerCase().includes('payal') ||
+                   product.category?.toLowerCase().includes('mettelu') ||
+                   product.category?.toLowerCase().includes('anklet') ||
+                   product.category?.toLowerCase().includes('vanki') ||
+                   product.category?.toLowerCase().includes('utensil') ||
+                   product.category?.toLowerCase().includes('pooja');
 
-  const rate = isSilver ? todayRates.silver_sell_value : todayRates.gold_sell_value;
+  const rate = isSilver ? (todayRates.silver_sell_value || 250) : (todayRates.gold_sell_value || 12000);
+  const fallbackDivisorMin = isSilver ? (todayRates.silver_sell_value || 250) : (todayRates.gold_sell_value || 12000);
+  const fallbackDivisorMax = isSilver ? (todayRates.silver_sell_value || 250) : (todayRates.gold_sell_value || 8000);
 
   const weightFrom = product.weightFrom !== undefined && product.weightFrom !== null 
     ? product.weightFrom 
-    : (product.price ? Number((product.price / 12000).toFixed(1)) : 8);
+    : (product.price ? Number((product.price / fallbackDivisorMin).toFixed(1)) : (isSilver ? 20 : 8));
 
   const weightTo = product.weightTo !== undefined && product.weightTo !== null 
     ? product.weightTo 
-    : (product.price ? Number((product.price / 8000).toFixed(1)) : 12);
+    : (product.price ? Number((product.price / fallbackDivisorMax).toFixed(1)) : (isSilver ? 50 : 12));
 
   const calculatedPriceMin = weightFrom * rate;
   const calculatedPriceMax = weightTo * rate;
@@ -72,11 +82,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         style={{ cursor: 'pointer' }}
       >
         <div className="product-img-wrap">
-          {/* Placeholder background (shown when image fails) */}
+          {/* Placeholder background */}
           <div
             style={{
               width: '100%', height: '100%',
-              background: product.color,
+              background: product.color || '#f8fafc',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               position: 'absolute', inset: 0,
             }}
@@ -89,13 +99,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             alt={product.name}
             className="product-img"
             style={{ position: 'relative', zIndex: 1 }}
-            onError={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              if (!img.dataset.failed) {
-                img.dataset.failed = 'true';
-                img.src = '/Pearl_Gold_Choker.jpeg';
-              }
-            }}
           />
 
           {product.badge && (
@@ -244,10 +247,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                     borderRadius: '16px',
                     zIndex: 2,
                     boxShadow: '0 10px 25px rgba(0,0,0,0.06)',
-                  }}
-                  onError={(e) => {
-                    const img = e.currentTarget as HTMLImageElement;
-                    img.src = '/Pearl_Gold_Choker.jpeg';
                   }}
                 />
               </div>

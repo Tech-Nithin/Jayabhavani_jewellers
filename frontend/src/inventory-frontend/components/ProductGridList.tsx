@@ -111,9 +111,9 @@ export const ProductGridList: React.FC<ProductGridListProps> = ({
                 {/* Image Container with Metal Tag Badge */}
                 <div style={{ position: 'relative', width: '100%', height: '180px', background: '#f8fafc', overflow: 'hidden' }}>
                   <img
-                    src={product.img || (isGold ? '/Eternal_Solitaire_Ring.jpg' : '/Pearl_Drop_Earrings.jpg')}
+                    src={product.img}
                     alt={product.name}
-                    onClick={() => onViewImage(product.img || (isGold ? '/Eternal_Solitaire_Ring.jpg' : '/Pearl_Drop_Earrings.jpg'))}
+                    onClick={() => onViewImage(product.img)}
                     style={{
                       width: '100%',
                       height: '100%',

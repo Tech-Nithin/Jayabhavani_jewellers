@@ -64,15 +64,16 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
         const data = await res.json();
         if (data.success && Array.isArray(data.products)) {
           const silverOnly = data.products
-            .filter((p: any) => p.item_type === 'SILVER')
+            .filter((p: any) => (p.item_type || '').toUpperCase() === 'SILVER')
             .map((p: any) => ({
               id: p.id,
               name: p.name,
               category: p.category || 'Pure Silver',
+              metalType: 'SILVER' as const,
               price: Number(p.price || 0),
               oldPrice: null,
-              badge: 'new',
-              img: p.img || '/images/collection-necklaces.jpg',
+              badge: null,
+              img: p.img,
               color: '#e8e0d4',
               weightFrom: p.weight_from_grams ? Number(p.weight_from_grams) : undefined,
               weightTo: p.weight_to_grams ? Number(p.weight_to_grams) : undefined,
@@ -84,7 +85,7 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
       }
     }
     fetchDbProducts();
-  }, [selectedCategory]);
+  }, []);
 
   const [dbCategories, setDbCategories] = useState<{ id: string; name: string }[]>([]);
 
@@ -103,11 +104,19 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
     fetchCategories();
   }, []);
 
+  // Build complete dynamic category list strictly from database (inventory_category and inventory_products)
+  const dynamicCategories = Array.from(
+    new Set([
+      ...dbCategories.map(c => c.name),
+      ...dbProducts.map(p => p.category),
+    ])
+  ).filter(Boolean);
+
   const categories = [
     { id: 'all', label: 'All Silver' },
-    ...dbCategories.map(cat => ({
-      id: cat.name.toLowerCase(),
-      label: cat.name
+    ...dynamicCategories.map(cat => ({
+      id: cat.toLowerCase(),
+      label: cat
     }))
   ];
 
@@ -164,18 +173,20 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
     return () => clearTimeout(timer);
   }, []);
 
-  const hasActiveSearchOrFilter = searchQuery.trim() !== '' || selectedCategory !== 'all';
-  const baseProducts = hasActiveSearchOrFilter
-    ? [...silverProducts, ...dbProducts]
-    : silverProducts;
+  const isFiltering = selectedCategory !== 'all' || searchQuery.trim() !== '';
 
-  const filteredProducts = baseProducts.filter((p) => {
-    const matchesCategory = areCategoriesMatching(selectedCategory, p.category);
-    const matchesQuery = searchQuery.trim() === '' ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesQuery;
-  });
+  let filteredProducts: Product[] = [];
+  if (!isFiltering) {
+    filteredProducts = silverProducts;
+  } else {
+    filteredProducts = dbProducts.filter((p) => {
+      const matchesCategory = areCategoriesMatching(selectedCategory, p.category);
+      const matchesQuery = searchQuery.trim() === '' ||
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.category.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesQuery;
+    });
+  }
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     if (sortBy === 'low-high') return a.price - b.price;

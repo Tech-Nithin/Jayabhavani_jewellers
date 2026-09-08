@@ -3,8 +3,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_KEY || '';
+const rawUrl = process.env.SUPABASE_URL || '';
+const supabaseUrl = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+const supabaseKey = (process.env.SUPABASE_KEY || '').trim();
 
 export const supabase = createClient(
   supabaseUrl !== '' ? supabaseUrl : 'https://placeholder.supabase.co',

@@ -336,7 +336,7 @@ export const LoadStockView: React.FC<LoadStockViewProps> = ({
                 {selectedProduct ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <img
-                      src={selectedProduct.img || '/Eternal_Solitaire_Ring.jpg'}
+                      src={selectedProduct.img}
                       alt={selectedProduct.name}
                       style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
                     />
@@ -411,7 +411,7 @@ export const LoadStockView: React.FC<LoadStockViewProps> = ({
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <img
-                              src={p.img || '/Eternal_Solitaire_Ring.jpg'}
+                              src={p.img}
                               alt={p.name}
                               style={{ width: '30px', height: '30px', borderRadius: '6px', objectFit: 'cover' }}
                             />

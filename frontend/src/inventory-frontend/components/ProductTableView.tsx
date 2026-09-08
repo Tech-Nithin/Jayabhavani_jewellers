@@ -371,9 +371,9 @@ export const ProductTableView: React.FC<ProductTableViewProps> = ({
                             {/* 2. Photo */}
                             <td style={{ padding: '14px 14px' }} onClick={(e) => e.stopPropagation()}>
                               <img
-                                src={item.img || '/Eternal_Solitaire_Ring.jpg'}
+                                src={item.img}
                                 alt={item.name}
-                                onClick={() => onViewImage(item.img || '/Eternal_Solitaire_Ring.jpg')}
+                                onClick={() => onViewImage(item.img)}
                                 style={{
                                   width: '42px',
                                   height: '42px',

@@ -6,6 +6,7 @@ export interface Product {
   id: string;
   name: string;
   category: string;
+  metalType?: 'GOLD' | 'SILVER';
   price: number;
   oldPrice: number | null;
   badge: ProductBadge;
