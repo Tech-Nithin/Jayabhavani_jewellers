@@ -10,6 +10,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // GET /api/inventory/products
 router.get('/products', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   try {
     const { category } = req.query;
 
@@ -350,7 +351,7 @@ router.post('/upload-cloudinary', upload.any(), async (req: Request, res: Respon
       console.log(`📤 Uploading direct binary WebP file (${file.size} bytes) to Cloudinary...`);
       const url = await uploadToCloudinaryFile(
         file.buffer,
-        file.originalname || `inv_${Date.now()}.webp`,
+        file.originalname || `inve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.webp`,
         'inventory_products'
       );
       return res.json({ success: true, url });
@@ -526,6 +527,7 @@ router.delete('/products/:id', async (req: Request, res: Response) => {
 
 // GET /api/inventory/categories
 router.get('/categories', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   try {
     const { data, error } = await supabase
       .from('inventory_category')

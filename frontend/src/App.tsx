@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { verifySessionApi } from './services/api';
+import { verifySessionApi, logoutUserApi } from './services/api';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLoginPage from './components/AdminLoginPage';
 import IntroLoader from './components/IntroLoader';
@@ -62,13 +62,29 @@ export default function App() {
     };
   }, []);
 
-  // Handle Logout
-  const handleLogout = () => {
-    localStorage.removeItem(STORAGE_KEY_TOKEN);
-    localStorage.removeItem(STORAGE_KEY_TAB);
-    sessionStorage.removeItem(STORAGE_KEY_TOKEN);
-    sessionStorage.removeItem(STORAGE_KEY_TAB);
+  // Handle Logout (Notifies backend, wipes all local & session storage, browser caches, and URL state)
+  const handleLogout = async () => {
+    const currentToken = localStorage.getItem(STORAGE_KEY_TOKEN) || sessionStorage.getItem(STORAGE_KEY_TOKEN) || '';
+    try {
+      if (currentToken) {
+        await logoutUserApi(currentToken);
+      }
+    } catch (e) {
+      console.warn('Backend logout warning:', e);
+    }
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => caches.delete(name));
+        });
+      }
+    } catch (e) {
+      console.warn('Storage cleanup warning:', e);
+    }
     setUser(null);
+    window.location.replace(window.location.pathname);
   };
 
   // Handle Successful Login

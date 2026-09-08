@@ -49,3 +49,18 @@ export async function verifySessionApi(token: string): Promise<{ success: boolea
     return { success: false };
   }
 }
+
+export async function logoutUserApi(token?: string): Promise<{ success: boolean }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token: token || '' }),
+    });
+    return await response.json();
+  } catch (error) {
+    return { success: false };
+  }
+}

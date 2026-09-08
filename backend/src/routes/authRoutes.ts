@@ -125,4 +125,14 @@ router.post('/verify-session', (req: Request, res: Response) => {
   });
 });
 
+// POST /api/auth/logout
+router.post('/logout', (req: Request, res: Response) => {
+  const { token } = req.body || {};
+  console.log(`🔒 User logout request processed successfully.`);
+  return res.status(200).json({
+    success: true,
+    message: 'Logout successful',
+  });
+});
+
 export default router;

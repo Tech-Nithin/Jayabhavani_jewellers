@@ -182,15 +182,19 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     return categoryProductsList.filter((n) => n.toLowerCase().includes(query));
   }, [categoryProductsList, productName]);
 
-  // Check if typed product already exists in current metal & category
+  // Check if typed product already exists in current metal & category & ornament name
   const existingDuplicateProduct = React.useMemo(() => {
     if (!productName.trim() || editingProduct) return null;
     const nameTrim = productName.trim().toLowerCase();
+    const catTrim = (categoryType || '').trim().toLowerCase();
     const met = (itemType || 'GOLD').trim().toUpperCase();
-    return (existingProducts || []).find(
-      (p) => (p.name || '').trim().toLowerCase() === nameTrim && (p.item_type || 'GOLD').trim().toUpperCase() === met
-    );
-  }, [productName, itemType, existingProducts, editingProduct]);
+    return (existingProducts || []).find((p) => {
+      const pName = (p.name || '').trim().toLowerCase();
+      const pCat = (p.category || '').trim().toLowerCase();
+      const pMet = (p.item_type || 'GOLD').trim().toUpperCase();
+      return pName === nameTrim && pCat === catTrim && pMet === met;
+    });
+  }, [productName, categoryType, itemType, existingProducts, editingProduct]);
 
   const formCard = (
     <div

@@ -109,6 +109,21 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
     fetchInventory();
     fetchCategories();
     fetchCashStatus();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchInventory();
+        fetchCategories();
+        fetchCashStatus();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, []);
 
   const updateUrlParams = (metal: 'GOLD' | 'SILVER' | 'CASH', category: string, search: string, viewParam?: string) => {
@@ -173,7 +188,9 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${API_BASE}/inventory/categories`);
+      const res = await fetch(`${API_BASE}/inventory/categories?t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       const data = await res.json();
       if (data.success && Array.isArray(data.categories)) {
         const fetchedOpts = data.categories.map((c: any) => ({
@@ -190,10 +207,23 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
 
   const fetchInventory = async () => {
     try {
-      const res = await fetch(`${API_BASE}/inventory/products`);
+      const res = await fetch(`${API_BASE}/inventory/products?t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       const data = await res.json();
-      if (data.success) {
-        setProducts(data.products || []);
+      if (data.success && Array.isArray(data.products)) {
+        setProducts(data.products);
+
+        // Auto-switch to SILVER if GOLD is empty and SILVER has stock
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasExplicitMetalParam = urlParams.has('metal');
+        if (!hasExplicitMetalParam) {
+          const goldItems = data.products.filter((p: any) => (p.item_type || 'GOLD').toUpperCase() === 'GOLD');
+          const silverItems = data.products.filter((p: any) => (p.item_type || '').toUpperCase() === 'SILVER');
+          if (goldItems.length === 0 && silverItems.length > 0) {
+            setActiveMetal('SILVER');
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to fetch inventory:', err);
@@ -315,8 +345,9 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
       let res;
       if (pendingBlob) {
         const formData = new FormData();
-        formData.append('file', pendingBlob, 'inventory_item.webp');
-        console.log(`📤 Uploading raw WebP blob (${pendingBlob.size} bytes) via FormData to Cloudinary...`);
+        const uniqueFileName = `inve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.webp`;
+        formData.append('file', pendingBlob, uniqueFileName);
+        console.log(`📤 Uploading raw WebP blob (${pendingBlob.size} bytes as ${uniqueFileName}) via FormData to Cloudinary...`);
         res = await fetch(`${API_BASE}/inventory/upload-cloudinary`, {
           method: 'POST',
           body: formData,
@@ -372,17 +403,13 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
 
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.product) {
-          if (isEdit) {
-            setProducts(products.map((p) => (p.id === targetId ? data.product : p)));
-          } else {
-            setProducts([data.product, ...products]);
-          }
+        if (data.success) {
           setActiveMetal(itemType);
           setSelectedOrnament('ALL');
           updateUrlParams(itemType, 'ALL', searchTerm, 'list');
           closeFormView();
           await fetchInventory();
+          await fetchCategories();
           return;
         }
       }
@@ -390,26 +417,8 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
       console.error('Failed to save product:', err);
     }
 
-    // Local fallback state update
-    const fallbackItem: InventoryProduct = {
-      id: targetId || `prod-${Date.now()}`,
-      name: payload.name || 'New Item',
-      category: payload.category || 'Ring',
-      item_type: itemType,
-      weight_from_grams: payload.weight_from_grams,
-      weight_to_grams: payload.weight_to_grams,
-      weight_grams: payload.weight_grams,
-      img: payload.img,
-    };
-
-    if (isEdit) {
-      setProducts(products.map((p) => (p.id === targetId ? fallbackItem : p)));
-    } else {
-      setProducts([fallbackItem, ...products]);
-    }
-    setActiveMetal(itemType);
-    setSelectedOrnament('ALL');
-    updateUrlParams(itemType, 'ALL', searchTerm, 'list');
+    // Refresh directly from database on finish
+    await fetchInventory();
     closeFormView();
   };
 

@@ -38,9 +38,11 @@ export const uploadToCloudinaryAsWebP = async (
 
     console.log(`☁️ Uploading WebP image to Cloudinary (folder: ${folder})...`);
 
+    const uniquePublicId = `inve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const result = await cloudinary.uploader.upload(imageData, {
       folder: folder,
       format: 'webp', // 👈 Converts and saves as WebP format in Cloudinary!
+      public_id: uniquePublicId,
       transformation: [{ quality: 'auto:good' }],
     });
 
@@ -76,12 +78,17 @@ export const uploadToCloudinaryFile = async (
 
     console.log(`☁️ Uploading binary WebP file (${fileBuffer.length} bytes) to Cloudinary...`);
 
+    const cleanBaseName = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const publicId = cleanBaseName.startsWith('inve_')
+      ? cleanBaseName
+      : `inve_${cleanBaseName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: folder,
           format: 'webp',
-          public_id: fileName.replace(/\.[^/.]+$/, ''),
+          public_id: publicId,
           transformation: [{ quality: 'auto:good' }],
         },
         (error, result) => {
