@@ -48,7 +48,6 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
   }, [initialCategory]);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('popularity');
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
   const [placeholderText, setPlaceholderText] = useState<string>('');
   const [isCategoryOpen, setIsCategoryOpen] = useState<boolean>(false);
@@ -104,13 +103,13 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
     fetchCategories();
   }, []);
 
-  // Build complete dynamic category list strictly from database (inventory_category and inventory_products)
+  // Build complete dynamic category list strictly from database (inventory_category and inventory_products) sorted A to Z
   const dynamicCategories = Array.from(
     new Set([
       ...dbCategories.map(c => c.name),
       ...dbProducts.map(p => p.category),
     ])
-  ).filter(Boolean);
+  ).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
   const categories = [
     { id: 'all', label: 'All Silver' },
@@ -179,20 +178,35 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
   if (!isFiltering) {
     filteredProducts = silverProducts;
   } else {
-    filteredProducts = dbProducts.filter((p) => {
-      const matchesCategory = areCategoriesMatching(selectedCategory, p.category);
-      const matchesQuery = searchQuery.trim() === '' ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.category.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesQuery;
+    // Search across database products and showcase items
+    const allCandidateProducts = [
+      ...dbProducts,
+      ...silverProducts.filter(sp => !dbProducts.some(dp => dp.id === sp.id || dp.name.toLowerCase() === sp.name.toLowerCase()))
+    ];
+
+    const q = searchQuery.trim().toLowerCase();
+    filteredProducts = allCandidateProducts.filter((p) => {
+      const matchesCategory = selectedCategory === 'all' || areCategoriesMatching(selectedCategory, p.category);
+      if (q === '') return matchesCategory;
+
+      const pName = (p.name || '').toLowerCase();
+      const pCat = (p.category || '').toLowerCase();
+
+      if (pName.includes(q) || pCat.includes(q)) {
+        return selectedCategory === 'all' || matchesCategory;
+      }
+
+      const tokens = q.split(/\s+/).filter(Boolean);
+      const matchesTokens = tokens.every(tok => {
+        const root = tok.endsWith('s') && tok.length > 3 ? tok.slice(0, -1) : tok;
+        return pName.includes(root) || pCat.includes(root);
+      });
+
+      return matchesTokens && (selectedCategory === 'all' || matchesCategory);
     });
   }
 
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    if (sortBy === 'low-high') return a.price - b.price;
-    if (sortBy === 'high-low') return b.price - a.price;
-    return 0; // popularity default
-  });
+  const sortedProducts = filteredProducts;
 
   return (
     <div style={{ background: '#fdf9f4', minHeight: '100vh', paddingBottom: '80px' }}>
@@ -397,8 +411,8 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
             </button>
           </div>
 
-          {/* Popular Search Suggestions Overlay Popover */}
-          {(isSearchFocused && searchQuery.trim() === '') && (
+          {/* Search Suggestions & Matched Products Overlay Popover */}
+          {isSearchFocused && (
             <div
               style={{
                 position: 'absolute',
@@ -410,77 +424,165 @@ export default function SilverPage({ onBackToStore: _onBackToStore, initialCateg
                 borderRadius: '24px',
                 border: '1px solid rgba(0, 0, 0, 0.08)',
                 boxShadow: '0 16px 40px rgba(0, 0, 0, 0.16)',
-                padding: '24px 28px',
-                zIndex: 100
+                padding: '20px 24px',
+                zIndex: 100,
+                maxHeight: '400px',
+                overflowY: 'auto'
               }}
             >
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8', marginBottom: '14px', letterSpacing: '0.01em' }}>
-                Popular
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setSelectedCategory(cat.id);
-                      setIsSearchFocused(false);
-                    }}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '10px',
-                      border: 'none',
-                      background: selectedCategory === cat.id ? '#e2e8f0' : '#f1f5f9',
-                      color: selectedCategory === cat.id ? '#0f172a' : '#475569',
-                      fontSize: '0.86rem',
-                      fontWeight: selectedCategory === cat.id ? 600 : 500,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
+              {searchQuery.trim() === '' ? (
+                <>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#94a3b8', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Popular Categories
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setSelectedCategory(cat.id);
+                          setIsSearchFocused(false);
+                        }}
+                        style={{
+                          padding: '7px 14px',
+                          borderRadius: '10px',
+                          border: 'none',
+                          background: selectedCategory === cat.id ? '#e2e8f0' : '#f1f5f9',
+                          color: selectedCategory === cat.id ? '#0f172a' : '#475569',
+                          fontSize: '0.84rem',
+                          fontWeight: selectedCategory === cat.id ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Matching Products ({filteredProducts.length})
+                    </span>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Click item to select</span>
+                  </div>
+
+                  {filteredProducts.length === 0 ? (
+                    <div style={{ padding: '16px 8px', textAlign: 'center', color: '#64748b', fontSize: '0.9rem' }}>
+                      No matching ornaments found for "{searchQuery}"
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {filteredProducts.slice(0, 10).map((prod) => {
+                        const q = searchQuery.trim();
+                        const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`(${escaped})`, 'gi');
+                        const nameParts = prod.name.split(regex);
+                        const catParts = (prod.category || '').split(regex);
+
+                        return (
+                          <div
+                            key={prod.id}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setSearchQuery(prod.name);
+                              setIsSearchFocused(false);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 14px',
+                              borderRadius: '12px',
+                              background: '#f8fafc',
+                              cursor: 'pointer',
+                              transition: 'background 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fafc'; }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <img
+                                src={prod.img}
+                                alt={prod.name}
+                                style={{ width: '38px', height: '38px', borderRadius: '8px', objectFit: 'cover', background: '#cbd5e1' }}
+                              />
+                              <div>
+                                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f172a' }}>
+                                  {nameParts.map((part, i) =>
+                                    part.toLowerCase() === q.toLowerCase() ? (
+                                      <span key={i} style={{ color: '#0369a1', background: '#e0f2fe', padding: '0 2px', borderRadius: '3px', fontWeight: 900 }}>
+                                        {part}
+                                      </span>
+                                    ) : (
+                                      <span key={i}>{part}</span>
+                                    )
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                                  {catParts.map((part, i) =>
+                                    part.toLowerCase() === q.toLowerCase() ? (
+                                      <span key={i} style={{ color: '#0369a1', background: '#e0f2fe', padding: '0 2px', borderRadius: '3px', fontWeight: 800 }}>
+                                        {part}
+                                      </span>
+                                    ) : (
+                                      <span key={i}>{part}</span>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ textAlign: 'right' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7', background: '#f0f9ff', padding: '3px 8px', borderRadius: '6px' }}>
+                                Select ➔
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
-          {/* Sort & Reset Bar */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              alignItems: 'center',
-              gap: '20px',
-              marginTop: '16px',
-              paddingRight: '4px',
-              fontSize: '0.82rem',
-              color: '#475569'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>Sort by:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+          {/* Reset Bar */}
+          {isFiltering && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: '20px',
+                marginTop: '16px',
+                paddingRight: '4px',
+                fontSize: '0.82rem',
+                color: '#475569'
+              }}
+            >
+              <button
+                onClick={() => {
+                  setSelectedCategory('all');
+                  setSearchQuery('');
+                }}
                 style={{
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '6px',
-                  padding: '3px 8px',
-                  background: '#ffffff',
-                  color: '#334155',
-                  outline: 'none',
-                  fontSize: '0.78rem',
+                  color: '#dc2626',
                   fontWeight: 600,
-                  cursor: 'pointer'
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem'
                 }}
               >
-                <option value="popularity">Popularity</option>
-                <option value="low-high">Price: Low to High</option>
-                <option value="high-low">Price: High to Low</option>
-              </select>
+                Clear search & filters
+              </button>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Product Grid */}

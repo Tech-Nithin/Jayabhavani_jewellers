@@ -35,7 +35,7 @@ export default function IntroLoader() {
       {/* Stamp / Slamming JB Logo */}
       <div className="stamp-logo-wrap">
         <img
-          src="/JB_logo.png"
+          src="/jb_logo-symmetric.png"
           alt="Jaya Bhavani Jewellers"
           className="stamp-logo-img"
         />

@@ -54,7 +54,7 @@ export default function Navbar({ onSearchOpen: _onSearchOpen, onAuthOpen, onNavi
           aria-label="Jaya Bhavani Jewellers Home"
           onClick={(e) => handleNavClick('store', '#', e)}
         >
-          <img src="/JB_logo_mobile.png" alt="Jaya Bhavani Logo" className="logo-img" />
+          <img src="/jb_logo-symmetric.png" alt="Jaya Bhavani Logo" className="logo-img" />
           <div className="logo-text">
             <span className="logo-main">JAYA BHAVANI</span>
             <span className="logo-sub"> Jewellery</span>
