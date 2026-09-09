@@ -70,7 +70,7 @@ router.get('/products', async (req: Request, res: Response) => {
 // Reliable Helper function: Upload image to Cloudinary as WebP
 async function uploadToCloudinaryHelper(imageStr: string): Promise<string> {
   if (!imageStr || imageStr.startsWith('http://') || imageStr.startsWith('https://')) {
-    return imageStr || '/Eternal_Solitaire_Ring.jpg';
+    return imageStr || '';
   }
 
   try {

@@ -110,18 +110,46 @@ export const ProductGridList: React.FC<ProductGridListProps> = ({
               >
                 {/* Image Container with Metal Tag Badge */}
                 <div style={{ position: 'relative', width: '100%', height: '180px', background: '#f8fafc', overflow: 'hidden' }}>
-                  <img
-                    src={product.img}
-                    alt={product.name}
-                    onClick={() => onViewImage(product.img)}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      cursor: 'pointer',
-                      transition: 'transform 0.3s ease',
-                    }}
-                  />
+                  {product.img && product.img.trim() !== '' ? (
+                    <img
+                      src={product.img}
+                      alt={product.name}
+                      onClick={() => onViewImage(product.img)}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        cursor: 'pointer',
+                        transition: 'transform 0.3s ease',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => onEditProduct(product)}
+                      title="No image uploaded - Click to upload/edit"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#f1f5f9',
+                        transition: 'background 0.2s ease',
+                      }}
+                    >
+                      <img
+                        src="/add_image_placeholder.png"
+                        alt="Add image"
+                        style={{
+                          width: '110px',
+                          height: '110px',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    </div>
+                  )}
                   <div
                     className="product-card-badge"
                     style={{

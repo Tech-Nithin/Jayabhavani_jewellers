@@ -371,16 +371,17 @@ export const ProductTableView: React.FC<ProductTableViewProps> = ({
                             {/* 2. Photo */}
                             <td style={{ padding: '14px 14px' }} onClick={(e) => e.stopPropagation()}>
                               <img
-                                src={item.img}
+                                src={item.img && item.img.trim() !== '' ? item.img : '/add_image_placeholder.png'}
                                 alt={item.name}
-                                onClick={() => onViewImage(item.img)}
+                                onClick={() => item.img && item.img.trim() !== '' ? onViewImage(item.img) : onEditProduct(item)}
                                 style={{
                                   width: '42px',
                                   height: '42px',
                                   borderRadius: '8px',
-                                  objectFit: 'cover',
+                                  objectFit: 'contain',
                                   border: '1px solid #cbd5e1',
-                                  cursor: 'zoom-in',
+                                  cursor: 'pointer',
+                                  background: '#f1f5f9',
                                   boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
                                 }}
                               />

@@ -338,7 +338,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
 
   const uploadToCloudinary = async (imageDataUrlOrBlob: string, pendingBlob?: Blob | null): Promise<string> => {
     if (!pendingBlob && (!imageDataUrlOrBlob || imageDataUrlOrBlob.startsWith('/') || imageDataUrlOrBlob.startsWith('http'))) {
-      return imageDataUrlOrBlob || (activeMetal === 'GOLD' ? '/Eternal_Solitaire_Ring.jpg' : '/Pearl_Drop_Earrings.jpg');
+      return imageDataUrlOrBlob || '';
     }
 
     try {

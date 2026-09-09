@@ -95,10 +95,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           <img
-            src={product.img}
+            src={product.img && product.img.trim() !== '' ? product.img : '/add_image_placeholder.png'}
             alt={product.name}
             className="product-img"
-            style={{ position: 'relative', zIndex: 1 }}
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              objectFit: (!product.img || product.img.trim() === '') ? 'contain' : 'cover',
+              padding: (!product.img || product.img.trim() === '') ? '20px' : '0',
+            }}
           />
 
           {product.badge && (
@@ -238,7 +243,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   }}
                 />
                 <img
-                  src={product.img}
+                  src={product.img && product.img.trim() !== '' ? product.img : '/add_image_placeholder.png'}
                   alt={product.name}
                   style={{
                     maxWidth: '100%',
