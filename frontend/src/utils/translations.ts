@@ -209,6 +209,7 @@ export const translations = {
     // Receipt Titles & Headers
     storeName: 'JAYA BHAVANI JEWELLERS',
     storeAddress: '4-3-56/1, Old bustand to shubodaya school road, Patelpura, Siddipet, Telangana, 502103',
+    storeProprietors: 'Dharmavaram Suryaprakash: 9030030505 | S/O Krishna: 9849845905',
     sellingBill: 'JBJ SELLING BILL',
     buyingBill: 'JBJ BUYING BILL',
     exchangeBill: 'JBJ TRADE-IN EXCHANGE BILL',
@@ -499,6 +500,7 @@ export const translations = {
     // Receipt Titles & Headers
     storeName: 'జయ భవాని జువెలర్స్',
     storeAddress: '4-3-56/1, ఓల్డ్ బస్టాండ్ నుండి శుబోదయ స్కూల్ రోడ్డు, పటేల్‌పురా, సిద్ధిపేట, తెలంగాణ, 502103',
+    storeProprietors: 'ధర్మవరం సూర్యప్రకాష్: 9030030505 | S/O కృష్ణ: 9849845905',
     sellingBill: 'JBJ అమ్మకం బిల్లు',
     buyingBill: 'JBJ కొనుగోలు బిల్లు',
     exchangeBill: 'JBJ ఎక్స్ఛేంజ్ బిల్లు',

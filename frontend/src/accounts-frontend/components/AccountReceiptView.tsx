@@ -184,12 +184,15 @@ export const AccountReceiptView: React.FC<AccountReceiptViewProps> = ({
         }}
       >
         {/* Store Branding Header */}
-        <div style={{ textAlign: 'center', borderBottom: '1px dashed #94a3b8', paddingBottom: '1.25rem', marginBottom: '1rem' }}>
+        <div style={{ textAlign: 'center', borderBottom: '1px dashed #94a3b8', paddingBottom: '0.45rem', marginBottom: '0.5rem' }}>
           <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, color: '#0f172a', letterSpacing: '0.5px' }}>
             🏛️ JAYA BHAVANI JEWELLERS
           </h2>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: '#475569', fontWeight: 700 }}>
             4-3-56/1, Old busstand to shubodaya school road, Patelpura, Siddipet, Telangana, 502103
+          </p>
+          <p style={{ margin: '2px 0 0 0', fontSize: '0.65rem', color: '#0f172a', fontWeight: 800 }}>
+            Dharmavaram Suryaprakash: 9030030505 | S/O Krishna: 9849845905
           </p>
         </div>
 

@@ -207,6 +207,7 @@ export const financeTranslations = {
     // Thermal Receipt Specific Labels
     receiptStoreName: 'JAYA BHAVANI JEWELLERS',
     receiptStoreAddress: '4-3-56/1, Old bustand to shubodaya school road, Patelpura, Siddipet, Telangana, 502103',
+    receiptStoreProprietors: 'Dharmavaram Suryaprakash: 9030030505 | S/O Krishna: 9849845905',
     receiptBillMode: 'BILL TYPE: [Finance/Girvi Loan]',
     receiptDateLabel: 'DATE:',
     receiptCustomerLabel: 'CUSTOMER:',
@@ -436,6 +437,7 @@ export const financeTranslations = {
     // Thermal Receipt Specific Labels
     receiptStoreName: 'జయ భవాని జువెలర్స్',
     receiptStoreAddress: '4-3-56/1, ఓల్డ్ బస్టాండ్ నుండి శుబోదయ స్కూల్ రోడ్డు, పటేల్‌పురా, సిద్ధిపేట, తెలంగాణ, 502103',
+    receiptStoreProprietors: 'ధర్మవరం సూర్యప్రకాష్: 9030030505 | S/O కృష్ణ: 9849845905',
     receiptBillMode: 'బిల్లు రకం: [ఫైనాన్స్ / గిర్వి లోన్]',
     receiptDateLabel: 'తేదీ:',
     receiptCustomerLabel: 'కస్టమర్:',

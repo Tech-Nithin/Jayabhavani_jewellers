@@ -371,7 +371,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
       <div style={{ position: 'relative', zIndex: 1 }}>
         {/* Thermal Store Header & Actions */}
-        <div style={{ textAlign: 'center', borderBottom: '1px dashed #94a3b8', paddingBottom: '1.25rem', marginBottom: '1rem', position: 'relative' }}>
+        <div style={{ textAlign: 'center', borderBottom: '1px dashed #94a3b8', paddingBottom: '0.45rem', marginBottom: '0.5rem', position: 'relative' }}>
           <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: '4px' }}>
             <button
               type="button"
@@ -421,6 +421,9 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           </h4>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.62rem', color: '#0f172a', fontWeight: 700 }}>
             {t.storeAddress}
+          </p>
+          <p style={{ margin: '2px 0 0 0', fontSize: '0.62rem', color: '#0f172a', fontWeight: 800 }}>
+            {t.storeProprietors}
           </p>
         </div>
 
