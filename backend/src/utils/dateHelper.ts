@@ -8,7 +8,23 @@
  * e.g. "2026-09-05T18:00:00.000+05:30"
  */
 export function getNowISTISO(customDate?: Date | string | null): string {
-  const d = customDate ? (typeof customDate === 'string' ? new Date(customDate) : customDate) : new Date();
+  let d: Date;
+  if (!customDate) {
+    d = new Date();
+  } else if (typeof customDate === 'string') {
+    const trimmed = customDate.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      if (trimmed === getTodayIST()) {
+        d = new Date();
+      } else {
+        d = new Date(`${trimmed}T12:00:00.000+05:30`);
+      }
+    } else {
+      d = new Date(trimmed);
+    }
+  } else {
+    d = customDate;
+  }
   if (isNaN(d.getTime())) return new Date().toISOString();
 
   const formatter = new Intl.DateTimeFormat('en-GB', {

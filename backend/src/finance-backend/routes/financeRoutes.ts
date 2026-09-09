@@ -431,7 +431,7 @@ const handleCreateLoan = async (req: Request, res: Response) => {
         metal_type: (newLoan.debt_category === 'SILVER' ? 'SILVER' : 'GOLD') as any,
         item_type: `Pledge Loan: ${newLoan.item_name || 'Ornament'}`,
         notes: `Loan disbursed ₹${principal.toLocaleString('en-IN')} to ${newLoan.customer_name}`,
-        date: loanDate,
+        date: newLoan.created_at || getNowISTISO(),
       });
     } catch (cashErr) {
       console.warn('⚠️ Cash record error on loan create:', cashErr);
@@ -595,7 +595,7 @@ router.post('/:uuid/pay', async (req: Request, res: Response) => {
         metal_type: (loan.debt_category === 'SILVER' ? 'SILVER' : 'GOLD') as any,
         item_type: `Pledge Loan Payment #${nextInstallment}`,
         notes: `Received ₹${totalTransactionPay.toLocaleString('en-IN')} (Int: ₹${intPaid}, Prin: ₹${prinPaid}) from ${loan.customer_name}`,
-        date: today,
+        date: paymentRecord?.paid_at || getNowISTISO(),
       });
     } catch (cashErr) {
       console.warn('⚠️ Cash IN record error on payment:', cashErr);

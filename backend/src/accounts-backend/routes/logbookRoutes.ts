@@ -90,7 +90,8 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       { data: dbLoans },
       { data: dbCashLedger },
       { data: dbCustomerBills },
-      { data: dbBillingRecords }
+      { data: dbBillingRecords },
+      { data: dbFinancePaymentHistory }
     ] = await Promise.all([
       supabase.from('customer_billing').select('*').order('created_at', { ascending: true }),
       supabase.from('billing_payment_history').select('*').order('created_at', { ascending: true }),
@@ -102,6 +103,7 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       supabase.from('cash_transaction_ledger').select('*, cash_history(date)').order('created_at', { ascending: true }),
       supabase.from('customer_billing').select('*').order('created_at', { ascending: true }),
       supabase.from('billing_sell_buy_records').select('*').order('created_at', { ascending: true }),
+      supabase.from('finance_payment_history').select('*').order('created_at', { ascending: true }),
     ]);
 
     const formattedDbInvoices = (dbInvoices || []).map(formatCustomerBillingToInvoice);
@@ -439,19 +441,26 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
     // 4. Process Cash Ledger Entries
     cashLedgerToday.forEach((tx: any) => {
       const type = (tx.transaction_type || '').toUpperCase();
-      const formattedTime = tx.created_at
-        ? new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '12:00 PM';
       const amt = Number(tx.transaction_cash_total || 0);
       const isFlowIn = (tx.flow_type || '').toUpperCase() === 'IN';
 
       if (type === 'FINANCE') {
         const isRepayment = isFlowIn || (tx.item_type || '').toLowerCase().includes('payment') || (tx.item_type || '').toLowerCase().includes('repay') || (tx.notes || '').toLowerCase().includes('received');
         if (isRepayment) {
+          const matchedFinPay = (dbFinancePaymentHistory || []).find((fp: any) =>
+            (fp.payment_uuid && String(fp.payment_uuid).toLowerCase() === String(tx.transaction_id || '').toLowerCase()) ||
+            (fp.id && String(fp.id) === String(tx.transaction_id || '')) ||
+            (fp.finance_uuid && String(fp.finance_uuid).toLowerCase() === String(tx.transaction_id || '').toLowerCase())
+          );
+          const effectiveCreatedAt = matchedFinPay?.paid_at || matchedFinPay?.created_at || tx.created_at || getNowISTISO();
+          const formattedTime = effectiveCreatedAt
+            ? new Date(effectiveCreatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+            : '12:00 PM';
+
           logBookTimeline.push({
             id: `log-fin-repay-${tx.id || tx.uuid || tx.cash_history_uuid || Math.random()}`,
             time: formattedTime,
-            created_at: tx.created_at || getNowISTISO(),
+            created_at: effectiveCreatedAt,
             type: 'FINANCE_REPAYMENT',
             title: tx.notes ? (tx.notes.includes('from ') ? tx.notes.split('from ')?.[1] : tx.notes) : 'Finance Payment',
             details: `💰 Finance Repayment · ${tx.item_type || 'Loan Payment'}: ${tx.notes || ''}`,
@@ -470,10 +479,15 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
 
       if (type === 'SELL' || type === 'BUY' || type === 'EXCHANGE' || type === 'ORDER') return;
 
+      const effectiveCashTime = tx.created_at || getNowISTISO();
+      const formattedCashTime = effectiveCashTime
+        ? new Date(effectiveCashTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '12:00 PM';
+
       logBookTimeline.push({
         id: `log-cash-${tx.cash_history_uuid || tx.id || Math.random()}`,
-        time: formattedTime,
-        created_at: tx.created_at || getNowISTISO(),
+        time: formattedCashTime,
+        created_at: effectiveCashTime,
         type: 'CASH_REGISTER',
         title: type === 'LOADING' ? 'Cash Loaded to Drawer' : (tx.notes || 'Cash Entry'),
         details: `${isFlowIn ? '💵 Cash IN (Loaded to Drawer)' : '💸 Cash OUT'} · Amount: ₹${amt.toLocaleString('en-IN')}${tx.notes ? ` (${tx.notes})` : ''}`,

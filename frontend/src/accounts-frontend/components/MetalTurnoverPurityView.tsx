@@ -81,6 +81,17 @@ export const MetalTurnoverPurityView: React.FC<MetalTurnoverPurityViewProps> = (
           <strong style={{ fontSize: '0.70rem', color: '#b91c1c' }}>-₹{fmtCash(kpiMetrics.cashGivenToCustomer)}</strong>
         </div>
 
+        {/* CASH LOADED TO DRAWER */}
+        {Number(kpiMetrics.cashLoadedToDrawer || 0) > 0 && (
+          <div style={{ padding: '5px 8px', borderRadius: '7px', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ fontSize: '0.75rem' }}>📥</span>
+              <span style={{ fontSize: '0.64rem', fontWeight: 700, color: '#047857' }}>Cash Loaded To Drawer:</span>
+            </div>
+            <strong style={{ fontSize: '0.70rem', color: '#047857' }}>+₹{fmtCash(kpiMetrics.cashLoadedToDrawer)}</strong>
+          </div>
+        )}
+
         {/* CASH GOT FROM FINANCE */}
         <div style={{ padding: '5px 8px', borderRadius: '7px', background: '#ccfbf1', border: '1px solid #99f6e4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>

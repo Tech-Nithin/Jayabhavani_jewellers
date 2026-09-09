@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase';
-import { getTodayIST, getNowISTISO, toISTTimestamp } from './dateHelper';
+import { getTodayIST, getNowISTISO, toISTTimestamp, toISTDateOnly } from './dateHelper';
 
 export interface CashTransactionParams {
   transaction_id?: string;
@@ -37,7 +37,7 @@ export async function recordCashTransaction(params: CashTransactionParams): Prom
   error?: string;
 }> {
   try {
-    const todayStr = params.date || getTodayISTString();
+    const todayStr = params.date ? toISTDateOnly(params.date) : getTodayISTString();
     const amount = Number(params.amount) || 0;
     if (amount <= 0) {
       return { success: false, error: 'Transaction amount must be greater than 0' };
