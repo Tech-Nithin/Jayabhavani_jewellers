@@ -327,9 +327,18 @@ export const FinanceReceiptView: React.FC<FinanceReceiptViewProps> = ({ data, co
           <p style={{ margin: '4px 0 0 0', fontSize: '0.62rem', color: '#0f172a', fontWeight: 800, maxWidth: '280px', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.3 }}>
             {t.receiptStoreAddress}
           </p>
-          <p style={{ margin: '2px 0 0 0', fontSize: '0.62rem', color: '#0f172a', fontWeight: 800, maxWidth: '280px', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.3 }}>
-            {t.receiptStoreProprietors}
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '3px', fontSize: '0.62rem', color: '#0f172a', fontWeight: 800 }}>
+            <span>{t.receiptStoreProprietor1Name || 'Dharmavaram Suryaprakash'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <i className="fa-solid fa-phone" style={{ fontSize: '0.52rem', color: '#334155' }}></i> {t.receiptStoreProprietor1Phone || '9030030505'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1px', fontSize: '0.62rem', color: '#0f172a', fontWeight: 800 }}>
+            <span>{t.receiptStoreProprietor2Name || 'S/O Krishna'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <i className="fa-solid fa-phone" style={{ fontSize: '0.52rem', color: '#334155' }}></i> {t.receiptStoreProprietor2Phone || '9849845905'}
+            </span>
+          </div>
         </div>
 
         {/* 2. Date, Mode & Customer Info with Goddess Artwork in the middle */}

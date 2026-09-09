@@ -191,9 +191,18 @@ export const AccountReceiptView: React.FC<AccountReceiptViewProps> = ({
           <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: '#475569', fontWeight: 700 }}>
             4-3-56/1, Old busstand to shubodaya school road, Patelpura, Siddipet, Telangana, 502103
           </p>
-          <p style={{ margin: '2px 0 0 0', fontSize: '0.65rem', color: '#0f172a', fontWeight: 800 }}>
-            Dharmavaram Suryaprakash: 9030030505 | S/O Krishna: 9849845905
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '3px', fontSize: '0.65rem', color: '#0f172a', fontWeight: 800 }}>
+            <span>Dharmavaram Suryaprakash</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <i className="fa-solid fa-phone" style={{ fontSize: '0.52rem', color: '#334155' }}></i> 9030030505
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1px', fontSize: '0.65rem', color: '#0f172a', fontWeight: 800 }}>
+            <span>S/O Krishna</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <i className="fa-solid fa-phone" style={{ fontSize: '0.52rem', color: '#334155' }}></i> 9849845905
+            </span>
+          </div>
         </div>
 
         {/* Date & Mode Badge Header */}
