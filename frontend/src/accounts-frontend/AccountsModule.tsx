@@ -285,6 +285,8 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
     let cashGivenToCustomer = 0;
     let cashGotFromFinance = 0;
     let cashGivenToFinance = 0;
+    let cashLoadedToDrawer = 0;
+    let cashWithdrawnFromDrawer = 0;
 
     let totalFinanceIssued = 0;
     let financeClearedCount = 0;
@@ -345,8 +347,16 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
           cashGotFromCustomer += paid;
           totalCashCollected += paid;
         }
-      } else if (type === 'CASH_REGISTER' && (item.payment_mode === 'CASH_IN' || (item.raw_cash_ledger && item.raw_cash_ledger.flow_type === 'IN'))) {
-        totalCashCollected += paid;
+      } else if (type === 'CASH_REGISTER') {
+        const flow = (item.payment_mode || item.flow_type || (item.raw_cash_ledger && item.raw_cash_ledger.flow_type) || '').toUpperCase();
+        const isFlowIn = flow === 'CASH_IN' || flow === 'IN';
+        const cashAmt = Number(item.amount || item.paid_amount || 0);
+        if (isFlowIn) {
+          cashLoadedToDrawer += cashAmt;
+          totalCashCollected += cashAmt;
+        } else {
+          cashWithdrawnFromDrawer += cashAmt;
+        }
       }
     });
 
@@ -447,14 +457,16 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
       silverTakenFromWorker: Number(silverTakenFromWorker.toFixed(3)),
       cashGivenToWorker: Math.round(cashGivenToWorker),
       cashTakenFromWorker: Math.round(cashTakenFromWorker),
+      cashLoadedToDrawer: Math.round(cashLoadedToDrawer),
+      cashWithdrawnFromDrawer: Math.round(cashWithdrawnFromDrawer),
       goldIn: overallMetalPuritySummary?.gold?.boughtGross || 0,
       goldOut: overallMetalPuritySummary?.gold?.soldGross || 0,
       goldWtAdded: 0,
       silverIn: overallMetalPuritySummary?.silver?.boughtGross || 0,
       silverOut: overallMetalPuritySummary?.silver?.soldGross || 0,
       silverWtAdded: 0,
-      cashIn: Math.round(cashGotFromCustomer + cashGotFromFinance + cashTakenFromWorker),
-      cashOut: Math.round(cashGivenToCustomer + cashGivenToFinance + cashGivenToWorker),
+      cashIn: Math.round(cashGotFromCustomer + cashGotFromFinance + cashTakenFromWorker + cashLoadedToDrawer),
+      cashOut: Math.round(cashGivenToCustomer + cashGivenToFinance + cashGivenToWorker + cashWithdrawnFromDrawer),
       cashGotFromCustomer: Math.round(cashGotFromCustomer),
       cashGivenToCustomer: Math.round(cashGivenToCustomer),
       cashGotFromFinance: Math.round(cashGotFromFinance),
