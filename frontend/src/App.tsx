@@ -6,7 +6,6 @@ import IntroLoader from './components/IntroLoader';
 import { initNativeNotifications } from './utils/nativeNotification';
 
 const STORAGE_KEY_TOKEN = 'jbj_session_token';
-const STORAGE_KEY_TAB = 'jbj_active_tab';
 
 export default function App() {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
