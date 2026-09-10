@@ -130,7 +130,7 @@ export const ChronologicalLogBookTable: React.FC<ChronologicalLogBookTableProps>
                 <th style={{ padding: '8px 8px', fontWeight: 800 }}>JBJ-Type</th>
                 <th style={{ padding: '8px 8px', fontWeight: 800 }}>Customer / Details</th>
                 <th style={{ padding: '8px 8px', fontWeight: 800, textAlign: 'right' }}>Net Weight</th>
-                <th style={{ padding: '8px 8px', fontWeight: 800, textAlign: 'right', color: '#15803d' }}>In Hand (₹)</th>
+                <th style={{ padding: '8px 8px', fontWeight: 800, textAlign: 'right', color: '#15803d' }}>Paid (₹)</th>
                 <th style={{ padding: '8px 8px', fontWeight: 800, textAlign: 'right' }}>Total Amount (₹)</th>
                 <th style={{ padding: '8px 8px', fontWeight: 800, textAlign: 'center' }}>Status</th>
               </tr>
