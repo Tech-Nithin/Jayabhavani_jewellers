@@ -624,16 +624,21 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         const purityNum = Number(it.purity_percentage) || 100;
         const weightNum = Number(it.weight_grams) || 0;
         const pureW = det?.pureWeight ?? Number((weightNum * (purityNum / 100)).toFixed(3));
-        const isGold = it.metal_type === 'GOLD';
-        const isSell = it.item_type === 'SELL';
-        const rate = isGold
+        const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
+        const isSell = (it.item_type || 'SELL').toUpperCase() === 'SELL';
+        const customRate = Number(it.custom_rate_per_gram || (it as any).customRate || (it as any).appliedRate || (it as any).rate || (it as any).applied_rate_per_gram || det?.rate || 0);
+        const defaultRate = isGold
           ? (isSell ? rates?.gold_sell_value || 0 : rates?.gold_buy_value || 0)
           : (isSell ? rates?.silver_sell_value || 0 : rates?.silver_buy_value || 0);
+        const rate = customRate > 0 ? customRate : defaultRate;
 
         return {
           ...it,
           appliedRate: rate,
           applied_rate_per_gram: rate,
+          custom_rate_per_gram: rate,
+          rate_per_gram: rate,
+          rate: rate,
           lineTotal: det?.lineTotal ?? 0,
           line_total: det?.lineTotal ?? 0,
           pureWeight: pureW,
@@ -916,7 +921,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         making_charges_per_gram: it.making_charges_per_gram !== undefined && it.making_charges_per_gram !== null ? String(it.making_charges_per_gram) : '',
         additional_charges_name: it.additional_charges_name || '',
         additional_charges_amount: it.additional_charges_amount !== undefined && it.additional_charges_amount !== null ? String(it.additional_charges_amount) : '',
-        custom_rate_per_gram: it.custom_rate_per_gram ? Number(it.custom_rate_per_gram) : undefined,
+        custom_rate_per_gram: (it.custom_rate_per_gram || it.applied_rate_per_gram || it.appliedRate || it.rate || it.rate_per_gram || it.metal_rate)
+          ? Number(it.custom_rate_per_gram || it.applied_rate_per_gram || it.appliedRate || it.rate || it.rate_per_gram || it.metal_rate)
+          : undefined,
         gst_percent: it.gst_percent !== undefined ? Number(it.gst_percent) : 3,
         item_type: it.item_type ? (it.item_type.toUpperCase() as 'SELL' | 'BUY') : (invMode === 'BUY' ? 'BUY' : 'SELL'),
         image_url: it.image_url || '',
@@ -928,6 +935,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         item_notes: it.item_notes || it.notes || '',
       }));
     } else if (inv) {
+      const existingSingleRate = Number(inv.custom_rate_per_gram || inv.applied_rate_per_gram || inv.appliedRate || inv.rate || inv.metal_rate || inv.rate_per_gram || 0);
       itemsToSet = [
         {
           id: 'item-1',
@@ -938,6 +946,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           weight_grams: inv.weight_grams !== undefined && inv.weight_grams !== null ? String(inv.weight_grams) : '',
           deduction_weight_grams: inv.deduction_weight_grams !== undefined && inv.deduction_weight_grams !== null ? String(inv.deduction_weight_grams) : '',
           purity_percentage: inv.purity_percentage !== undefined && inv.purity_percentage !== null ? String(inv.purity_percentage) : (inv.transaction_type === 'BUY' ? '100' : '91.6'),
+          custom_rate_per_gram: existingSingleRate > 0 ? existingSingleRate : undefined,
           making_charges_per_gram: inv.making_charges_per_gram !== undefined && inv.making_charges_per_gram !== null ? String(inv.making_charges_per_gram) : '',
           gst_percent: Number(inv.gst_percent) || 3,
           item_type: (inv.transaction_type === 'BUY' || invMode === 'BUY') ? 'BUY' : 'SELL',

@@ -519,27 +519,37 @@ router.get(['/day-book', '/logbook'], async (req: Request, res: Response) => {
       const inst1 = billPayments.find((p: any) => Number(p.installment_number || 1) === 1);
       const latestPayment = billPayments.length > 0 ? billPayments[billPayments.length - 1] : null;
 
-      const paidAmount = inst1
-        ? Number(inst1.amount_paid)
-        : Number(inv.receipt_json_data?.payment_history?.[0]?.amount ?? inv.receipt_json_data?.advancePaidAmount ?? inv.paid_amount ?? netAmount);
+      const isFullPaid = (inv.payment_status || '').toUpperCase() === 'PAID' || (inv.payment_status || '').toUpperCase() === 'FULL' || Number(inv.due_amount || 0) <= 0.01;
 
-      const dueAmount = inst1 && inst1.remaining_due !== undefined && inst1.remaining_due !== null
-        ? Number(inst1.remaining_due)
-        : (inv.due_amount !== undefined && inv.due_amount !== null
-            ? Number(inv.due_amount)
-            : (inv.receipt_json_data?.balanceDueAmount !== undefined && inv.receipt_json_data?.balanceDueAmount !== null
-                ? Number(inv.receipt_json_data.balanceDueAmount)
-                : Math.max(0, netAmount - paidAmount)));
+      const paidAmount = isFullPaid
+        ? Number(inv.paid_amount ?? inv.final_amount ?? netAmount)
+        : (inst1
+            ? Number(inst1.amount_paid)
+            : Number(inv.receipt_json_data?.payment_history?.[0]?.amount ?? inv.receipt_json_data?.advancePaidAmount ?? inv.paid_amount ?? netAmount));
 
-      const currentActiveDue = latestPayment && latestPayment.remaining_due !== undefined && latestPayment.remaining_due !== null
-        ? Number(latestPayment.remaining_due)
-        : (inv.due_amount !== undefined && inv.due_amount !== null
-            ? Number(inv.due_amount)
-            : Math.max(0, netAmount - Number(inv.paid_amount || paidAmount)));
+      const dueAmount = isFullPaid
+        ? 0
+        : (inst1 && inst1.remaining_due !== undefined && inst1.remaining_due !== null
+            ? Number(inst1.remaining_due)
+            : (inv.due_amount !== undefined && inv.due_amount !== null
+                ? Number(inv.due_amount)
+                : (inv.receipt_json_data?.balanceDueAmount !== undefined && inv.receipt_json_data?.balanceDueAmount !== null
+                    ? Number(inv.receipt_json_data.balanceDueAmount)
+                    : Math.max(0, netAmount - paidAmount))));
 
-      const currentTotalPaid = latestPayment
-        ? billPayments.reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0)
-        : Number(inv.paid_amount ?? paidAmount);
+      const currentActiveDue = isFullPaid
+        ? 0
+        : (latestPayment && latestPayment.remaining_due !== undefined && latestPayment.remaining_due !== null
+            ? Number(latestPayment.remaining_due)
+            : (inv.due_amount !== undefined && inv.due_amount !== null
+                ? Number(inv.due_amount)
+                : Math.max(0, netAmount - Number(inv.paid_amount || paidAmount))));
+
+      const currentTotalPaid = isFullPaid
+        ? Number(inv.paid_amount ?? inv.final_amount ?? netAmount)
+        : (latestPayment
+            ? billPayments.reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0)
+            : Number(inv.paid_amount ?? paidAmount));
 
       inv.due_amount = currentActiveDue;
       inv.paid_amount = currentTotalPaid;

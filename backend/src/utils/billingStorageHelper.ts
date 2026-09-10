@@ -176,7 +176,7 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         const deductionName = it.deduction_name || it.stone_name || it.waste_type || null;
         const deductionWeight = Number(it.deduction_weight || it.deduction_weight_grams || it.stone_weight || it.stone_weight_grams || it.waste_weight || 0);
         const netMetalWeight = Number(it.net_weight_grams || it.net_weight || Math.max(0, grossWeight - deductionWeight));
-        const metalRate = Number(it.applied_rate_per_gram || it.rate_per_gram || it.rate || receiptData.applied_rate_per_gram || input.metal_rate || 0);
+        const metalRate = Number(it.custom_rate_per_gram || it.applied_rate_per_gram || it.rate_per_gram || it.rate || (it as any).customRate || (it as any).appliedRate || receiptData.applied_rate_per_gram || input.metal_rate || 0);
         
         // HMW percentage is the hallmark / wastage percentage
         const hallmarkPct = Number(it.hmw_percentage || it.wastage_percent || it.hallmark_percentage || 0);
@@ -413,6 +413,25 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
         } else {
           console.log(`✅ Inserted billing_payment_history installment #1 for ${billingId} (Paid: ₹${paidAmount})`);
         }
+      }
+    } else if (existingPayments && existingPayments.length === 1) {
+      // If invoice was updated and only had initial payment #1, synchronize installment #1 with new paid amount & remaining due
+      const { error: payUpdErr } = await supabase
+        .from('billing_payment_history')
+        .update({
+          amount_paid: paidAmount,
+          remaining_due: dueAmount,
+          payment_status: paymentStatus,
+          bill_date: billDate,
+          payment_mode: paymentMode,
+          updated_at: updatedAt,
+        })
+        .eq('payment_uuid', existingPayments[0].payment_uuid);
+
+      if (payUpdErr) {
+        console.warn('⚠️ Error synchronizing billing_payment_history on update:', payUpdErr.message);
+      } else {
+        console.log(`✅ Synchronized billing_payment_history installment #1 for ${billingId} (New Paid: ₹${paidAmount}, Due: ₹${dueAmount})`);
       }
     }
 

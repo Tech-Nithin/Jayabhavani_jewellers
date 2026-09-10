@@ -848,11 +848,13 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     const names: string[] = [];
 
     receipt_json_data.items.forEach((it: any) => {
-      const isGold = it.metal_type === 'GOLD';
-      const isSell = it.item_type === 'SELL';
-      const rate = isGold
+      const isGold = (it.metal_type || 'GOLD').toUpperCase() === 'GOLD';
+      const isSell = (it.item_type || 'SELL').toUpperCase() === 'SELL';
+      const itemCustomRate = Number(it.custom_rate_per_gram || it.applied_rate_per_gram || it.appliedRate || it.rate || it.rate_per_gram || it.metal_rate || 0);
+      const defaultRate = isGold
         ? (isSell ? activeMetalValues.gold_sell_value : activeMetalValues.gold_buy_value)
         : (isSell ? activeMetalValues.silver_sell_value : activeMetalValues.silver_buy_value);
+      const rate = itemCustomRate > 0 ? itemCustomRate : defaultRate;
 
       const grossWeight = Number(it.weight_grams) || 0;
       const deductionWeight = Number(it.deduction_weight_grams) || 0;
@@ -892,6 +894,8 @@ router.put('/update/:id', async (req: Request, res: Response) => {
       it.additionalVal = additionalVal;
       it.appliedRate = rate;
       it.applied_rate_per_gram = rate;
+      it.custom_rate_per_gram = rate;
+      it.rate = rate;
       it.lineTotal = lineTotal;
       it.line_total = lineTotal;
 
@@ -925,9 +929,11 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     const mcPerGram = Number(making_charges_per_gram) || 0;
     const gstRate = Number(gst_percent) || 0;
 
-    const applied_rate = metal_type === 'GOLD'
+    const itemCustomRate = Number(req.body.custom_rate_per_gram || req.body.applied_rate_per_gram || req.body.rate || req.body.metal_rate || 0);
+    const defaultRate = metal_type === 'GOLD'
       ? (transaction_type === 'SELL' ? activeMetalValues.gold_sell_value : activeMetalValues.gold_buy_value)
       : (transaction_type === 'SELL' ? activeMetalValues.silver_sell_value : activeMetalValues.silver_buy_value);
+    const applied_rate = itemCustomRate > 0 ? itemCustomRate : defaultRate;
 
     pure_metal_weight = Number((weight * (purity / 100)).toFixed(3));
     const weightUsed = transaction_type === 'SELL' ? weight : pure_metal_weight;
@@ -946,9 +952,13 @@ router.put('/update/:id', async (req: Request, res: Response) => {
   const existingHistory = Array.isArray(receipt_json_data?.update_history) ? receipt_json_data.update_history : [];
   const updateHistoryList = [...existingHistory, nowIso];
 
+  const primaryItem = (receipt_json_data && receipt_json_data.items && receipt_json_data.items[0]) || {};
+  const primaryRate = Number(primaryItem.applied_rate_per_gram || primaryItem.custom_rate_per_gram || primaryItem.rate || req.body.applied_rate_per_gram || (resolvedUpdateMetalType === 'SILVER' ? activeMetalValues.silver_sell_value : activeMetalValues.gold_sell_value));
+
   receipt_json_data.updated_at = nowIso;
   receipt_json_data.update_history = updateHistoryList;
   receipt_json_data.bill_date = resolvedBillDate;
+  receipt_json_data.applied_rate_per_gram = primaryRate;
 
   const rawPaidVal = req.body.paid_amount ?? receipt_json_data?.paid_amount ?? receipt_json_data?.paidAmount;
   const paidVal = rawPaidVal !== undefined ? Number(rawPaidVal) : (transaction_type === 'BUY' ? 0 : final_amount_val);
@@ -965,7 +975,7 @@ router.put('/update/:id', async (req: Request, res: Response) => {
     product_name: final_product_name,
     weight_grams: final_weight,
     purity_percentage: Number(purity_percentage) || 100,
-    applied_rate_per_gram: activeMetalValues.gold_sell_value,
+    applied_rate_per_gram: primaryRate,
     pure_metal_weight,
     metal_value,
     making_charges,
