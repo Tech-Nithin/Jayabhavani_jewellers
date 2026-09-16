@@ -17,6 +17,19 @@ const parseIndianCurrencyNumber = (val: string | number | undefined | null): num
   return parseFloat(cleanStr) || 0;
 };
 
+const getSafeReceiptData = (inv: any): any => {
+  if (!inv) return {};
+  let raw = inv.receipt_json_data;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      raw = {};
+    }
+  }
+  return raw || {};
+};
+
 interface CustomerDirectoryViewProps {
   customers: CustomerDirectoryRecord[];
   rates: GlobalRates | null;
@@ -96,6 +109,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     open: boolean;
     cust: CustomerDirectoryRecord | null;
     payingNow: string;
+    discount: string;
     note: string;
     customPaidAt: string;
     isSubmitting: boolean;
@@ -103,6 +117,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     open: false,
     cust: null,
     payingNow: '',
+    discount: '',
     note: '',
     customPaidAt: '',
     isSubmitting: false,
@@ -110,7 +125,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
 
   const handleOpenSettlementModal = (cust: CustomerDirectoryRecord) => {
     const inv = cust.latestInvoice;
-    const receiptData = inv?.receipt_json_data || {};
+    const receiptData = getSafeReceiptData(inv);
     const dueVal = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
 
     const now = new Date();
@@ -121,6 +136,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
       open: true,
       cust,
       payingNow: dueVal > 0 ? dueVal.toLocaleString('en-IN') : '',
+      discount: '',
       note: '',
       customPaidAt: localIso,
       isSubmitting: false,
@@ -132,9 +148,10 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
     const cust = settlementModal.cust;
     const inv = cust.latestInvoice;
     const paidNowNum = parseIndianCurrencyNumber(settlementModal.payingNow);
+    const discountNum = parseIndianCurrencyNumber(settlementModal.discount);
 
-    if (paidNowNum <= 0) {
-      alert('Please enter a valid payment amount');
+    if (paidNowNum <= 0 && discountNum <= 0) {
+      alert('Please enter a payment amount or discount');
       return;
     }
 
@@ -146,6 +163,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paid_now: paidNowNum,
+          discount_amount: discountNum,
           custom_paid_at: settlementModal.customPaidAt ? new Date(settlementModal.customPaidAt).toISOString() : new Date().toISOString(),
           note: settlementModal.note || undefined,
         }),
@@ -159,10 +177,12 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                 ...c.latestInvoice,
                 paid_amount: data.paid_amount,
                 due_amount: data.due_amount,
+                discount_amount: data.discount_amount,
                 receipt_json_data: {
                   ...(c.latestInvoice?.receipt_json_data || {}),
                   advancePaidAmount: data.paid_amount,
                   balanceDueAmount: data.due_amount,
+                  discount_amount: data.discount_amount,
                   payment_history: data.payment_history,
                 },
               };
@@ -174,7 +194,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             return c;
           })
         );
-        setSettlementModal({ open: false, cust: null, payingNow: '', note: '', customPaidAt: '', isSubmitting: false });
+        setSettlementModal({ open: false, cust: null, payingNow: '', discount: '', note: '', customPaidAt: '', isSubmitting: false });
         alert(
           data.due_amount === 0
             ? `✅ Invoice ${invId} full payment of ₹${paidNowNum.toLocaleString('en-IN')} received & marked as PAID!`
@@ -346,15 +366,16 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
 
   const getCustomerMode = (cust: CustomerDirectoryRecord): 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER' => {
     const inv = cust.latestInvoice;
-    const jsonMode = inv?.receipt_json_data?.transaction_type || inv?.receipt_json_data?.mode;
+    const receiptData = getSafeReceiptData(inv);
+    const jsonMode = receiptData?.transaction_type || receiptData?.mode;
     const invMode = inv?.transaction_type;
     const rawMode = (jsonMode || invMode || 'SELL').toUpperCase();
 
     if (rawMode === 'ORDER') return 'ORDER';
 
-    const items = inv?.receipt_json_data?.items || [];
-    const hasBuy = items.some((i: any) => i.item_type === 'BUY');
-    const hasSell = items.some((i: any) => i.item_type === 'SELL');
+    const items = Array.isArray(receiptData?.items) ? receiptData.items : [];
+    const hasBuy = items.some((i: any) => (i?.item_type || '').toUpperCase() === 'BUY');
+    const hasSell = items.some((i: any) => (i?.item_type || '').toUpperCase() === 'SELL');
 
     if (rawMode === 'EXCHANGE' || (hasBuy && hasSell)) return 'EXCHANGE';
     if (rawMode === 'BUY' || (hasBuy && !hasSell)) return 'BUY';
@@ -1254,7 +1275,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
+                <td colSpan={8} style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
                   <i className="fa-solid fa-user-slash" style={{ fontSize: '1.3rem', marginBottom: '6px', display: 'block', color: '#cbd5e1' }}></i>
                   No customer records found in {historyTab} history.
                 </td>
@@ -1331,8 +1352,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                     {/* 3. PRODUCT Column */}
                     <td className="col-product" style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', textAlign: 'left' }}>
                       {(() => {
-                        const items: any[] = cust.latestInvoice?.receipt_json_data?.items || [];
-                        const primaryImg = cust.latestInvoice?.image_url || cust.latestInvoice?.receipt_json_data?.image_url || items.find((i: any) => i.image_url)?.image_url || '';
+                        const receiptData = getSafeReceiptData(cust.latestInvoice);
+                        const items: any[] = Array.isArray(receiptData?.items) ? receiptData.items : [];
+                        const primaryImg = cust.latestInvoice?.image_url || receiptData?.image_url || items.find((i: any) => i?.image_url)?.image_url || '';
 
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
@@ -1358,9 +1380,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                               {items.length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                   {items.map((item: any, i: number) => {
-                                    const pName = item.product_name || `${item.metal_type || 'Jewellery'} Item`;
-                                    const itemType = (item.item_type || mode).toUpperCase();
-                                    const itemMetal = (item.metal_type || 'GOLD').toUpperCase();
+                                    const pName = typeof item === 'string' ? item : (item?.product_name || `${item?.metal_type || 'Jewellery'} Item`);
+                                    const itemType = (typeof item === 'object' && item?.item_type ? item.item_type : mode).toUpperCase();
+                                    const itemMetal = (typeof item === 'object' && item?.metal_type ? item.metal_type : 'GOLD').toUpperCase();
 
                                     return (
                                       <div key={i} style={{ fontSize: '0.74rem', color: '#334155', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
@@ -1401,7 +1423,9 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                 </div>
                               ) : (
                                 <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.76rem' }}>
-                                  {cust.products.join(', ')}
+                                  {Array.isArray(cust.products)
+                                    ? cust.products.map((p: any) => (typeof p === 'object' ? p.product_name || p.name || 'Item' : p)).join(', ') || '-'
+                                    : (cust.products || '-')}
                                 </div>
                               )}
                             </div>
@@ -1413,29 +1437,18 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                     {/* 4. WEIGHT Column */}
                     <td style={{ padding: '0.65rem 0.65rem', textAlign: 'center', verticalAlign: 'middle' }}>
                       {(() => {
-                        const items: any[] = cust.latestInvoice?.receipt_json_data?.items || [];
+                        const receiptData = getSafeReceiptData(cust.latestInvoice);
+                        const items: any[] = Array.isArray(receiptData?.items) ? receiptData.items : [];
 
                         if (items.length > 0) {
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                               {items.map((item: any, i: number) => {
-                                const grossW = Number(item.weight_grams) || 0;
-                                // const dedW = Number(item.deduction_weight_grams) || 0;
-                                // const netW = Math.max(0, grossW - dedW);
-
+                                const grossW = Number(item?.weight_grams) || 0;
                                 return (
                                   <div key={i} style={{ fontSize: '0.73rem', color: '#334155' }}>
-                                    {/* <div style={{ fontWeight: 700, color: '#0369a1' }}>
-                                      {netW.toFixed(3)}g Net
-                                    </div> */}
                                     <div style={{ fontSize: '0.66rem', color: '#64748b', marginTop: '1px' }}>
-                                      {/* <i className="fa-solid fa-scale-balanced" style={{ fontSize: '0.60rem', color: '#d97706', marginRight: '3px' }}></i> */}
                                       <span>{grossW.toFixed(1)}g </span>
-                                      {/* {dedW > 0 && (
-                                        <span style={{ color: '#dc2626', fontWeight: 600, marginLeft: '3px' }}>
-                                          (-{dedW.toFixed(1)}g)
-                                        </span>
-                                      )} */}
                                     </div>
                                   </div>
                                 );
@@ -1444,15 +1457,15 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                           );
                         }
 
-                        return <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0369a1' }}>{cust.totalWeight.toFixed(3)}g</span>;
+                        return <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0369a1' }}>{Number(cust.totalWeight || 0).toFixed(3)}g</span>;
                       })()}
                     </td>
 
                     {/* 5. PAYMENT STATUS Column (Paid vs Due + Paid? Settlement Button) */}
                     {(() => {
                       const inv = cust.latestInvoice;
-                      const receiptData = inv?.receipt_json_data || {};
-                      const grandTotalVal = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+                      const receiptData = getSafeReceiptData(inv);
+                      const grandTotalVal = Number(inv?.total_amount) || Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
                       const dueAmount = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
                       const paidAmount = inv?.paid_amount !== undefined ? Number(inv.paid_amount) : Number(receiptData?.advancePaidAmount || grandTotalVal);
                       const isDue = dueAmount > 0;
@@ -1498,8 +1511,8 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                     <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', verticalAlign: 'middle' }}>
                       {(() => {
                         const inv = cust.latestInvoice;
-                        const receiptData = inv?.receipt_json_data || {};
-                        const grandTotalVal = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+                        const receiptData = getSafeReceiptData(inv);
+                        const grandTotalVal = Number(inv?.total_amount) || Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
                         const isBuy = (inv?.transaction_type || mode).toUpperCase() === 'BUY';
                         return (
                           <span style={{ fontWeight: 800, fontSize: '0.82rem', color: isBuy ? '#0369a1' : '#0f172a' }}>
@@ -1825,7 +1838,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setSettlementModal({ open: false, cust: null, payingNow: '', note: '', customPaidAt: '', isSubmitting: false })}
+                onClick={() => setSettlementModal({ open: false, cust: null, payingNow: '', discount: '', note: '', customPaidAt: '', isSubmitting: false })}
                 style={{ background: 'none', border: 'none', fontSize: '1.2rem', color: '#92400e', cursor: 'pointer' }}
               >
                 <i className="fa-solid fa-xmark"></i>
@@ -1836,13 +1849,14 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {(() => {
                 const inv = settlementModal.cust.latestInvoice;
-                const receiptData = inv?.receipt_json_data || {};
-                const totalGrand = Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
+                const receiptData = getSafeReceiptData(inv);
+                const totalGrand = Number(inv?.total_amount) || Number(inv?.final_amount) || Number(receiptData?.grandTotal) || Number(receiptData?.netPayable) || 0;
                 const currentDue = inv?.due_amount !== undefined ? Number(inv.due_amount) : Number(receiptData?.balanceDueAmount || 0);
                 const currentPaid = inv?.paid_amount !== undefined ? Number(inv.paid_amount) : Number(receiptData?.advancePaidAmount || totalGrand);
 
                 const paidNowNum = parseIndianCurrencyNumber(settlementModal.payingNow);
-                const newRemainingDue = Math.max(0, currentDue - paidNowNum);
+                const discountNum = parseIndianCurrencyNumber(settlementModal.discount);
+                const newRemainingDue = Math.max(0, currentDue - paidNowNum - discountNum);
                 const newTotalPaid = currentPaid + paidNowNum;
 
                 const paymentHistory: any[] = Array.isArray(receiptData?.payment_history) ? receiptData.payment_history : [];
@@ -1865,26 +1879,49 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Payment Input */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
-                        Amount Paying Today (₹):
-                      </label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="Enter payment amount e.g. 10,000"
-                        value={settlementModal.payingNow}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const num = parseIndianCurrencyNumber(raw);
-                          setSettlementModal((prev) => ({
-                            ...prev,
-                            payingNow: num > 0 ? num.toLocaleString('en-IN') : raw,
-                          }));
-                        }}
-                        style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '8px', border: '1.5px solid #d97706', fontSize: '1rem', fontWeight: 800, color: '#b45309', outline: 'none', background: '#fffbeb' }}
-                      />
+                    {/* Payment Inputs Grid: Amount Paying Today + Settlement Discount */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>
+                          Paying Today (₹):
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="e.g. 10,000"
+                          value={settlementModal.payingNow}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const num = parseIndianCurrencyNumber(raw);
+                            setSettlementModal((prev) => ({
+                              ...prev,
+                              payingNow: num > 0 ? num.toLocaleString('en-IN') : raw,
+                            }));
+                          }}
+                          style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1.5px solid #d97706', fontSize: '0.92rem', fontWeight: 800, color: '#b45309', outline: 'none', background: '#fffbeb' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#047857', marginBottom: '4px' }}>
+                          Discount / తగ్గింపు (₹):
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="e.g. 500 (Optional)"
+                          value={settlementModal.discount}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const num = parseIndianCurrencyNumber(raw);
+                            setSettlementModal((prev) => ({
+                              ...prev,
+                              discount: num > 0 ? num.toLocaleString('en-IN') : raw,
+                            }));
+                          }}
+                          style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1.5px solid #10b981', fontSize: '0.92rem', fontWeight: 800, color: '#047857', outline: 'none', background: '#ecfdf5' }}
+                        />
+                      </div>
                     </div>
 
                     {/* Payment Date & Time Input */}
@@ -1906,6 +1943,12 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                         <span>New Paid Total:</span>
                         <span style={{ color: '#16a34a' }}>₹{newTotalPaid.toLocaleString('en-IN')}</span>
                       </div>
+                      {discountNum > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#047857', fontWeight: 700, marginTop: '2px' }}>
+                          <span>Discount Deducted:</span>
+                          <span>- ₹{discountNum.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: newRemainingDue === 0 ? '#15803d' : '#b45309', fontWeight: 800, marginTop: '2px' }}>
                         <span>Remaining Balance Due:</span>
                         <span>₹{newRemainingDue.toLocaleString('en-IN')}</span>
@@ -1922,6 +1965,7 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
                           {paymentHistory.map((ph: any, pIdx: number) => {
                             const pDate = ph.paid_at ? new Date(ph.paid_at).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
+                            const discOnInst = Number(ph.discount_amount || 0);
                             return (
                               <div key={pIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '4px 8px', borderRadius: '6px', fontSize: '0.70rem', border: '1px solid #e2e8f0' }}>
                                 <span style={{ fontWeight: 700, color: '#334155' }}>
@@ -1929,7 +1973,10 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
                                 </span>
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                   <span style={{ color: '#64748b', fontSize: '0.65rem' }}>{pDate}</span>
-                                  <strong style={{ color: '#16a34a' }}>₹{Number(ph.amount || 0).toLocaleString('en-IN')}</strong>
+                                  <strong style={{ color: '#16a34a' }}>+ ₹{Number(ph.amount || 0).toLocaleString('en-IN')}</strong>
+                                  {discOnInst > 0 && (
+                                    <span style={{ color: '#047857', fontWeight: 700, fontSize: '0.65rem' }}>(Disc: -₹{discOnInst.toLocaleString('en-IN')})</span>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1945,14 +1992,14 @@ export const CustomerDirectoryView: React.FC<CustomerDirectoryViewProps> = ({
               <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.4rem' }}>
                 <button
                   type="button"
-                  onClick={() => setSettlementModal({ open: false, cust: null, payingNow: '', note: '', customPaidAt: '', isSubmitting: false })}
+                  onClick={() => setSettlementModal({ open: false, cust: null, payingNow: '', discount: '', note: '', customPaidAt: '', isSubmitting: false })}
                   style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={settlementModal.isSubmitting || parseIndianCurrencyNumber(settlementModal.payingNow) <= 0}
+                  disabled={settlementModal.isSubmitting || (parseIndianCurrencyNumber(settlementModal.payingNow) <= 0 && parseIndianCurrencyNumber(settlementModal.discount) <= 0)}
                   onClick={handleConfirmSettlement}
                   style={{
                     flex: 1.5,

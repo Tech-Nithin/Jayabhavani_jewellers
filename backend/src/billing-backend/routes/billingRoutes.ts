@@ -1170,11 +1170,12 @@ router.post('/presets', async (req: Request, res: Response) => {
 router.put('/invoices/:id/settlement', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { paid_now, note, bill_date, payment_date, custom_paid_at, payment_mode } = req.body;
+    const { paid_now, discount_amount, discount, note, bill_date, payment_date, custom_paid_at, payment_mode } = req.body;
 
     const pNow = Number(paid_now) || 0;
-    if (pNow <= 0) {
-      return res.status(400).json({ success: false, message: 'Invalid payment amount' });
+    const pDiscount = Math.max(0, Number(discount_amount ?? discount ?? 0));
+    if (pNow <= 0 && pDiscount <= 0) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid payment amount or discount' });
     }
 
     const resolvedDate = (custom_paid_at ? String(custom_paid_at).split('T')[0] : '') || bill_date || payment_date;
@@ -1183,6 +1184,7 @@ router.put('/invoices/:id/settlement', async (req: Request, res: Response) => {
     const result = await recordAdditionalPayment({
       billing_id: String(id),
       amount_paid: pNow,
+      discount_amount: pDiscount,
       payment_mode: payment_mode || 'CASH',
       notes: note,
       bill_date: resolvedDate,

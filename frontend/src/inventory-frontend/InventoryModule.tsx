@@ -690,7 +690,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
                 onClick={() => setView('loading-history')}
                 style={{
                   padding: '10px 18px',
-                  background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
+                  background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '12px',
@@ -700,7 +700,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  boxShadow: '0 4px 14px rgba(79, 70, 229, 0.3)',
+                  boxShadow: '0 4px 14px rgba(217, 119, 6, 0.3)',
                 }}
               >
                 <i className="fa-solid fa-clock-rotate-left"></i> {lang === 'TE' ? 'లోడింగ్ చరిత్ర' : 'Loading History'}

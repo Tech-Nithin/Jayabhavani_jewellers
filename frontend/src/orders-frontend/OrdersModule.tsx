@@ -719,6 +719,7 @@ export const OrdersModule: React.FC<{ lang?: Language }> = ({
             paymentType={(billPayload?.paymentType || (selectedOrder.due_amount === 0 ? 'FULL' : 'PARTIAL')) as any}
             advancePaidAmount={billPayload?.advancePaidAmount ?? selectedOrder.paid_amount ?? 0}
             balanceDueAmount={billPayload?.balanceDueAmount ?? selectedOrder.due_amount ?? 0}
+            discountAmount={Number(billPayload?.discount_amount ?? (selectedOrder as any)?.discount_amount ?? 0)}
             paymentHistory={billPayload?.payment_history || []}
             createdDate={selectedOrder.created_at}
             updatedDate={selectedOrder.updated_at}

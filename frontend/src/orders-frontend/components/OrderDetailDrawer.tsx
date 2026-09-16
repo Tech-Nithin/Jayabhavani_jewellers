@@ -397,6 +397,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack,
               paymentType={(billPayload.paymentType || (order.due_amount === 0 ? 'FULL' : 'PARTIAL')) as any}
               advancePaidAmount={billPayload.advancePaidAmount ?? order.paid_amount ?? 0}
               balanceDueAmount={billPayload.balanceDueAmount ?? order.due_amount ?? 0}
+              discountAmount={Number(billPayload.discount_amount ?? (order as any).discount_amount ?? 0)}
               paymentHistory={billPayload.payment_history || []}
               createdDate={order.created_at}
               updatedDate={order.updated_at}

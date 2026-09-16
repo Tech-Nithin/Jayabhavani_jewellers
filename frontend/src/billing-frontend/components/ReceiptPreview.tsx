@@ -28,6 +28,7 @@ interface ReceiptPreviewProps {
   paymentType?: 'FULL' | 'PARTIAL';
   advancePaidAmount?: number;
   balanceDueAmount?: number;
+  discountAmount?: number;
   paymentHistory?: any[];
   lang?: Language;
   onDownloadPNG?: () => void;
@@ -79,15 +80,15 @@ export const printReceipt80mm = (receiptId: string) => {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>80mm Thermal Print</title>
+        <title>90mm Thermal Print</title>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
           @page {
-            size: 80mm auto;
+            size: 90mm auto;
             margin: 0;
           }
           html, body {
-            width: 80mm;
+            width: 90mm;
             margin: 0;
             padding: 0;
             background: #ffffff;
@@ -96,9 +97,9 @@ export const printReceipt80mm = (receiptId: string) => {
             print-color-adjust: exact;
           }
           #${receiptId} {
-            width: 80mm !important;
-            min-width: 80mm !important;
-            max-width: 80mm !important;
+            width: 90mm !important;
+            min-width: 90mm !important;
+            max-width: 90mm !important;
             border: none !important;
             box-shadow: none !important;
             padding: 3mm !important;
@@ -249,6 +250,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   paymentType = 'FULL',
   advancePaidAmount,
   balanceDueAmount,
+  discountAmount,
   paymentHistory,
   lang = 'EN',
   onDownloadPNG,
@@ -721,6 +723,18 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                   );
                 })}
               </div>
+              {discountAmount && discountAmount > 0 ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 700, paddingTop: '3px', borderTop: '1px dashed #cbd5e1' }}>
+                    <span>{lang === 'TE' ? 'వస్తువుల మొత్తం (Amount Total)' : 'Amount Total'}:</span>
+                    <span>₹{totalSellValue.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#dc2626', fontWeight: 800, paddingBottom: '3px' }}>
+                    <span>{lang === 'TE' ? 'తగ్గింపు (Discount)' : 'Discount'}:</span>
+                    <span>- ₹{discountAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                </>
+              ) : null}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
                   <div>{t.grandTotal}</div>
@@ -728,7 +742,7 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     {t.customerShouldPay}
                   </div>
                 </div>
-                <div>₹{totalSellValue.toLocaleString('en-IN')}</div>
+                <div>₹{Math.max(0, totalSellValue - (discountAmount || 0)).toLocaleString('en-IN')}</div>
               </div>
             </>
           ) : (
@@ -741,6 +755,12 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                 <span>{t.lessExchangeCredit}</span>
                 <span>- ₹{totalBuyCredit.toLocaleString('en-IN')}</span>
               </div>
+              {discountAmount && discountAmount > 0 && totalSellValue >= totalBuyCredit ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 800, color: '#dc2626' }}>
+                  <span>{lang === 'TE' ? 'తగ్గింపు (Discount)' : 'Discount'}:</span>
+                  <span>- ₹{discountAmount.toLocaleString('en-IN')}</span>
+                </div>
+              ) : null}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', paddingTop: '6px', borderTop: '1px solid #94a3b8', marginTop: '4px' }}>
                 <div>
                   <div>{t.grandTotal}</div>
@@ -748,7 +768,14 @@ export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                     {totalBuyCredit > totalSellValue ? t.needToPayCustomer : t.customerShouldPay}
                   </div>
                 </div>
-                <div style={{ fontSize: '1rem', fontWeight: 900 }}>₹{Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}</div>
+                <div style={{ fontSize: '1rem', fontWeight: 900 }}>
+                  ₹{(() => {
+                    const raw = Math.abs(totalSellValue - totalBuyCredit);
+                    const isCustPay = totalSellValue >= totalBuyCredit;
+                    const final = isCustPay ? Math.max(0, raw - (discountAmount || 0)) : raw;
+                    return final.toLocaleString('en-IN');
+                  })()}
+                </div>
               </div>
             </>
           )}

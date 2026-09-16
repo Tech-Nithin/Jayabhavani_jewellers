@@ -12,8 +12,8 @@ interface StockMovementProps {
 }
 
 export const StockMovementView: React.FC<StockMovementProps> = ({
-  stockViewMode,
-  setStockViewMode,
+  // stockViewMode,
+  // setStockViewMode,
   metalCategoryFilter,
   setMetalCategoryFilter,
   eodReorderList,
@@ -185,13 +185,13 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
     };
   });
 
-  const finalAvailableStockWt = runningStockWt;
+  // const finalAvailableStockWt = runningStockWt;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Main Card Container */}
       <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-        
+
         {/* Header Bar & Metal Filter Controls */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
@@ -271,51 +271,6 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 <i className="fa-solid fa-coins"></i> Silver
               </button>
             </div>
-
-            {/* Time Filter (ALL | TODAY) */}
-            <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-              <button
-                type="button"
-                onClick={() => setStockViewMode('ALL')}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: stockViewMode === 'ALL' ? '#0284c7' : 'transparent',
-                  color: stockViewMode === 'ALL' ? '#ffffff' : '#64748b',
-                  fontWeight: 800,
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <i className="fa-solid fa-layer-group"></i> Total Stock
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStockViewMode('TODAY')}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: stockViewMode === 'TODAY' ? '#166534' : 'transparent',
-                  color: stockViewMode === 'TODAY' ? '#ffffff' : '#64748b',
-                  fontWeight: 800,
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <i className="fa-solid fa-calendar-day"></i> Today Added
-              </button>
-            </div>
           </div>
         </div>
 
@@ -333,6 +288,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 <th style={{ padding: '14px 12px' }}>Transaction Type</th>
                 <th style={{ padding: '14px 12px' }}>Flow</th>
                 <th style={{ padding: '14px 12px' }}>Metal</th>
+                <th style={{ padding: '14px 12px' }}>Weight (g)</th>
                 <th style={{ padding: '14px 12px' }}>Item & Details</th>
               </tr>
             </thead>
@@ -340,7 +296,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
               {/* Dynamic Accordion Transactions Rows (Descending Order - Most Recent First) */}
               {processedStockRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                  <td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                     No {metalCategoryFilter === 'ALL' ? 'Gold or Silver' : metalCategoryFilter} weight movement transactions recorded today.
                   </td>
                 </tr>
@@ -349,14 +305,14 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                   const txType = entry.rawType;
                   const createdStr = entry.created_at
                     ? new Date(entry.created_at).toLocaleString('en-IN', {
-                        timeZone: 'Asia/Kolkata',
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true,
-                      })
+                      timeZone: 'Asia/Kolkata',
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })
                     : entry.time || '-';
                   const itemMetal = (entry.metalCategory || 'GOLD').toUpperCase();
                   const isExpanded = expandedRowId === entry.id;
@@ -412,6 +368,15 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                             {itemMetal.includes('SILVER') ? '🥈 SILVER' : '🥇 GOLD'}
                           </span>
                         </td>
+                        <td style={{ padding: '14px 12px', whiteSpace: 'nowrap' }}>
+                          <strong style={{
+                            color: entry.isInflow ? '#15803d' : '#dc2626',
+                            fontWeight: 800,
+                            fontSize: '0.88rem',
+                          }}>
+                            {entry.isInflow ? '+' : '-'}{Number(entry.weight_grams || 0).toFixed(3)} g
+                          </strong>
+                        </td>
                         <td style={{ padding: '14px 12px', color: '#334155' }}>
                           <div style={{ fontWeight: 700 }}>{entry.productName || '-'}</div>
                         </td>
@@ -420,7 +385,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                       {/* Smooth Accordion Expanded Detail Dropdown */}
                       {isExpanded && (
                         <tr style={{ background: '#f0f9ff', borderBottom: '2px solid #bae6fd' }}>
-                          <td colSpan={8} style={{ padding: '12px 16px' }}>
+                          <td colSpan={9} style={{ padding: '12px 16px' }}>
                             <div style={{
                               background: '#ffffff',
                               borderRadius: '12px',
@@ -503,9 +468,9 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 <td colSpan={3} style={{ padding: '12px', textAlign: 'right', fontSize: '0.82rem' }}>
                   <span style={{ color: '#15803d', marginRight: '10px' }}>+{totalMetalIn.toFixed(3)} g (⬇ IN)</span>
                   <span style={{ color: '#b91c1c', marginRight: '10px' }}>-{totalMetalOut.toFixed(3)} g (⬆ OUT)</span>
-                  <span style={{ fontWeight: 900, color: '#b45309', background: '#fffbeb', padding: '3px 10px', borderRadius: '6px', border: '1px solid #fde68a' }}>
+                  {/* <span style={{ fontWeight: 900, color: '#b45309', background: '#fffbeb', padding: '3px 10px', borderRadius: '6px', border: '1px solid #fde68a' }}>
                     Final Stock: {finalAvailableStockWt.toFixed(3)} g
-                  </span>
+                  </span> */}
                 </td>
               </tr>
             </tfoot>
@@ -513,7 +478,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
         </div>
 
         {/* EOD Stock Reconciliation Banner Card */}
-        <div style={{ marginTop: '1.25rem', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '14px', padding: '1.25rem', color: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        {/* <div style={{ marginTop: '1.25rem', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '14px', padding: '1.25rem', color: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700 }}>📦 SHOWCASE {metalCategoryFilter === 'ALL' ? 'ALL METALS' : metalCategoryFilter} STOCK RECONCILIATION</div>
             <div style={{ fontSize: '0.82rem', color: '#e2e8f0', marginTop: '4px' }}>
@@ -527,7 +492,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
               {finalAvailableStockWt.toFixed(3)} g
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* EOD Restock Reorder Alert Banner */}
         {eodReorderList.length > 0 && (

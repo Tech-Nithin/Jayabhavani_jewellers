@@ -74,9 +74,10 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [successModal, setSuccessModal] = useState<{ open: boolean; message: string; invId: string } | null>(null);
 
-  // Payment Breakdown State (Full vs Partial Payment)
+  // Payment Breakdown State (Full vs Partial Payment & Discount)
   const [paymentType, setPaymentType] = useState<'FULL' | 'PARTIAL'>('FULL');
   const [advancePaidAmount, setAdvancePaidAmount] = useState<string>('');
+  const [discountAmount, setDiscountAmount] = useState<string>('');
   const getInitialItemsForMode = (m: 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER'): BillItem[] => {
     if (m === 'BUY') {
       return [
@@ -217,6 +218,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     setShowValidationErrors(false);
     setPaymentType('FULL');
     setAdvancePaidAmount('');
+    setDiscountAmount('');
     setEditingInvoiceId(null);
 
     setModeItemsMap((prev) => ({
@@ -316,10 +318,10 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
     let result: BillCalcResult;
     switch (mode) {
-      case 'BUY':      result = calculateBuyItems(items, rates);      break;
-      case 'EXCHANGE': result = calculateExchangeItems(items, rates);  break;
-      case 'ORDER':    result = calculateOrderItems(items, rates);     break;
-      default:         result = calculateSellItems(items, rates);      break;
+      case 'BUY': result = calculateBuyItems(items, rates); break;
+      case 'EXCHANGE': result = calculateExchangeItems(items, rates); break;
+      case 'ORDER': result = calculateOrderItems(items, rates); break;
+      default: result = calculateSellItems(items, rates); break;
     }
 
     setCalcResults(result);
@@ -658,7 +660,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
       const isNeedToPayCustomer = mode === 'BUY' || totalBuyCredit > totalSellValue;
       const effectivePaymentType = isNeedToPayCustomer ? 'FULL' : paymentType;
-      const grandTotVal = mode === 'BUY' ? totalBuyCredit : mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+      const rawProductTotal = mode === 'BUY' ? totalBuyCredit : mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+      const discountVal = isNeedToPayCustomer ? 0 : Math.min(rawProductTotal, parseIndianCurrencyNumber(discountAmount));
+      const grandTotVal = Math.max(0, rawProductTotal - discountVal);
       const paidVal = effectivePaymentType === 'FULL' ? grandTotVal : Math.min(grandTotVal, parseIndianCurrencyNumber(advancePaidAmount));
       const dueVal = isNeedToPayCustomer ? 0 : Math.max(0, grandTotVal - paidVal);
 
@@ -681,6 +685,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         items: enrichedItems,
         totalSellValue,
         totalBuyCredit,
+        product_total: rawProductTotal,
+        discount_amount: discountVal,
         netPayable,
         paymentType,
         advancePaidAmount: paidVal,
@@ -702,7 +708,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         const totalDedW = orderItemsList.reduce((acc, i) => acc + (Number(i.deduction_weight_grams) || 0), 0);
         const totalNetW = Math.max(0, totalGrossW - totalDedW);
 
-        const grandTotalVal = Math.abs(totalSellValue - totalBuyCredit);
+        const orderRawTotal = Math.abs(totalSellValue - totalBuyCredit);
+        const orderDiscountVal = Math.min(orderRawTotal, parseIndianCurrencyNumber(discountAmount));
+        const grandTotalVal = Math.max(0, orderRawTotal - orderDiscountVal);
         const effPaid = paymentType === 'FULL' ? grandTotalVal : Math.min(grandTotalVal, parseIndianCurrencyNumber(advancePaidAmount));
         const effDue = Math.max(0, grandTotalVal - effPaid);
 
@@ -714,9 +722,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           mode: 'ORDER',
           transaction_type: 'ORDER',
           bill_date: billDate,
+          product_total: orderRawTotal,
+          discount_amount: orderDiscountVal,
           paymentType,
           advancePaidAmount: effPaid,
           balanceDueAmount: effDue,
+          grandTotal: grandTotalVal,
           flow_type: flowTypeStr,
           shop_pays_customer: isShopPayingCustomer,
         };
@@ -738,6 +749,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           wastage_percentage: Number(primaryItem?.wastage_percent) || 0,
           total_sell_value: totalSellValue,
           total_buy_credit: totalBuyCredit,
+          discount_amount: orderDiscountVal,
           total_amount: grandTotalVal,
           paid_amount: effPaid,
           due_amount: effDue,
@@ -804,6 +816,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
           purity_percentage: firstItem?.purity_percentage,
           making_charges_per_gram: firstItem?.making_charges_per_gram,
           gst_percent: firstItem?.gst_percent,
+          discount_amount: discountVal,
           paid_amount: paidVal,
           due_amount: dueVal,
           bill_date: billDate,
@@ -843,6 +856,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     setCustomerPhone('');
     setCustomerAddress('');
     setAdvancePaidAmount('');
+    setDiscountAmount('');
     setPaymentType('FULL');
     setBillDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
     setEditingInvoiceId(null);
@@ -895,6 +909,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
     // Set payment details
     const dueAmount = Number(inv?.due_amount || inv?.receipt_json_data?.dueAmount || 0);
     const paidAmount = Number(inv?.paid_amount || inv?.receipt_json_data?.paidAmount || 0);
+    const discountVal = Number(inv?.discount_amount || inv?.receipt_json_data?.discount_amount || 0);
+    setDiscountAmount(discountVal > 0 ? formatIndianCurrencyInput(String(discountVal)) : '');
     if (dueAmount > 0 || (inv?.receipt_json_data?.paymentType === 'PARTIAL')) {
       setPaymentType('PARTIAL');
       setAdvancePaidAmount(paidAmount > 0 ? formatIndianCurrencyInput(String(paidAmount)) : '');
@@ -1469,12 +1485,14 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   />
                 )}
 
-                {/* Payment Breakdown Box: Full Payment vs Partial Payment (Only shown when customer owes money to store) */}
+                {/* Payment Breakdown Box: Full Payment vs Partial Payment & Discount (Only shown when customer owes money to store) */}
                 {(() => {
                   const isCustomerPaying = mode !== 'BUY' && (mode === 'ORDER' ? totalSellValue >= totalBuyCredit : totalSellValue > totalBuyCredit);
                   if (!isCustomerPaying) return null;
 
-                  const grandTotalAmount = mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+                  const rawProductTotal = mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+                  const discountVal = Math.min(rawProductTotal, parseIndianCurrencyNumber(discountAmount));
+                  const grandTotalAmount = Math.max(0, rawProductTotal - discountVal);
                   const rawAdvanceNum = parseIndianCurrencyNumber(advancePaidAmount);
                   const isExceeded = paymentType === 'PARTIAL' && rawAdvanceNum > grandTotalAmount && grandTotalAmount > 0;
                   const calculatedPaidAmount = paymentType === 'FULL' ? grandTotalAmount : Math.min(grandTotalAmount, rawAdvanceNum);
@@ -1482,7 +1500,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
                   return (
                     <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '0.85rem 1.1rem', marginBottom: '1rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: paymentType === 'PARTIAL' ? '0.75rem' : '0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <i className="fa-solid fa-credit-card" style={{ color: '#d97706', fontSize: '0.9rem' }}></i>
                           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a' }}>
@@ -1535,48 +1553,75 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         </div>
                       </div>
 
-                      {paymentType === 'PARTIAL' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', paddingTop: '0.65rem', borderTop: '1px dashed #cbd5e1' }}>
-                          <div>
-                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
-                              {lang === 'TE' ? 'ఇప్పుడు ఎంత చెల్లిస్తున్నారు? (ఆడ్వాన్స్ ₹)' : 'How much are they paying? (Advance ₹)'}
-                            </label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="e.g. 1,00,000"
-                              onFocus={(e) => e.target.select()}
-                              value={advancePaidAmount}
-                              onChange={(e) => setAdvancePaidAmount(formatIndianCurrencyInput(e.target.value))}
-                              style={{
-                                width: '100%',
-                                padding: '0.5rem 0.75rem',
-                                borderRadius: '6px',
-                                border: isExceeded ? '1.5px solid #ef4444' : '1.5px solid #d97706',
-                                fontSize: '0.88rem',
-                                fontWeight: 800,
-                                color: isExceeded ? '#dc2626' : '#b45309',
-                                background: isExceeded ? '#fef2f2' : '#fffbeb',
-                              }}
-                            />
-                            {isExceeded && (
-                              <div style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <i className="fa-solid fa-circle-exclamation"></i>
-                                {lang === 'TE' ? 'మోతాదు మించింది (Value Exceeded)' : 'Value Exceeded'}
-                              </div>
-                            )}
-                          </div>
-
-                          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#991b1b', textTransform: 'uppercase' }}>
-                              {lang === 'TE' ? 'ఇంకా బాకీ బకాయి (Balance Due)' : 'Balance Still Due'}
-                            </span>
-                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#dc2626', marginTop: '1px' }}>
-                              ₹{calculatedDueAmount.toLocaleString('en-IN')}
-                            </div>
-                          </div>
+                      {/* Payment Inputs Grid: Discount & Advance */}
+                      <div style={{ display: 'grid', gridTemplateColumns: paymentType === 'PARTIAL' ? 'repeat(auto-fit, minmax(180px, 1fr))' : '1fr', gap: '0.85rem', paddingTop: '0.65rem', borderTop: '1px dashed #cbd5e1' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                            {lang === 'TE' ? 'డిస్కౌంట్ / తగ్గింపు (Discount ₹)' : 'Discount (₹)'}
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="e.g. 500 (Optional)"
+                            onFocus={(e) => e.target.select()}
+                            value={discountAmount}
+                            onChange={(e) => setDiscountAmount(formatIndianCurrencyInput(e.target.value))}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem 0.75rem',
+                              borderRadius: '6px',
+                              border: '1.5px solid #10b983ff',
+                              fontSize: '0.88rem',
+                              fontWeight: 800,
+                              color: '#047840ff',
+                              background: '#ecfdf5',
+                            }}
+                          />
                         </div>
-                      )}
+
+                        {paymentType === 'PARTIAL' && (
+                          <>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                                {lang === 'TE' ? 'ఇప్పుడు ఎంత చెల్లిస్తున్నారు? (ఆడ్వాన్స్ ₹)' : 'How much are they paying? (Advance ₹)'}
+                              </label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="e.g. 1,00,000"
+                                onFocus={(e) => e.target.select()}
+                                value={advancePaidAmount}
+                                onChange={(e) => setAdvancePaidAmount(formatIndianCurrencyInput(e.target.value))}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.5rem 0.75rem',
+                                  borderRadius: '6px',
+                                  border: isExceeded ? '1.5px solid #ef4444' : '1.5px solid #d97706',
+                                  fontSize: '0.88rem',
+                                  fontWeight: 800,
+                                  color: isExceeded ? '#dc2626' : '#b45309',
+                                  background: isExceeded ? '#fef2f2' : '#fffbeb',
+                                }}
+                              />
+                              {isExceeded && (
+                                <div style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <i className="fa-solid fa-circle-exclamation"></i>
+                                  {lang === 'TE' ? 'మోతాదు మించింది (Value Exceeded)' : 'Value Exceeded'}
+                                </div>
+                              )}
+                            </div>
+
+                            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#991b1b', textTransform: 'uppercase' }}>
+                                {lang === 'TE' ? 'ఇంకా బాకీ బకాయి (Balance Due)' : 'Balance Still Due'}
+                              </span>
+                              <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#dc2626', marginTop: '1px' }}>
+                                ₹{calculatedDueAmount.toLocaleString('en-IN')}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })()}
@@ -1590,10 +1635,18 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>₹{totalBuyCredit.toLocaleString('en-IN')}</div>
                       </div>
                     ) : mode === 'SELL' ? (
-                      <div>
-                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossSellingTotal}</span>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>₹{totalSellValue.toLocaleString('en-IN')}</div>
-                      </div>
+                      <>
+                        <div>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.grossSellingTotal}</span>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>₹{totalSellValue.toLocaleString('en-IN')}</div>
+                        </div>
+                        {parseIndianCurrencyNumber(discountAmount) > 0 && (
+                          <div>
+                            <span style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 700 }}>{lang === 'TE' ? 'డిస్కౌంట్ (తగ్గింపు)' : 'Discount'}</span>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#dc2626' }}>- ₹{parseIndianCurrencyNumber(discountAmount).toLocaleString('en-IN')}</div>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <>
                         <div>
@@ -1604,6 +1657,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                           <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.lessItemExchange}</span>
                           <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0369a1' }}>- ₹{totalBuyCredit.toLocaleString('en-IN')}</div>
                         </div>
+                        {parseIndianCurrencyNumber(discountAmount) > 0 && (
+                          <div>
+                            <span style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 700 }}>{lang === 'TE' ? 'డిస్కౌంట్ (తగ్గింపు)' : 'Discount'}</span>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#dc2626' }}>- ₹{parseIndianCurrencyNumber(discountAmount).toLocaleString('en-IN')}</div>
+                          </div>
+                        )}
                       </>
                     )}
 
@@ -1613,7 +1672,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         {mode === 'BUY' || totalBuyCredit > totalSellValue ? t.needToPayCustomerTag : t.customerPaidTag}
                       </span>
                       <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
-                        ₹{mode === 'BUY' ? totalBuyCredit.toLocaleString('en-IN') : mode === 'SELL' ? totalSellValue.toLocaleString('en-IN') : Math.abs(totalSellValue - totalBuyCredit).toLocaleString('en-IN')}
+                        ₹{(() => {
+                          if (mode === 'BUY') return totalBuyCredit.toLocaleString('en-IN');
+                          const rawTot = mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+                          const disc = Math.min(rawTot, parseIndianCurrencyNumber(discountAmount));
+                          return Math.max(0, rawTot - disc).toLocaleString('en-IN');
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -1676,7 +1740,9 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
             {/* RIGHT GRID (30%): Real-Time Retail Thermal Receipt Preview */}
             {(() => {
-              const grandTot = mode === 'BUY' ? totalBuyCredit : mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+              const rawTot = mode === 'BUY' ? totalBuyCredit : mode === 'SELL' ? totalSellValue : Math.abs(totalSellValue - totalBuyCredit);
+              const disc = mode === 'BUY' ? 0 : Math.min(rawTot, parseIndianCurrencyNumber(discountAmount));
+              const grandTot = Math.max(0, rawTot - disc);
               const paidVal = paymentType === 'FULL' ? grandTot : Math.min(grandTot, parseIndianCurrencyNumber(advancePaidAmount));
               const dueVal = Math.max(0, grandTot - paidVal);
 
@@ -1694,6 +1760,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                   itemDetails={calcResults.itemDetails}
                   totalSellValue={totalSellValue}
                   totalBuyCredit={totalBuyCredit}
+                  discountAmount={disc}
                   netPayable={netPayable}
                   createdDate={billDate ? `${billDate}T${new Date().toISOString().split('T')[1] || '12:00:00.000Z'}` : undefined}
                   billType={activeBillType}

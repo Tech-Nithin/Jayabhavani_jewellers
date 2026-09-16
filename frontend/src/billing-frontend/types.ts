@@ -54,7 +54,7 @@ export interface InvoiceRecord {
   customer_name: string;
   customer_phone?: string;
   customer_address?: string;
-  transaction_type: 'SELL' | 'BUY' | 'EXCHANGE';
+  transaction_type: 'SELL' | 'BUY' | 'EXCHANGE' | 'ORDER';
   metal_type: string;
   product_name: string;
   weight_grams: number;
@@ -69,6 +69,8 @@ export interface InvoiceRecord {
   purity_percentage?: number;
   pure_metal_weight?: number;
   gst_percent?: number;
+  total_amount?: number;
+  discount_amount?: number;
   final_amount: number;
   paid_amount?: number;
   due_amount?: number;
@@ -78,8 +80,12 @@ export interface InvoiceRecord {
   silver_sell_rate_snapshot?: number;
   return_purity_percentage?: number;
   return_pure_gold?: number;
+  billing_id?: number | string;
+  customer_billing_uuid?: string;
+  bill_date?: string;
   receipt_json_data?: any;
   image_url?: string;
+  notes?: string;
   created_at: string;
   updated_at?: string;
 }

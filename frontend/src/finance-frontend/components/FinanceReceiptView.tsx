@@ -73,15 +73,15 @@ export const printFinanceReceipt80mm = (receiptId: string) => {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>80mm Finance Thermal Print</title>
+        <title>90mm Finance Thermal Print</title>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
           @page {
-            size: 80mm auto;
+            size: 90mm auto;
             margin: 0;
           }
           html, body {
-            width: 80mm;
+            width: 90mm;
             margin: 0;
             padding: 0;
             background: #ffffff;
@@ -90,9 +90,9 @@ export const printFinanceReceipt80mm = (receiptId: string) => {
             print-color-adjust: exact;
           }
           #${receiptId} {
-            width: 80mm !important;
-            min-width: 80mm !important;
-            max-width: 80mm !important;
+            width: 90mm !important;
+            min-width: 90mm !important;
+            max-width: 90mm !important;
             border: none !important;
             box-shadow: none !important;
             padding: 3mm !important;

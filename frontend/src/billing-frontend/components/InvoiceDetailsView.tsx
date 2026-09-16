@@ -198,6 +198,7 @@ export const InvoiceDetailsView: React.FC<InvoiceDetailsViewProps> = ({
           paymentType={(storedPayload?.paymentType || ((inv?.due_amount || 0) === 0 ? 'FULL' : 'PARTIAL')) as any}
           advancePaidAmount={storedPayload?.advancePaidAmount ?? inv?.paid_amount ?? (mode === 'BUY' ? 0 : netPayable)}
           balanceDueAmount={storedPayload?.balanceDueAmount ?? inv?.due_amount ?? 0}
+          discountAmount={Number(storedPayload?.discount_amount ?? (inv as any)?.discount_amount ?? 0)}
           paymentHistory={storedPayload?.payment_history || []}
           createdDate={createdAtDate}
           updatedDate={updatedAtDate}

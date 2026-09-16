@@ -512,7 +512,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
     { id: 'buy_conversion', label: '⚖️ Buy Metals Conversion' },
     { id: 'stock', label: '📦 Metal In & Outs' },
     { id: 'cash', label: '💵 Cash In & Outs' },
-    { id: 'scrap', label: '⚖️ Buy Metal records' },
+    // { id: 'scrap', label: '⚖️ Buy Metal records' },
     { id: 'udhaari', label: '🤝 Workers Transactions' },
     { id: 'udhaari_dues', label: '📋 Customer Dues' },
   ];

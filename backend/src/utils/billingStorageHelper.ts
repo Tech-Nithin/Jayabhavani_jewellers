@@ -10,6 +10,8 @@ export interface BillingStorageInput {
   customer_phone?: string;
   customer_address?: string;
   total_amount?: number;
+  discount_amount?: number;
+  discount?: number;
   paid_amount?: number;
   due_amount?: number;
   payment_status?: string;
@@ -81,6 +83,15 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       0
     );
 
+    const discountAmount = Number(
+      input.discount_amount ??
+      input.discount ??
+      receiptData.discount_amount ??
+      receiptData.discountAmount ??
+      receiptData.discount ??
+      0
+    );
+
     const paidAmount = Number(
       input.paid_amount ??
       receiptData.paid_amount ??
@@ -110,6 +121,7 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
       customer_phone: customerPhone || null,
       customer_address: customerAddress || null,
       total_amount: totalAmount,
+      discount_amount: discountAmount,
       paid_amount: paidAmount,
       due_amount: dueAmount,
       payment_status: paymentStatus,
@@ -451,6 +463,7 @@ export async function storeBillingTransaction(input: BillingStorageInput): Promi
 export async function recordAdditionalPayment(params: {
   billing_id: string;
   amount_paid: number;
+  discount_amount?: number;
   remaining_due?: number;
   total_amount?: number;
   payment_mode?: 'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER';
@@ -468,10 +481,12 @@ export async function recordAdditionalPayment(params: {
   error?: string;
 }> {
   try {
-    const { billing_id, amount_paid, remaining_due, total_amount, payment_mode = 'CASH', notes, bill_date, payment_date, custom_paid_at } = params;
+    const { billing_id, amount_paid, discount_amount = 0, remaining_due, total_amount, payment_mode = 'CASH', notes, bill_date, payment_date, custom_paid_at } = params;
     const amount = Number(amount_paid);
-    if (amount <= 0) {
-      return { success: false, error: 'Payment amount must be greater than 0' };
+    const installmentDiscount = Math.max(0, Number(discount_amount || 0));
+
+    if (amount <= 0 && installmentDiscount <= 0) {
+      return { success: false, error: 'Payment amount or discount must be greater than 0' };
     }
 
     const rawDate = custom_paid_at ? String(custom_paid_at).split('T')[0] : (bill_date || payment_date);
@@ -502,56 +517,51 @@ export async function recordAdditionalPayment(params: {
     const nextInstallmentNum = payments && payments.length > 0 ? (payments[0].installment_number + 1) : 1;
 
     // Calculate new amounts accurately
-    const billJson = billingRow.bill_json || {};
-    const effectiveTotal = Number(
-      total_amount ||
-      billJson.grandTotal ||
-      billJson.netPayable ||
-      billJson.totalSellValue ||
-      billJson.total_amount ||
-      billingRow.total_amount ||
-      (Number(billingRow.paid_amount || 0) + Number(billingRow.due_amount || 0)) ||
-      0
-    );
-
+    const currentDue = Number(billingRow.due_amount || 0);
     const newPaidAmount = Number((Number(billingRow.paid_amount || 0) + amount).toFixed(2));
     const newDueAmount = remaining_due !== undefined
       ? Math.max(0, Number(Number(remaining_due).toFixed(2)))
-      : Math.max(0, Number((effectiveTotal - newPaidAmount).toFixed(2)));
+      : Math.max(0, Number((currentDue - amount - installmentDiscount).toFixed(2)));
     const newStatus = newDueAmount <= 0.01 ? 'PAID' : 'PARTIAL';
+    const totalAccumulatedDiscount = Number((Number(billingRow.discount_amount || 0) + installmentDiscount).toFixed(2));
+    const newTotalAmount = Number((Number(billingRow.total_amount || 0) - installmentDiscount).toFixed(2));
 
-    // 3. Insert into billing_payment_history with bill_date, payment_status, and remaining_due
+    // 3. Insert into billing_payment_history with bill_date, payment_status, discount_amount, and remaining_due
     const { error: payErr } = await supabase
       .from('billing_payment_history')
       .insert([{
         customer_billing_uuid: billingRow.customer_billing_uuid,
         installment_number: nextInstallmentNum,
         amount_paid: amount,
+        discount_amount: installmentDiscount,
         payment_mode: payment_mode,
         payment_status: newDueAmount <= 0.01 ? 'FULL' : 'PARTIAL',
         remaining_due: newDueAmount,
         bill_date: pDate,
-        notes: notes || `Installment #${nextInstallmentNum} for ${billing_id}`,
+        notes: notes || `Installment #${nextInstallmentNum}${installmentDiscount > 0 ? ` (Discount: ₹${installmentDiscount})` : ''} for ${billing_id}`,
         created_at: paidTimestamp,
       }]);
 
     if (payErr) {
-      return { success: false, error: payErr.message };
+      console.warn('⚠️ Error inserting into billing_payment_history:', payErr.message);
     }
 
-    // 4. Update customer_billing paid_amount, due_amount, payment_status & bill_json
+    // 4. Update customer_billing paid_amount, due_amount, payment_status, discount_amount & bill_json
     const existingBillJson = billingRow.bill_json || {};
     const existingHist = Array.isArray(existingBillJson.payment_history) ? [...existingBillJson.payment_history] : [];
     existingHist.push({
       installment: nextInstallmentNum,
       amount: amount,
+      discount: installmentDiscount,
       paid_at: paidTimestamp,
-      note: notes || `Installment #${nextInstallmentNum}`,
+      note: notes || `Installment #${nextInstallmentNum}${installmentDiscount > 0 ? ` (Discount: ₹${installmentDiscount})` : ''}`,
     });
 
     const updatedBillJson = {
       ...existingBillJson,
-      grandTotal: effectiveTotal || existingBillJson.grandTotal,
+      total_amount: newTotalAmount,
+      grandTotal: newTotalAmount,
+      discount_amount: totalAccumulatedDiscount,
       advancePaidAmount: newPaidAmount,
       paid_amount: newPaidAmount,
       balanceDueAmount: newDueAmount,
@@ -561,15 +571,14 @@ export async function recordAdditionalPayment(params: {
     };
 
     const updatePayload: any = {
+      total_amount: newTotalAmount,
+      discount_amount: totalAccumulatedDiscount,
       paid_amount: newPaidAmount,
       due_amount: newDueAmount,
       payment_status: newStatus,
       bill_json: updatedBillJson,
       updated_at: getNowISTISO(),
     };
-    if (effectiveTotal > 0 && Number(billingRow.total_amount || 0) < effectiveTotal) {
-      updatePayload.total_amount = effectiveTotal;
-    }
 
     const { data: updatedBilling, error: updateErr } = await supabase
       .from('customer_billing')
