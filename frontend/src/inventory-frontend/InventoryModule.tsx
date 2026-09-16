@@ -16,6 +16,7 @@ import { CashHistoryTableView } from './components/CashHistoryTableView';
 import { AddEditProductModal } from './components/AddEditProductModal';
 import { LoadStockView } from './components/LoadStockView';
 import { LoadCashView } from './components/LoadCashView';
+import { LoadingHistoryView } from './components/LoadingHistoryView';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { FullImagePreviewModal } from './components/FullImagePreviewModal';
 
@@ -28,8 +29,8 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(globalSearch);
 
-  // View: 'list' = main inventory, 'add' = full-screen add form, 'edit' = full-screen edit form, 'load' = load stock, 'load-cash' = load cash
-  const [view, setView] = useState<'list' | 'add' | 'edit' | 'load' | 'load-cash'>('list');
+  // View: 'list' = main inventory, 'add' = full-screen add form, 'edit' = full-screen edit form, 'load' = load stock, 'load-cash' = load cash, 'loading-history' = unified loading ledger
+  const [view, setView] = useState<'list' | 'add' | 'edit' | 'load' | 'load-cash' | 'loading-history'>('list');
   const [preSelectedLoadItemId, setPreSelectedLoadItemId] = useState<string>('');
   // Layout Mode: 'grid' = visual cards, 'table' = category accordion list
   const [layoutMode, setLayoutMode] = useState<'grid' | 'table'>('grid');
@@ -486,8 +487,15 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
   return (
     <div className="admin-dashboard-root" style={{ color: '#181310', fontFamily: "'Inter', 'Source Sans 3', 'DM Sans', sans-serif" }}>
 
-      {/* -- LOAD CASH VIEW (Full Screen) -- */}
-      {view === 'load-cash' ? (
+      {/* -- LOADING HISTORY VIEW (Full Width) -- */}
+      {view === 'loading-history' ? (
+        <div style={{ width: '100%', maxWidth: '100%', margin: '0', padding: '0 4px' }}>
+          <LoadingHistoryView
+            onBack={closeFormView}
+            lang={lang}
+          />
+        </div>
+      ) : view === 'load-cash' ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
             <button
@@ -499,7 +507,7 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
             <div>
               <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
                 <i className="fa-solid fa-money-bill-wave" style={{ color: '#16a34a', marginRight: '8px' }}></i>
-                {lang === 'TE' ? 'నగదు లోడ్ చేయండి' : 'Load Cash into Shop Drawer'}
+                {lang === 'TE' ? 'నగదు లోడ్ & చరిత్ర' : 'Load Cash & History'}
               </h2>
               <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
                 Deposit cash into shop drawer and view historical daily cash flow records.
@@ -675,6 +683,27 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
                 }}
               >
                 <i className="fa-solid fa-money-bill-wave"></i> {lang === 'TE' ? 'నగదు లోడ్' : 'Load Cash'}
+              </button>
+
+              <button
+                className="inventory-loading-history-btn"
+                onClick={() => setView('loading-history')}
+                style={{
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 14px rgba(79, 70, 229, 0.3)',
+                }}
+              >
+                <i className="fa-solid fa-clock-rotate-left"></i> {lang === 'TE' ? 'లోడింగ్ చరిత్ర' : 'Loading History'}
               </button>
             </div>
           </div>

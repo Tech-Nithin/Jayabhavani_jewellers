@@ -735,5 +735,187 @@ router.get('/closing-record/:date', async (req: Request, res: Response) => {
   }
 });
 
+// ==============================================================================
+// UNIFIED LOADING HISTORY (Gold Stock, Silver Stock, and Cash Drawer Loadings)
+// ==============================================================================
+
+// GET /api/inventory/loading-history - Fetch all loading history for Gold, Silver, and Cash
+router.get('/loading-history', async (req: Request, res: Response) => {
+  try {
+    const { type, date, startDate, endDate } = req.query;
+
+    // 1. Fetch current live inventory & cash balances for KPI cards
+    const { data: allProducts } = await supabase
+      .from('inventory_products')
+      .select('item_type, current_stock_weight, weight_from_grams');
+
+    let currentGoldStock = 0;
+    let currentSilverStock = 0;
+
+    (allProducts || []).forEach((p) => {
+      const wt = Number(p.current_stock_weight ?? p.weight_from_grams ?? 0);
+      const mType = (p.item_type || 'GOLD').toUpperCase();
+      if (mType === 'SILVER') {
+        currentSilverStock += wt;
+      } else {
+        currentGoldStock += wt;
+      }
+    });
+
+    const { getTodayCashStatus } = await import('../../utils/cashLedgerHelper');
+    const cashStatus = await getTodayCashStatus();
+    const currentCashBalance = Number(cashStatus.current_cash || 0);
+
+    // 2. Fetch Stock Loading Logs from inventory_stock_logs
+    const { data: rawStockLogs, error: stockErr } = await supabase
+      .from('inventory_stock_logs')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (stockErr) {
+      console.warn('⚠️ Supabase fetch stock logs warning:', stockErr.message);
+    }
+
+    // Filter stock logs for loading/restocking/opening events
+    const stockLoadings = (rawStockLogs || [])
+      .filter((log) => {
+        const noteStr = (log.notes || '').toLowerCase();
+        const prevWt = Number(log.previous_stock_weight || 0);
+        const newWt = Number(log.new_stock_weight || 0);
+        const isRestock = noteStr.includes('restock') || noteStr.includes('loaded') || noteStr.includes('load') || noteStr.includes('opening') || noteStr.includes('initial');
+        const isIncrease = newWt > prevWt;
+        const isNotSale = !noteStr.includes('sale') && !noteStr.includes('invoice') && !noteStr.includes('karigar_out');
+        return (isRestock || isIncrease) && isNotSale;
+      })
+      .map((log) => {
+        const prevWt = Number(log.previous_stock_weight || 0);
+        const newWt = Number(log.new_stock_weight || 0);
+        let loadedDelta = Number((newWt - prevWt).toFixed(3));
+        if (loadedDelta <= 0 && newWt > 0) {
+          loadedDelta = newWt;
+        }
+        const metalCat = (log.metal_category || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+
+        return {
+          id: log.id || `stock_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          load_type: metalCat as 'GOLD' | 'SILVER',
+          item_id: log.item_id,
+          item_name: log.item_name || `${metalCat === 'GOLD' ? 'Gold' : 'Silver'} Ornament`,
+          item_category: log.item_category || 'General',
+          loaded_weight_grams: loadedDelta,
+          loaded_cash_amount: 0,
+          previous_balance: prevWt,
+          new_balance: newWt,
+          notes: log.notes || `Loaded +${loadedDelta}g stock into inventory`,
+          created_at: log.created_at || new Date().toISOString(),
+        };
+      });
+
+    // 3. Fetch Cash Loading Logs from cash_transaction_ledger
+    const { data: rawCashLogs, error: cashErr } = await supabase
+      .from('cash_transaction_ledger')
+      .select('*')
+      .or('transaction_type.eq.LOADING,flow_type.eq.IN')
+      .order('created_at', { ascending: false });
+
+    if (cashErr) {
+      console.warn('⚠️ Supabase fetch cash logs warning:', cashErr.message);
+    }
+
+    const cashLoadings = (rawCashLogs || [])
+      .filter((c) => {
+        const tType = (c.transaction_type || '').toUpperCase();
+        const fType = (c.flow_type || '').toUpperCase();
+        const noteStr = (c.notes || '').toLowerCase();
+        // Include cash loadings
+        return tType === 'LOADING' || (fType === 'IN' && (noteStr.includes('load') || noteStr.includes('drawer') || noteStr.includes('owner') || tType === 'INFLOW'));
+      })
+      .map((c) => ({
+        id: c.uuid || `cash_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        load_type: 'CASH' as const,
+        item_id: c.transaction_id || 'CASH_DRAWER',
+        item_name: 'Cash Loaded into Drawer',
+        item_category: 'Cash Drawer',
+        loaded_weight_grams: 0,
+        loaded_cash_amount: Number(c.transaction_cash_total || 0),
+        previous_balance: 0, // Cash ledger is transactional
+        new_balance: Number(c.transaction_cash_total || 0),
+        notes: c.notes || `Loaded ₹${Number(c.transaction_cash_total || 0).toLocaleString('en-IN')} into cash drawer`,
+        created_at: c.created_at || new Date().toISOString(),
+      }));
+
+    // 4. Combine and Sort in Descending Chronological Order (Latest at top)
+    let combined = [...stockLoadings, ...cashLoadings].sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return dateB - dateA;
+    });
+
+    // 5. Apply Date & Type Filters if requested
+    if (type && typeof type === 'string' && type.toUpperCase() !== 'ALL') {
+      const filterType = type.toUpperCase();
+      combined = combined.filter((entry) => entry.load_type === filterType);
+    }
+
+    if (date && typeof date === 'string' && date.toLowerCase() !== 'all') {
+      if (date.toLowerCase() === 'range' && startDate && endDate) {
+        const start = new Date(`${startDate}T00:00:00+05:30`).getTime();
+        const end = new Date(`${endDate}T23:59:59+05:30`).getTime();
+        combined = combined.filter((entry) => {
+          const entryTime = new Date(entry.created_at).getTime();
+          return entryTime >= start && entryTime <= end;
+        });
+      } else if (date.includes('-')) {
+        const targetDay = date.split('T')[0];
+        combined = combined.filter((entry) => {
+          const entryDay = entry.created_at.split('T')[0];
+          return entryDay === targetDay;
+        });
+      }
+    }
+
+    // 6. Calculate Totals for All vs Loaded
+    let totalLoadedGold = 0;
+    let totalLoadedGoldCount = 0;
+    let totalLoadedSilver = 0;
+    let totalLoadedSilverCount = 0;
+    let totalLoadedCash = 0;
+    let totalLoadedCashCount = 0;
+
+    combined.forEach((entry) => {
+      if (entry.load_type === 'GOLD') {
+        totalLoadedGold += entry.loaded_weight_grams;
+        totalLoadedGoldCount++;
+      } else if (entry.load_type === 'SILVER') {
+        totalLoadedSilver += entry.loaded_weight_grams;
+        totalLoadedSilverCount++;
+      } else if (entry.load_type === 'CASH') {
+        totalLoadedCash += entry.loaded_cash_amount;
+        totalLoadedCashCount++;
+      }
+    });
+
+    return res.json({
+      success: true,
+      metrics: {
+        currentGoldStock: Number(currentGoldStock.toFixed(3)),
+        currentSilverStock: Number(currentSilverStock.toFixed(3)),
+        currentCashBalance: Number(currentCashBalance.toFixed(2)),
+        totalLoadedGold: Number(totalLoadedGold.toFixed(3)),
+        totalLoadedGoldCount,
+        totalLoadedSilver: Number(totalLoadedSilver.toFixed(3)),
+        totalLoadedSilverCount,
+        totalLoadedCash: Number(totalLoadedCash.toFixed(2)),
+        totalLoadedCashCount,
+        totalEntriesCount: combined.length,
+      },
+      loadings: combined,
+    });
+  } catch (err: any) {
+    console.error('Error fetching loading history:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to fetch loading history' });
+  }
+});
+
 export default router;
 

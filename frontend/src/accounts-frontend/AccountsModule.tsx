@@ -3,6 +3,7 @@ import { API_BASE } from '../config/apiConfig';
 
 // Sub-component views
 import { OldMetalVaultView } from './components/OldMetalVaultView';
+import { BuyMetalsConversionView } from './components/BuyMetalsConversionView';
 import { UdhaariCustomerDuesView } from './components/UdhaariCustomerDuesView';
 import { UdhaariKarigarView } from './components/UdhaariKarigarView';
 import { StockMovementView } from './components/StockMovementView';
@@ -16,7 +17,7 @@ import { ChronologicalLogBookTable } from './components/ChronologicalLogBookTabl
 // Modals
 import { SeeBillModal } from '../billing-frontend/components/SeeBillModal';
 
-export type AccountTab = 'logbook' | 'stock' | 'cash' | 'scrap' | 'udhaari' | 'udhaari_dues';
+export type AccountTab = 'logbook' | 'buy_conversion' | 'stock' | 'cash' | 'scrap' | 'udhaari' | 'udhaari_dues';
 export type DateFilterMode = 'TODAY' | 'YESTERDAY' | 'MONTH' | 'DATE' | 'CUSTOM' | 'ALL';
 
 interface AccountsModuleProps {
@@ -508,6 +509,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
 
   const pillTabs = [
     { id: 'logbook', label: '💻 Daily Entry Log Book' },
+    { id: 'buy_conversion', label: '⚖️ Buy Metals Conversion' },
     { id: 'stock', label: '📦 Metal In & Outs' },
     { id: 'cash', label: '💵 Cash In & Outs' },
     { id: 'scrap', label: '⚖️ Buy Metal records' },
@@ -654,6 +656,17 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
                 setSelectedBillModalItem={setSelectedBillModalItem}
               />
             </>
+          )}
+
+          {/* SUB-SCREEN 1B: ⚖️ Buy Metals Stock & Conversion */}
+          {activeSubTab === 'buy_conversion' && (
+            <BuyMetalsConversionView
+              selectedDate={selectedDate}
+              dateFilterMode={dateFilterMode}
+              startDate={startDate}
+              endDate={endDate}
+              apiUrl={API_BASE}
+            />
           )}
 
           {/* SUB-SCREEN 2: 📦 Metal In & Outs (StockMovementView) */}

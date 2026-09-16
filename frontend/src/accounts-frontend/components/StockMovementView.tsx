@@ -332,45 +332,15 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                 <th style={{ padding: '14px 12px' }}>Customer / Party</th>
                 <th style={{ padding: '14px 12px' }}>Transaction Type</th>
                 <th style={{ padding: '14px 12px' }}>Flow</th>
-                <th style={{ padding: '14px 12px', textAlign: 'right' }}>Weight (g)</th>
-                <th style={{ padding: '14px 12px', textAlign: 'right', background: '#f0fdf4', color: '#166534' }}>After Tx (g)</th>
                 <th style={{ padding: '14px 12px' }}>Metal</th>
                 <th style={{ padding: '14px 12px' }}>Item & Details</th>
               </tr>
             </thead>
             <tbody>
-              {/* Row #0: Opening Stock Weight */}
-              <tr style={{ background: '#fffbeb', borderBottom: '2px solid #fef3c7' }}>
-                <td style={{ padding: '14px 12px', textAlign: 'center' }}>📌</td>
-                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>#0</td>
-                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Opening (9:00 AM)</td>
-                <td style={{ padding: '14px 12px', fontWeight: 800, color: '#b45309' }}>Showcase Vault Opening</td>
-                <td style={{ padding: '14px 12px' }}>
-                  <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-                    OPENING STOCK
-                  </span>
-                </td>
-                <td style={{ padding: '14px 12px' }}>
-                  <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#ffffff', color: '#b45309', border: '1px solid #fde68a' }}>
-                    START
-                  </span>
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 800, color: '#94a3b8' }}>
-                  {openingStockWeight.toFixed(3)} g
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: '#b45309' }}>
-                  {openingStockWeight.toFixed(3)} g
-                </td>
-                <td style={{ padding: '14px 12px', fontWeight: 700, color: '#b45309' }}>
-                  {metalCategoryFilter === 'ALL' ? 'ALL METALS' : metalCategoryFilter}
-                </td>
-                <td style={{ padding: '14px 12px', color: '#b45309', fontWeight: 700 }}>Starting Showcase Stock Weight</td>
-              </tr>
-
               {/* Dynamic Accordion Transactions Rows (Descending Order - Most Recent First) */}
               {processedStockRows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                  <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                     No {metalCategoryFilter === 'ALL' ? 'Gold or Silver' : metalCategoryFilter} weight movement transactions recorded today.
                   </td>
                 </tr>
@@ -437,12 +407,6 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: entry.skipStockDebit ? '#94a3b8' : entry.isInflow ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
-                          {entry.skipStockDebit ? '0.000 g (Pending)' : `${entry.isInflow ? '+' : '-'}${entry.wt.toFixed(3)} g`}
-                        </td>
-                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 900, color: '#0f172a', background: '#f8fafc', whiteSpace: 'nowrap' }}>
-                          {entry.afterTxStockWt.toFixed(3)} g
-                        </td>
                         <td style={{ padding: '14px 12px' }}>
                           <span className="badge-responsive-font" style={{ fontWeight: 800, padding: '3px 6px', borderRadius: '6px', background: itemMetal.includes('SILVER') ? '#f0f9ff' : '#fffbe6', color: itemMetal.includes('SILVER') ? '#0369a1' : '#b45309', border: `1px solid ${itemMetal.includes('SILVER') ? '#bae6fd' : '#fde68a'}` }}>
                             {itemMetal.includes('SILVER') ? '🥈 SILVER' : '🥇 GOLD'}
@@ -456,7 +420,7 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
                       {/* Smooth Accordion Expanded Detail Dropdown */}
                       {isExpanded && (
                         <tr style={{ background: '#f0f9ff', borderBottom: '2px solid #bae6fd' }}>
-                          <td colSpan={10} style={{ padding: '12px 16px' }}>
+                          <td colSpan={8} style={{ padding: '12px 16px' }}>
                             <div style={{
                               background: '#ffffff',
                               borderRadius: '12px',
@@ -533,17 +497,16 @@ export const StockMovementView: React.FC<StockMovementProps> = ({
             {/* Table Footer with Whole Metal Flow Totals */}
             <tfoot style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
               <tr>
-                <td colSpan={6} style={{ padding: '12px', textAlign: 'right', fontSize: '0.82rem', color: '#0f172a' }}>
+                <td colSpan={5} style={{ padding: '12px', textAlign: 'right', fontSize: '0.82rem', color: '#0f172a' }}>
                   📊 TOTAL {metalCategoryFilter === 'ALL' ? 'ALL METALS' : metalCategoryFilter} MOVEMENT SUMMARY:
                 </td>
-                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem' }}>
-                  <div style={{ color: '#15803d' }}>+{totalMetalIn.toFixed(3)} g (⬇ IN)</div>
-                  <div style={{ color: '#b91c1c' }}>-{totalMetalOut.toFixed(3)} g (⬆ OUT)</div>
+                <td colSpan={3} style={{ padding: '12px', textAlign: 'right', fontSize: '0.82rem' }}>
+                  <span style={{ color: '#15803d', marginRight: '10px' }}>+{totalMetalIn.toFixed(3)} g (⬇ IN)</span>
+                  <span style={{ color: '#b91c1c', marginRight: '10px' }}>-{totalMetalOut.toFixed(3)} g (⬆ OUT)</span>
+                  <span style={{ fontWeight: 900, color: '#b45309', background: '#fffbeb', padding: '3px 10px', borderRadius: '6px', border: '1px solid #fde68a' }}>
+                    Final Stock: {finalAvailableStockWt.toFixed(3)} g
+                  </span>
                 </td>
-                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 900, color: '#b45309', fontSize: '0.88rem', background: '#fffbeb', border: '1px solid #fde68a' }}>
-                  {finalAvailableStockWt.toFixed(3)} g
-                </td>
-                <td colSpan={2}></td>
               </tr>
             </tfoot>
           </table>
