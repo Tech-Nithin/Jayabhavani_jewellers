@@ -193,6 +193,25 @@ router.post('/products', async (req: Request, res: Response) => {
   // Auto-save category to Supabase inventory_category table
   await autoSaveCategoryToSupabase(finalCategory);
 
+  const targetMetalType = (item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+
+  // Duplicate Check: Check if an item with the same name and category already exists in target metal
+  const { data: existingProduct } = await supabase
+    .from('inventory_products')
+    .select('id, item_name, category, item_type')
+    .eq('item_type', targetMetalType)
+    .ilike('category', finalCategory.trim())
+    .ilike('item_name', itemName.trim())
+    .limit(1);
+
+  if (existingProduct && existingProduct.length > 0) {
+    return res.status(400).json({
+      success: false,
+      code: 'PRODUCT_EXISTS',
+      message: `An item with name "${itemName}" under category "${finalCategory}" already exists in ${targetMetalType} inventory. To avoid duplicate products, please use "Load Stock" on the existing item instead of creating a duplicate.`,
+    });
+  }
+
   // Automatically upload image to Cloudinary in WebP format if base64 data URL
   const cloudinaryWebpUrl = await uploadToCloudinaryHelper(img);
 
@@ -200,7 +219,7 @@ router.post('/products', async (req: Request, res: Response) => {
       id,
       item_name: itemName,
       category: finalCategory,
-      item_type: (item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD',
+      item_type: targetMetalType,
       weight_from_grams: finalWeightFrom,
       weight_to_grams: finalWeightTo,
       current_stock_weight: finalTotalWeight,
@@ -297,18 +316,8 @@ router.post('/products/:id/restock', async (req: Request, res: Response) => {
       eventType: 'RESTOCK',
       weightDeltaGrams: weightToAdd,
       referenceType: 'MANUAL',
-      notes: notes || `Restocked +${weightToAdd}g by shop owner`,
+      notes: notes || `Loaded +${weightToAdd}g stock by shop owner`,
     });
-
-    await supabase.from('inventory_stock_logs').insert([{
-      item_id: id,
-      item_name: existing.item_name || existing.name || existing.category,
-      metal_category: existing.item_type || 'GOLD',
-      item_category: existing.category || 'General',
-      previous_stock_weight: currentStockWeight,
-      new_stock_weight: newStockWeight,
-      notes: notes || `Restocked +${weightToAdd}g by shop owner`,
-    }]);
 
     memoryCache.clear();
 
@@ -437,10 +446,30 @@ router.put('/products/:id', async (req: Request, res: Response) => {
       finalImgUrl = await uploadToCloudinaryHelper(img);
     }
 
+    const targetMetalType = (item_type || existingData?.item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+
+    // Duplicate Check: Check if an item with the same name and category already exists in target metal
+    const { data: duplicateProduct } = await supabase
+      .from('inventory_products')
+      .select('id, item_name, category, item_type')
+      .neq('id', id)
+      .eq('item_type', targetMetalType)
+      .ilike('category', finalCategory.trim())
+      .ilike('item_name', itemName.trim())
+      .limit(1);
+
+    if (duplicateProduct && duplicateProduct.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'PRODUCT_EXISTS',
+        message: `An item with name "${itemName}" under category "${finalCategory}" already exists in ${targetMetalType} inventory. To avoid duplicate products, please delete this record and use "Load Stock" on the existing item instead.`,
+      });
+    }
+
     const updatedProductObj: any = {
       item_name: itemName,
       category: finalCategory,
-      item_type: item_type || existingData?.item_type || 'GOLD',
+      item_type: targetMetalType,
       weight_from_grams: finalWeightFrom,
       weight_to_grams: finalWeightTo,
       current_stock_weight: newStockWeight,
@@ -462,21 +491,38 @@ router.put('/products/:id', async (req: Request, res: Response) => {
       return res.status(500).json({ success: false, message: error.message });
     }
 
-    // 2. Insert update/adjustment log into inventory_stock_logs
-    const { error: logErr } = await supabase
+    // 2. Synchronize item name, category, and metal category on all existing stock logs for this item
+    const finalMetalType = (item_type || existingData?.item_type || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
+    const { error: syncLogsErr } = await supabase
       .from('inventory_stock_logs')
-      .insert([{
-        item_id: id,
+      .update({
         item_name: itemName,
-        metal_category: item_type || existingData?.item_type || 'GOLD',
         item_category: finalCategory,
-        previous_stock_weight: previousStockWeight,
-        new_stock_weight: newStockWeight,
-        notes: `Updated item details (Stock: ${previousStockWeight}g ➔ ${newStockWeight}g)`,
-      }]);
+        metal_category: finalMetalType,
+      })
+      .eq('item_id', id);
 
-    if (logErr) {
-      console.warn('⚠️ Stock log edit insert warning:', logErr.message);
+    if (syncLogsErr) {
+      console.warn('⚠️ Stock logs metadata sync warning:', syncLogsErr.message);
+    }
+
+    // 3. Insert update/adjustment log into inventory_stock_logs only if stock weight changed
+    if (Math.abs(previousStockWeight - newStockWeight) > 0.001) {
+      const { error: logErr } = await supabase
+        .from('inventory_stock_logs')
+        .insert([{
+          item_id: id,
+          item_name: itemName,
+          metal_category: finalMetalType,
+          item_category: finalCategory,
+          previous_stock_weight: previousStockWeight,
+          new_stock_weight: newStockWeight,
+          notes: `Updated item details (Stock: ${previousStockWeight}g ➔ ${newStockWeight}g)`,
+        }]);
+
+      if (logErr) {
+        console.warn('⚠️ Stock log edit insert warning:', logErr.message);
+      }
     }
 
     memoryCache.clear();
@@ -517,7 +563,19 @@ router.delete('/products/:id', async (req: Request, res: Response) => {
       return res.status(500).json({ success: false, message: error.message });
     }
 
-    console.log(`✨ Successfully deleted record ${id} from Supabase inventory_products table.`);
+    // Cascade delete associated logs from inventory_stock_logs
+    const { error: logsDeleteErr } = await supabase
+      .from('inventory_stock_logs')
+      .delete()
+      .eq('item_id', id);
+
+    if (logsDeleteErr) {
+      console.warn('⚠️ Stock logs cascade delete warning:', logsDeleteErr.message);
+    }
+
+    memoryCache.clear();
+
+    console.log(`✨ Successfully deleted record ${id} and associated stock logs from Supabase.`);
     return res.json({ success: true, message: 'Product deleted successfully', id });
   } catch (err: any) {
     console.error('Database delete error:', err);
@@ -766,7 +824,7 @@ router.get('/loading-history', async (req: Request, res: Response) => {
     const cashStatus = await getTodayCashStatus();
     const currentCashBalance = Number(cashStatus.current_cash || 0);
 
-    // 2. Fetch Stock Loading Logs from inventory_stock_logs
+    // 2. Fetch Stock Loading Logs from inventory_stock_logs (Strictly explicit stock loadings)
     const { data: rawStockLogs, error: stockErr } = await supabase
       .from('inventory_stock_logs')
       .select('*')
@@ -776,29 +834,55 @@ router.get('/loading-history', async (req: Request, res: Response) => {
       console.warn('⚠️ Supabase fetch stock logs warning:', stockErr.message);
     }
 
-    // Filter stock logs for loading/restocking/opening events
+    // Filter stock logs strictly for loading and update adjustment events
     const stockLoadings = (rawStockLogs || [])
       .filter((log) => {
-        const noteStr = (log.notes || '').toLowerCase();
+        const noteStr = (log.notes || '').toLowerCase().trim();
         const prevWt = Number(log.previous_stock_weight || 0);
         const newWt = Number(log.new_stock_weight || 0);
-        const isRestock = noteStr.includes('restock') || noteStr.includes('loaded') || noteStr.includes('load') || noteStr.includes('opening') || noteStr.includes('initial');
-        const isIncrease = newWt > prevWt;
-        const isNotSale = !noteStr.includes('sale') && !noteStr.includes('invoice') && !noteStr.includes('karigar_out');
-        return (isRestock || isIncrease) && isNotSale;
+
+        const isInitialStock = noteStr.includes('initial stock');
+        const isStockLoaded =
+          noteStr.includes('loaded +') ||
+          noteStr.includes('restocked +') ||
+          noteStr.startsWith('loaded') ||
+          noteStr.startsWith('restocked');
+        const isUpdated = noteStr.includes('updated item details') || noteStr.startsWith('updated');
+
+        const isNotSaleOrWorker =
+          !noteStr.includes('invoice') &&
+          !noteStr.includes('karigar') &&
+          !noteStr.includes('refund');
+
+        return (isInitialStock || isStockLoaded || isUpdated) && isNotSaleOrWorker;
       })
       .map((log) => {
+        const noteStr = (log.notes || '').toLowerCase().trim();
         const prevWt = Number(log.previous_stock_weight || 0);
         const newWt = Number(log.new_stock_weight || 0);
-        let loadedDelta = Number((newWt - prevWt).toFixed(3));
-        if (loadedDelta <= 0 && newWt > 0) {
-          loadedDelta = newWt;
+
+        let logStatus: 'INITIAL_STOCK' | 'STOCK_LOADED' | 'UPDATED' = 'STOCK_LOADED';
+        let loadedDelta = 0;
+
+        if (noteStr.includes('initial stock')) {
+          logStatus = 'INITIAL_STOCK';
+          loadedDelta = prevWt === 0 && newWt > 0 ? newWt : Number((newWt - prevWt).toFixed(3));
+          if (loadedDelta <= 0 && newWt > 0) loadedDelta = newWt;
+        } else if (noteStr.includes('updated item details') || noteStr.startsWith('updated')) {
+          logStatus = 'UPDATED';
+          loadedDelta = Number((newWt - prevWt).toFixed(3));
+        } else {
+          logStatus = 'STOCK_LOADED';
+          loadedDelta = Number((newWt - prevWt).toFixed(3));
+          if (loadedDelta <= 0 && newWt > 0) loadedDelta = newWt;
         }
+
         const metalCat = (log.metal_category || 'GOLD').toUpperCase() === 'SILVER' ? 'SILVER' : 'GOLD';
 
         return {
           id: log.id || `stock_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           load_type: metalCat as 'GOLD' | 'SILVER',
+          log_status: logStatus,
           item_id: log.item_id,
           item_name: log.item_name || `${metalCat === 'GOLD' ? 'Gold' : 'Silver'} Ornament`,
           item_category: log.item_category || 'General',
@@ -806,16 +890,17 @@ router.get('/loading-history', async (req: Request, res: Response) => {
           loaded_cash_amount: 0,
           previous_balance: prevWt,
           new_balance: newWt,
-          notes: log.notes || `Loaded +${loadedDelta}g stock into inventory`,
+          notes: log.notes || (logStatus === 'UPDATED' ? `Updated stock: ${prevWt}g ➔ ${newWt}g` : `Loaded +${loadedDelta}g stock into inventory`),
           created_at: log.created_at || new Date().toISOString(),
         };
       });
 
-    // 3. Fetch Cash Loading Logs from cash_transaction_ledger
+    // 3. Fetch Cash Loading Logs from cash_transaction_ledger (Strictly drawer loadings)
     const { data: rawCashLogs, error: cashErr } = await supabase
       .from('cash_transaction_ledger')
       .select('*')
-      .or('transaction_type.eq.LOADING,flow_type.eq.IN')
+      .eq('transaction_type', 'LOADING')
+      .eq('flow_type', 'IN')
       .order('created_at', { ascending: false });
 
     if (cashErr) {
@@ -823,22 +908,16 @@ router.get('/loading-history', async (req: Request, res: Response) => {
     }
 
     const cashLoadings = (rawCashLogs || [])
-      .filter((c) => {
-        const tType = (c.transaction_type || '').toUpperCase();
-        const fType = (c.flow_type || '').toUpperCase();
-        const noteStr = (c.notes || '').toLowerCase();
-        // Include cash loadings
-        return tType === 'LOADING' || (fType === 'IN' && (noteStr.includes('load') || noteStr.includes('drawer') || noteStr.includes('owner') || tType === 'INFLOW'));
-      })
       .map((c) => ({
         id: c.uuid || `cash_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         load_type: 'CASH' as const,
+        log_status: 'CASH_LOADED' as const,
         item_id: c.transaction_id || 'CASH_DRAWER',
         item_name: 'Cash Loaded into Drawer',
         item_category: 'Cash Drawer',
         loaded_weight_grams: 0,
         loaded_cash_amount: Number(c.transaction_cash_total || 0),
-        previous_balance: 0, // Cash ledger is transactional
+        previous_balance: 0,
         new_balance: Number(c.transaction_cash_total || 0),
         notes: c.notes || `Loaded ₹${Number(c.transaction_cash_total || 0).toLocaleString('en-IN')} into cash drawer`,
         created_at: c.created_at || new Date().toISOString(),

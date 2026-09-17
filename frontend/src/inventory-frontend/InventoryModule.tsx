@@ -402,25 +402,24 @@ export const InventoryModule: React.FC<{ globalSearch?: string; lang?: Language 
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setActiveMetal(itemType);
-          setSelectedOrnament('ALL');
-          updateUrlParams(itemType, 'ALL', searchTerm, 'list');
-          closeFormView();
-          await fetchInventory();
-          await fetchCategories();
-          return;
-        }
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.message || 'Failed to save product');
+        return;
       }
-    } catch (err) {
-      console.error('Failed to save product:', err);
-    }
 
-    // Refresh directly from database on finish
-    await fetchInventory();
-    closeFormView();
+      setActiveMetal(itemType);
+      setSelectedOrnament('ALL');
+      updateUrlParams(itemType, 'ALL', searchTerm, 'list');
+      closeFormView();
+      await fetchInventory();
+      await fetchCategories();
+      return;
+    } catch (err: any) {
+      console.error('Failed to save product:', err);
+      alert(err.message || 'Network error while saving product');
+      return;
+    }
   };
 
   const handleDeleteProduct = async (productId: string) => {

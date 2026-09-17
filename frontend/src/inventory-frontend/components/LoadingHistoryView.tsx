@@ -7,6 +7,7 @@ export type DateFilterMode = 'TODAY' | 'YESTERDAY' | 'MONTH' | 'DATE' | 'CUSTOM'
 interface LoadingEntry {
   id: string;
   load_type: 'GOLD' | 'SILVER' | 'CASH';
+  log_status?: 'INITIAL_STOCK' | 'STOCK_LOADED' | 'UPDATED' | 'CASH_LOADED';
   item_id?: string;
   item_name: string;
   item_category: string;
@@ -162,7 +163,8 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
         const matchCategory = (item.item_category || '').toLowerCase().includes(term);
         const matchNotes = (item.notes || '').toLowerCase().includes(term);
         const matchType = (item.load_type || '').toLowerCase().includes(term);
-        if (!matchName && !matchCategory && !matchNotes && !matchType) {
+        const matchStatus = (item.log_status || '').toLowerCase().includes(term);
+        if (!matchName && !matchCategory && !matchNotes && !matchType && !matchStatus) {
           return false;
         }
       }
@@ -605,13 +607,14 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'center' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #cbd5e1' }}>
-                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '5%', textAlign: 'center' }}>#</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '18%', textAlign: 'center' }}>Date & Time</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '13%', textAlign: 'center' }}>Type</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '20%', textAlign: 'center' }}>Item / Source</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '13%', textAlign: 'center' }}>Category</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '15%', textAlign: 'center' }}>Loaded Quantity / Amount</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '16%', textAlign: 'center' }}>Notes & Remarks</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '4%', textAlign: 'center' }}>#</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '16%', textAlign: 'center' }}>Date & Time</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '11%', textAlign: 'center' }}>Type</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '18%', textAlign: 'center' }}>Item / Source</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '12%', textAlign: 'center' }}>Category</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '13%', textAlign: 'center' }}>Loaded Quantity / Amount</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '13%', textAlign: 'center' }}>Log Status</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800, color: '#334155', width: '13%', textAlign: 'center' }}>Notes & Remarks</th>
                 </tr>
               </thead>
               <tbody>
@@ -619,6 +622,18 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
                   const isGold = entry.load_type === 'GOLD';
                   const isSilver = entry.load_type === 'SILVER';
                   const isCash = entry.load_type === 'CASH';
+
+                  // Derive log status fallback if not directly provided
+                  const noteLower = (entry.notes || '').toLowerCase();
+                  const status = entry.log_status || (
+                    isCash
+                      ? 'CASH_LOADED'
+                      : noteLower.includes('initial stock')
+                      ? 'INITIAL_STOCK'
+                      : noteLower.includes('updated')
+                      ? 'UPDATED'
+                      : 'STOCK_LOADED'
+                  );
 
                   return (
                     <tr
@@ -662,7 +677,7 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
                               border: '1px solid #fde68a',
                             }}
                           >
-                            🥇 Gold Stock
+                            🥇 Gold
                           </span>
                         )}
                         {isSilver && (
@@ -681,7 +696,7 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
                               border: '1px solid #bae6fd',
                             }}
                           >
-                            🥈 Silver Stock
+                            🥈 Silver
                           </span>
                         )}
                         {isCash && (
@@ -700,7 +715,7 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
                               border: '1px solid #bbf7d0',
                             }}
                           >
-                            💵 Cash Inflow
+                            💵 Cash
                           </span>
                         )}
                       </td>
@@ -723,6 +738,26 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
                           <span style={{ color: '#15803d', fontWeight: 900, fontSize: '0.82rem' }}>
                             +₹{entry.loaded_cash_amount.toLocaleString('en-IN')}
                           </span>
+                        ) : entry.loaded_weight_grams < 0 ? (
+                          <span
+                            style={{
+                              color: '#dc2626',
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                            }}
+                          >
+                            {entry.loaded_weight_grams.toFixed(3)} g
+                          </span>
+                        ) : entry.loaded_weight_grams === 0 ? (
+                          <span
+                            style={{
+                              color: '#64748b',
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                            }}
+                          >
+                            0.000 g
+                          </span>
                         ) : (
                           <span
                             style={{
@@ -732,6 +767,86 @@ export const LoadingHistoryView: React.FC<LoadingHistoryViewProps> = ({
                             }}
                           >
                             +{entry.loaded_weight_grams.toFixed(3)} g
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Log Status Badge */}
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                        {status === 'INITIAL_STOCK' && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              background: '#ede9fe',
+                              color: '#6d28d9',
+                              fontWeight: 800,
+                              fontSize: '0.70rem',
+                              border: '1px solid #ddd6fe',
+                            }}
+                          >
+                            🏷️ Initial Stock
+                          </span>
+                        )}
+                        {status === 'STOCK_LOADED' && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              background: '#dcfce7',
+                              color: '#15803d',
+                              fontWeight: 800,
+                              fontSize: '0.70rem',
+                              border: '1px solid #bbf7d0',
+                            }}
+                          >
+                            📦 Stock Loaded
+                          </span>
+                        )}
+                        {status === 'UPDATED' && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              background: '#ffedd5',
+                              color: '#c2410c',
+                              fontWeight: 800,
+                              fontSize: '0.70rem',
+                              border: '1px solid #fed7aa',
+                            }}
+                          >
+                            ✏️ Updated
+                          </span>
+                        )}
+                        {status === 'CASH_LOADED' && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              background: '#ccfbf1',
+                              color: '#0f766e',
+                              fontWeight: 800,
+                              fontSize: '0.70rem',
+                              border: '1px solid #99f6e4',
+                            }}
+                          >
+                            💵 Cash Loaded
                           </span>
                         )}
                       </td>
