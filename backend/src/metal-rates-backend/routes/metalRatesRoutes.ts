@@ -227,21 +227,28 @@ async function handleUpdateRates(req: Request, res: Response) {
 
   if (Object.keys(updates).length > 0) {
     try {
-      await supabase
+      const { error: upsertErr } = await supabase
         .from('updated_metal_values')
-        .update({
-          ...updates,
-          updated_at: nowISO,
-        })
-        .eq('id', 1);
+        .upsert([
+          {
+            id: 1,
+            ...updates,
+          }
+        ], { onConflict: 'id' });
+
+      if (upsertErr) {
+        console.error('❌ Supabase upsert error on updated_metal_values:', upsertErr);
+      }
 
       if (historyEntriesToInsert.length > 0) {
-        const { data: insertedHistory } = await supabase
+        const { data: insertedHistory, error: histErr } = await supabase
           .from('metal_history_rates')
           .insert(historyEntriesToInsert)
           .select('*');
 
-        if (insertedHistory) {
+        if (histErr) {
+          console.error('❌ Supabase insert error on metal_history_rates:', histErr);
+        } else if (insertedHistory) {
           metalHistoryRates = [...insertedHistory, ...metalHistoryRates];
         }
       }
