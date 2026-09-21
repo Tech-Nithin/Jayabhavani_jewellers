@@ -7,7 +7,7 @@ type WidgetState = 'ORB' | 'EXPANDED';
 export const GlobalAiWorkerAssistant: React.FC = () => {
   const [widgetState, setWidgetState] = useState<WidgetState>('ORB');
   const [workers, setWorkers] = useState<any[]>([]);
-  const [selectedWorkerId, setSelectedWorkerId] = useState<string>('EXPENSES');
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string>('WRKR-3');
   const [direction, setDirection] = useState<'OUTGOING' | 'INCOMING'>('OUTGOING');
   const [amount, setAmount] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -33,9 +33,23 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
       const res = await fetch(`${API_BASE}/work-assignment/workers`);
       const data = await res.json();
       if (data?.success && Array.isArray(data.workers)) {
-        setWorkers(data.workers);
-        if (!selectedWorkerId) {
-          setSelectedWorkerId('EXPENSES');
+        // Sort so Worker 3 (WRKR-3 / Expenses) is always at the top
+        const worker3 = data.workers.find(
+          (w: any) =>
+            String(w.id).toUpperCase() === 'WRKR-3' ||
+            w.name?.trim().toLowerCase() === 'expenses'
+        );
+        const otherWorkers = data.workers.filter(
+          (w: any) =>
+            String(w.id).toUpperCase() !== 'WRKR-3' &&
+            w.name?.trim().toLowerCase() !== 'expenses'
+        );
+
+        const sortedWorkers = worker3 ? [worker3, ...otherWorkers] : data.workers;
+        setWorkers(sortedWorkers);
+
+        if (!selectedWorkerId || selectedWorkerId === 'EXPENSES') {
+          setSelectedWorkerId(worker3 ? String(worker3.id) : sortedWorkers[0]?.id || 'WRKR-3');
         }
       }
     } catch (err) {
@@ -505,7 +519,7 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                   width: '100%',
                   padding: '0.55rem 0.7rem',
                   background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(168, 85, 247, 0.3)',
+                  border: '1px solid rgba(251, 191, 36, 0.35)',
                   borderRadius: '8px',
                   fontSize: '0.8rem',
                   fontWeight: 700,
@@ -515,14 +529,24 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                   boxSizing: 'border-box',
                 }}
               >
-                <option value="EXPENSES" style={{ background: '#120d22', color: '#fbbf24', fontWeight: 800 }}>
-                  🏢 Expenses (General Store Expense)
-                </option>
-                {workers.map((w) => (
-                  <option key={w.id} value={w.id} style={{ background: '#120d22', color: '#ffffff' }}>
-                    👤 {w.name} {w.specialization ? `(${w.specialization})` : ''} - {w.id}
-                  </option>
-                ))}
+                {workers.map((w) => {
+                  const isWorker3 = String(w.id).toUpperCase() === 'WRKR-3' || w.name?.trim().toLowerCase() === 'expenses';
+                  return (
+                    <option
+                      key={w.id}
+                      value={w.id}
+                      style={{
+                        background: '#120d22',
+                        color: isWorker3 ? '#fbbf24' : '#ffffff',
+                        fontWeight: isWorker3 ? 800 : 500,
+                      }}
+                    >
+                      {isWorker3
+                        ? `🏢 ${w.name} (${w.id}) - General Store Expense`
+                        : `👤 ${w.name} ${w.specialization ? `(${w.specialization})` : ''} - ${w.id}`}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
