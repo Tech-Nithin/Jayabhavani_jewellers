@@ -31,6 +31,8 @@ interface ChatHeaderProps {
   setActiveChatFilter?: (f: ChatFilterOption) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  isAiPanelOpen?: boolean;
+  onToggleAiPanel?: () => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -60,6 +62,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   setActiveChatFilter,
   onRefresh,
   isRefreshing = false,
+  isAiPanelOpen = false,
+  onToggleAiPanel,
 }) => {
   const t = getWorkAssignmentTranslation(lang);
 
@@ -235,6 +239,35 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             </div>
           </div>
         </div>
+
+        {/* AI Assistant Quick Panel Toggle Button */}
+        {onToggleAiPanel && (
+          <button
+            type="button"
+            onClick={onToggleAiPanel}
+            title={isAiPanelOpen ? 'Close AI Quick Assistant' : 'Open AI Quick Assistant'}
+            style={{
+              background: isAiPanelOpen
+                ? 'linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%)'
+                : 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+              border: isAiPanelOpen ? '1px solid #7c3aed' : '1px solid #ddd6fe',
+              borderRadius: '6px',
+              padding: '4px 9px',
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              color: isAiPanelOpen ? '#ffffff' : '#6d28d9',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              boxShadow: isAiPanelOpen ? '0 2px 8px rgba(139, 92, 246, 0.4)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <i className="fa-solid fa-wand-magic-sparkles"></i>
+            <span>AI Panel</span>
+          </button>
+        )}
 
         {/* Direct Supabase Refresh Button */}
         {onRefresh && (

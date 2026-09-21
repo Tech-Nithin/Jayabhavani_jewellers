@@ -336,6 +336,81 @@ router.get('/customer-directory', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/billing/customers/lookup - Fetch distinct client profiles (phone, name, address) for instant autocomplete
+router.get('/customers/lookup', async (req: Request, res: Response) => {
+  try {
+    const clientMap = new Map<string, { name: string; phone: string; address: string }>();
+
+    const processRecord = (name?: string, phone?: string, address?: string) => {
+      const cleanPhone = String(phone || '').replace(/\D/g, '');
+      const cleanName = String(name || '').trim();
+      const cleanAddress = String(address || '').trim();
+
+      if (cleanPhone.length >= 10 && cleanName) {
+        if (!clientMap.has(cleanPhone)) {
+          clientMap.set(cleanPhone, {
+            name: cleanName,
+            phone: cleanPhone,
+            address: cleanAddress,
+          });
+        }
+      }
+    };
+
+    // 1. Fetch from customer_billing table
+    try {
+      const { data: billingData, error: billingErr } = await supabase
+        .from('customer_billing')
+        .select('customer_name, customer_phone, customer_address, bill_json, created_at')
+        .order('created_at', { ascending: false });
+
+      if (!billingErr && Array.isArray(billingData)) {
+        billingData.forEach((row: any) => {
+          const name = row.customer_name || row.bill_json?.customer_name || row.bill_json?.customerName;
+          const phone = row.customer_phone || row.bill_json?.customer_phone || row.bill_json?.customerPhone;
+          const address = row.customer_address || row.bill_json?.customer_address || row.bill_json?.customerAddress || '';
+          processRecord(name, phone, address);
+        });
+      }
+    } catch (e) {
+      console.warn('customer_billing lookup notice:', e);
+    }
+
+    // 2. Fetch from orders table
+    try {
+      const { data: ordersData, error: ordersErr } = await supabase
+        .from('orders')
+        .select('customer_name, customer_phone, customer_address, created_at')
+        .order('created_at', { ascending: false });
+
+      if (!ordersErr && Array.isArray(ordersData)) {
+        ordersData.forEach((row: any) => {
+          processRecord(row.customer_name, row.customer_phone, row.customer_address);
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // 3. In-memory invoices fallback
+    invoicesList.forEach((inv) => {
+      const name = inv.customer_name || inv.receipt_json_data?.customerName;
+      const phone = inv.customer_phone || inv.receipt_json_data?.customerPhone;
+      const address = inv.customer_address || inv.receipt_json_data?.customerAddress || '';
+      processRecord(name, phone, address);
+    });
+
+    const customers = Array.from(clientMap.values());
+    return res.json({
+      success: true,
+      customers,
+    });
+  } catch (err: any) {
+    console.error('Error in customer lookup:', err);
+    return res.status(500).json({ success: false, customers: [] });
+  }
+});
+
 // GET /api/billing/invoices - Fetch all invoice records from PostgreSQL / Supabase
 router.get('/invoices', async (req: Request, res: Response) => {
   try {

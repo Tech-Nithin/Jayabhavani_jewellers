@@ -14,6 +14,7 @@ import { ChatHeader } from './components/ChatHeader';
 import { MessageBubble } from './components/MessageBubble';
 import { WorkerProfileModal } from './components/WorkerProfileModal';
 import { TransactionInputForm } from './components/TransactionInputForm';
+import { AiWorkerAssistantPanel } from './components/AiWorkerAssistantPanel';
 import {
   saveCachedTransactions,
   getCachedTransactions,
@@ -187,7 +188,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [category, setCategory] = useState<'GOLD' | 'SILVER' | 'CASH' | 'ORNAMENT' | 'CHAT'>('GOLD');
   const [itemName, setItemName] = useState('');
   const [amountCash, setAmountCash] = useState('');
-  const [cashMetalLink, setCashMetalLink] = useState<'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH'>('FOR_GOLD');
+  const [cashMetalLink, setCashMetalLink] = useState<'FOR_GOLD' | 'FOR_SILVER' | 'GENERAL_CASH'>('GENERAL_CASH');
   const [appliedRatePerGram, setAppliedRatePerGram] = useState('');
   const [weightGrams, setWeightGrams] = useState('');
   const [touchPercentage, setTouchPercentage] = useState('100');
@@ -195,6 +196,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [activeMenuTxId, setActiveMenuTxId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<'down' | 'up'>('down');
   const [replyTo, setReplyTo] = useState<ReplyMessageData | null>(null);
@@ -989,13 +991,21 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     if (t.direction === 'OUTGOING') {
       if (t.category === 'GOLD' || t.category === 'ORNAMENT') totalGoldSentFine += fine;
       else if (t.category === 'SILVER') totalSilverSentFine += fine;
-      else if (t.category === 'CASH') {
+      else if (t.category === 'CASH' || Number(t.amount_cash) > 0) {
         if (t.cash_metal_link === 'FOR_GOLD') {
           const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
-          totalGoldSentFine += equiv;
+          if (equiv > 0) {
+            totalGoldSentFine += equiv;
+          } else {
+            totalCashSent += Number(t.amount_cash) || 0;
+          }
         } else if (t.cash_metal_link === 'FOR_SILVER') {
           const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
-          totalSilverSentFine += equiv;
+          if (equiv > 0) {
+            totalSilverSentFine += equiv;
+          } else {
+            totalCashSent += Number(t.amount_cash) || 0;
+          }
         } else {
           totalCashSent += Number(t.amount_cash) || 0;
         }
@@ -1003,13 +1013,21 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
     } else {
       if (t.category === 'GOLD' || t.category === 'ORNAMENT') totalGoldReceivedFine += fine;
       else if (t.category === 'SILVER') totalSilverReceivedFine += fine;
-      else if (t.category === 'CASH') {
+      else if (t.category === 'CASH' || Number(t.amount_cash) > 0) {
         if (t.cash_metal_link === 'FOR_GOLD') {
           const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
-          totalGoldReceivedFine += equiv;
+          if (equiv > 0) {
+            totalGoldReceivedFine += equiv;
+          } else {
+            totalCashReceived += Number(t.amount_cash) || 0;
+          }
         } else if (t.cash_metal_link === 'FOR_SILVER') {
           const equiv = Number(t.equivalent_metal_grams) || (Number(t.applied_rate_per_gram) ? (Number(t.amount_cash) / Number(t.applied_rate_per_gram)) : 0);
-          totalSilverReceivedFine += equiv;
+          if (equiv > 0) {
+            totalSilverReceivedFine += equiv;
+          } else {
+            totalCashReceived += Number(t.amount_cash) || 0;
+          }
         } else {
           totalCashReceived += Number(t.amount_cash) || 0;
         }
@@ -1102,7 +1120,7 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
           </p>
         </div>
       ) : (
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
 
           {/* ── CHAT HEADER ── */}
           <ChatHeader
@@ -1132,6 +1150,21 @@ export const WorkerTransactionsView: React.FC<WorkerTransactionsViewProps> = ({
             setActiveChatFilter={setActiveChatFilter}
             onRefresh={handleDirectSupabaseRefresh}
             isRefreshing={isRefreshing}
+            isAiPanelOpen={isAiPanelOpen}
+            onToggleAiPanel={() => setIsAiPanelOpen((prev) => !prev)}
+          />
+
+          {/* ── FLOATING AI ASSISTANT SIDEBAR PANEL ── */}
+          <AiWorkerAssistantPanel
+            isOpen={isAiPanelOpen}
+            onClose={() => setIsAiPanelOpen(false)}
+            activeWorker={worker}
+            workers={workers}
+            onSelectWorker={handleWorkerChange}
+            onTransactionSuccess={(newTx) => {
+              setTransactions((prev) => mergeTransactions(prev, [newTx], worker?.id));
+              scrollToBottom(true);
+            }}
           />
 
           {/* ── CHAT MESSAGES TIMELINE (VIVID SLATE-PEARL WALLPAPER) ── */}

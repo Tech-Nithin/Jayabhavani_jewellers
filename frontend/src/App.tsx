@@ -61,7 +61,7 @@ export default function App() {
     };
   }, []);
 
-  // Handle Logout (Notifies backend, wipes all local & session storage, browser caches, and URL state)
+  // Handle Logout (Notifies backend, wipes all local & session storage, cookies, browser caches, and URL state)
   const handleLogout = async () => {
     const currentToken = localStorage.getItem(STORAGE_KEY_TOKEN) || sessionStorage.getItem(STORAGE_KEY_TOKEN) || '';
     try {
@@ -71,17 +71,45 @@ export default function App() {
     } catch (e) {
       console.warn('Backend logout warning:', e);
     }
+
     try {
+      // 1. Wipe all local and session storage
       localStorage.clear();
       sessionStorage.clear();
+
+      // 2. Wipe all accessible browser cookies across paths and domains
+      if (typeof document !== 'undefined' && document.cookie) {
+        const cookies = document.cookie.split(';');
+        const host = window.location.hostname;
+        const hostParts = host.split('.');
+        
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
+          if (name) {
+            // Expire for standard root path
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;`;
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${host};`;
+            
+            // If subdomains exist, expire on root domain
+            if (hostParts.length > 1) {
+              const rootDomain = '.' + hostParts.slice(-2).join('.');
+              document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${rootDomain};`;
+            }
+          }
+        }
+      }
+
+      // 3. Clear Service Worker & Browser Cache Storage
       if ('caches' in window) {
-        caches.keys().then((names) => {
-          names.forEach((name) => caches.delete(name));
-        });
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((k) => caches.delete(k)));
       }
     } catch (e) {
-      console.warn('Storage cleanup warning:', e);
+      console.warn('Storage & cookie cleanup warning:', e);
     }
+
     setUser(null);
     window.location.replace(window.location.pathname);
   };

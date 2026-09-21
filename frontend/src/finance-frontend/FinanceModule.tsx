@@ -238,7 +238,7 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
   }, []);
   useEffect(() => { setCurrentPage(1); }, [statusFilter, metalFilter, debouncedSearchTerm, startDate, endDate]);
 
-  // Click outside listener for date range filters
+  // Click & focus outside listener for date range filters
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (startCalendarDropdownRef.current && !startCalendarDropdownRef.current.contains(e.target as Node)) {
@@ -248,8 +248,20 @@ export const FinanceModule: React.FC<{ globalSearch?: string; lang?: Language }>
         setOpenEndCalendar(false);
       }
     };
+    const handleFocusOutside = (e: FocusEvent) => {
+      if (startCalendarDropdownRef.current && !startCalendarDropdownRef.current.contains(e.target as Node)) {
+        setOpenStartCalendar(false);
+      }
+      if (endCalendarDropdownRef.current && !endCalendarDropdownRef.current.contains(e.target as Node)) {
+        setOpenEndCalendar(false);
+      }
+    };
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('focusin', handleFocusOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('focusin', handleFocusOutside);
+    };
   }, []);
 
   const fetchMetalRates = async () => {

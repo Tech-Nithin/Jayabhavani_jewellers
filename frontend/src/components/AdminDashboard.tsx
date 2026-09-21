@@ -9,6 +9,7 @@ import { AccountsModule } from '../accounts-frontend/AccountsModule';
 import { useWindowWidth } from '../utils/useWindowWidth';
 import AnnouncementBar from './AnnouncementBar';
 import { PwaInstallBanner } from './PwaInstallBanner';
+import { GlobalAiWorkerAssistant } from './GlobalAiWorkerAssistant';
 
 import { translations } from '../utils/translations';
 import type { Language } from '../utils/translations';
@@ -635,6 +636,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {(currentTab === 'workers' || currentTab === 'work-assignment') && <WorkAssignmentModule globalSearch={globalSearch} lang={lang} />}
         </main>
       </div>
+
+      {/* 5. Global Floating AI Assistant Button & Panel */}
+      <GlobalAiWorkerAssistant />
     </div>
   );
 };

@@ -5,6 +5,11 @@ const API_BASE_URL = API_BASE;
 export interface LoginResponse {
   success: boolean;
   message: string;
+  attempts?: number;
+  maxAttempts?: number;
+  locked?: boolean;
+  lockRemainingSeconds?: number;
+  unauthorized?: boolean;
   user?: {
     email: string;
     name: string;
@@ -29,6 +34,46 @@ export async function loginUser(email: string, password: string): Promise<LoginR
     return {
       success: false,
       message: 'Network error. Could not connect to authentication server.',
+    };
+  }
+}
+
+export async function sendForgotPasswordOtp(email: string): Promise<{ success: boolean; message: string; unauthorized?: boolean }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password/send-otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Network error. Failed to send OTP.',
+    };
+  }
+}
+
+export async function resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<{ success: boolean; message: string; unauthorized?: boolean }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password/verify-and-reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Network error. Failed to reset password.',
     };
   }
 }

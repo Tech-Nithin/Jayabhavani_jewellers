@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { GlobalRates, BillItem, CustomerDirectoryRecord } from './types';
 import { ReceiptPreview, printReceipt80mm } from './components/ReceiptPreview';
 import { CustomerDirectoryView } from './components/CustomerDirectoryView';
@@ -48,6 +48,103 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
   const [billDate, setBillDate] = useState<string>(() => {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   });
+
+  // ── CUSTOMER CACHE & AUTOFILL SYSTEM ──
+  interface CachedCustomer {
+    name: string;
+    phone: string;
+    address: string;
+  }
+  const CUSTOMERS_CACHE_KEY = 'jbj_billing_customers_cache_v1';
+  const [allCustomers, setAllCustomers] = useState<CachedCustomer[]>([]);
+  const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const phoneWrapperRef = useRef<HTMLDivElement>(null);
+  const nameWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Load and cache all customers (invalidates on hard refresh)
+  const loadCustomers = async (forceDb = false) => {
+    if (!forceDb) {
+      try {
+        const cached = localStorage.getItem(CUSTOMERS_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAllCustomers(parsed);
+            return;
+          }
+        }
+      } catch (e) {}
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/billing/customers/lookup`);
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.customers)) {
+        setAllCustomers(data.customers);
+        try {
+          localStorage.setItem(CUSTOMERS_CACHE_KEY, JSON.stringify(data.customers));
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Could not fetch customers for billing autofill:', err);
+    }
+  };
+
+  useEffect(() => {
+    // Check if hard refresh / browser reload occurred
+    const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    const isReload = navEntries.length > 0 && navEntries[0].type === 'reload';
+    if (isReload) {
+      try {
+        localStorage.removeItem(CUSTOMERS_CACHE_KEY);
+      } catch (e) {}
+      loadCustomers(true);
+    } else {
+      loadCustomers(false);
+    }
+  }, []);
+
+  // Save/Update customer in local storage on successful bill creation
+  const saveCustomerToLocalCache = (name: string, phone: string, address: string) => {
+    const cleanPhone = String(phone || '').replace(/\D/g, '');
+    const cleanName = String(name || '').trim();
+    const cleanAddress = String(address || '').trim();
+    if (cleanPhone.length >= 10 && cleanName) {
+      setAllCustomers((prev) => {
+        const filtered = prev.filter((c) => c.phone !== cleanPhone);
+        const updated = [{ name: cleanName, phone: cleanPhone, address: cleanAddress }, ...filtered];
+        try {
+          localStorage.setItem(CUSTOMERS_CACHE_KEY, JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+    }
+  };
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (phoneWrapperRef.current && !phoneWrapperRef.current.contains(e.target as Node)) {
+        setShowPhoneSuggestions(false);
+      }
+      if (nameWrapperRef.current && !nameWrapperRef.current.contains(e.target as Node)) {
+        setShowNameSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // Autofill helper
+  const handleSelectCustomer = (c: CachedCustomer) => {
+    setCustomerPhone(c.phone);
+    setCustomerName(toStartCase(c.name));
+    setCustomerAddress(toStartCase(c.address));
+    setShowPhoneSuggestions(false);
+    setShowNameSuggestions(false);
+    if (showValidationErrors) setShowValidationErrors(false);
+  };
 
   // Auto-translate typed Customer Name and Address to Telugu dynamically for screen & receipt display
   useEffect(() => {
@@ -782,6 +879,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
         const dataOrder = await resOrder.json();
 
         if (resOrder.ok && dataOrder.success) {
+          saveCustomerToLocalCache(customerName, customerPhone, customerAddress);
           printReceipt80mm('pos-realtime-receipt-card');
           setSuccessModal({
             open: true,
@@ -827,6 +925,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
       const data = await res.json();
       if (res.ok && data.success) {
+        saveCustomerToLocalCache(customerName, customerPhone, customerAddress);
         // Trigger automatic 80mm thermal receipt printing
         printReceipt80mm('pos-realtime-receipt-card');
 
@@ -1222,44 +1321,13 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
 
               <form onSubmit={handleCreateInvoice}>
                 {/* Customer info (Shared by ALL modes: SELL, BUY, EXCHANGE, ORDER) */}
+                {/* Customer info (Shared by ALL modes: SELL, BUY, EXCHANGE, ORDER) */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && !customerName.trim() ? '#dc2626' : '#475569' }}>
-                        {t.custNameLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
-                      </label>
-                      {showValidationErrors && !customerName.trim() && (
-                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#dc2626' }}>* Required</span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      placeholder={t.custNamePlaceholder}
-                      value={customerName}
-                      onChange={(e) => {
-                        setCustomerName(toStartCase(e.target.value));
-                        if (showValidationErrors) setShowValidationErrors(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.55rem 0.75rem',
-                        borderRadius: '6px',
-                        border: showValidationErrors && !customerName.trim() ? '2px solid #dc2626' : '1px solid #cbd5e1',
-                        background: showValidationErrors && !customerName.trim() ? '#fef2f2' : '#ffffff',
-                        marginTop: '0.2rem',
-                        boxShadow: showValidationErrors && !customerName.trim() ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
-                      }}
-                      required
-                    />
-                    {showValidationErrors && !customerName.trim() && (
-                      <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <i className="fa-solid fa-triangle-exclamation"></i> Please enter Customer Name
-                      </div>
-                    )}
-                  </div>
-                  <div>
+                  {/* 1. Phone Number (FIRST FIELD) */}
+                  <div ref={phoneWrapperRef} style={{ position: 'relative' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#dc2626' : '#475569' }}>
+                        <i className="fa-solid fa-phone" style={{ color: '#0284c7', marginRight: '4px' }}></i>
                         {t.custPhoneLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
                       </label>
                       {showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) && (
@@ -1271,11 +1339,28 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                       inputMode="numeric"
                       pattern="[0-9]*"
                       maxLength={10}
-                      placeholder={t.custPhonePlaceholder}
+                      placeholder={t.custPhonePlaceholder || 'Enter 10-digit mobile...'}
                       value={customerPhone}
+                      onFocus={() => {
+                        if (customerPhone.trim().length >= 2) setShowPhoneSuggestions(true);
+                      }}
                       onChange={(e) => {
-                        setCustomerPhone(e.target.value.replace(/\D/g, ''));
+                        const cleanVal = e.target.value.replace(/\D/g, '');
+                        setCustomerPhone(cleanVal);
+                        if (cleanVal.length >= 2) {
+                          setShowPhoneSuggestions(true);
+                        } else {
+                          setShowPhoneSuggestions(false);
+                        }
                         if (showValidationErrors) setShowValidationErrors(false);
+
+                        // Auto-fill on typing complete 10-digit matching phone number
+                        if (cleanVal.length === 10) {
+                          const exactMatch = allCustomers.find((c) => c.phone === cleanVal);
+                          if (exactMatch) {
+                            handleSelectCustomer(exactMatch);
+                          }
+                        }
                       }}
                       style={{
                         width: '100%',
@@ -1284,6 +1369,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         border: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '2px solid #dc2626' : '1px solid #cbd5e1',
                         background: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '#fef2f2' : '#ffffff',
                         marginTop: '0.2rem',
+                        fontWeight: 700,
+                        color: '#0f172a',
                         boxShadow: showValidationErrors && (!customerPhone.trim() || customerPhone.trim().length < 10) ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
                       }}
                     />
@@ -1292,10 +1379,173 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         <i className="fa-solid fa-triangle-exclamation"></i> Please enter 10-digit Phone Number
                       </div>
                     )}
+
+                    {/* Phone Auto-suggest Dropdown */}
+                    {showPhoneSuggestions && customerPhone.trim().length >= 2 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+                          maxHeight: '220px',
+                          overflowY: 'auto',
+                          zIndex: 9999,
+                          marginTop: '3px',
+                        }}
+                      >
+                        {allCustomers.filter((c) => c.phone.includes(customerPhone.trim()) || c.name.toLowerCase().includes(customerPhone.toLowerCase())).length > 0 ? (
+                          allCustomers
+                            .filter((c) => c.phone.includes(customerPhone.trim()) || c.name.toLowerCase().includes(customerPhone.toLowerCase()))
+                            .slice(0, 8)
+                            .map((c, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => handleSelectCustomer(c)}
+                                style={{
+                                  padding: '0.55rem 0.75rem',
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: 'pointer',
+                                  transition: 'background 0.12s ease',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
+                                    📱 {c.phone}
+                                  </span>
+                                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#2563eb' }}>
+                                    {c.name}
+                                  </span>
+                                </div>
+                                {c.address && (
+                                  <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    📍 {c.address}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                        ) : (
+                          <div style={{ padding: '0.6rem 0.75rem', fontSize: '0.74rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                            New customer (No matching records)
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* 2. Customer Name (SECOND FIELD) */}
+                  <div ref={nameWrapperRef} style={{ position: 'relative' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && !customerName.trim() ? '#dc2626' : '#475569' }}>
+                        <i className="fa-solid fa-user" style={{ color: '#d97706', marginRight: '4px' }}></i>
+                        {t.custNameLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
+                      </label>
+                      {showValidationErrors && !customerName.trim() && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#dc2626' }}>* Required</span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder={t.custNamePlaceholder}
+                      value={customerName}
+                      onFocus={() => {
+                        if (customerName.trim().length >= 2) setShowNameSuggestions(true);
+                      }}
+                      onChange={(e) => {
+                        const val = toStartCase(e.target.value);
+                        setCustomerName(val);
+                        if (val.trim().length >= 2) {
+                          setShowNameSuggestions(true);
+                        } else {
+                          setShowNameSuggestions(false);
+                        }
+                        if (showValidationErrors) setShowValidationErrors(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '6px',
+                        border: showValidationErrors && !customerName.trim() ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                        background: showValidationErrors && !customerName.trim() ? '#fef2f2' : '#ffffff',
+                        marginTop: '0.2rem',
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        boxShadow: showValidationErrors && !customerName.trim() ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
+                      }}
+                      required
+                    />
+                    {showValidationErrors && !customerName.trim() && (
+                      <div style={{ color: '#dc2626', fontSize: '0.68rem', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <i className="fa-solid fa-triangle-exclamation"></i> Please enter Customer Name
+                      </div>
+                    )}
+
+                    {/* Name Auto-suggest Dropdown */}
+                    {showNameSuggestions && customerName.trim().length >= 2 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+                          maxHeight: '220px',
+                          overflowY: 'auto',
+                          zIndex: 9999,
+                          marginTop: '3px',
+                        }}
+                      >
+                        {allCustomers.filter((c) => c.name.toLowerCase().includes(customerName.toLowerCase()) || c.phone.includes(customerName.trim())).length > 0 ? (
+                          allCustomers
+                            .filter((c) => c.name.toLowerCase().includes(customerName.toLowerCase()) || c.phone.includes(customerName.trim()))
+                            .slice(0, 8)
+                            .map((c, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => handleSelectCustomer(c)}
+                                style={{
+                                  padding: '0.55rem 0.75rem',
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: 'pointer',
+                                  transition: 'background 0.12s ease',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
+                                    👤 {c.name}
+                                  </span>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7' }}>
+                                    {c.phone}
+                                  </span>
+                                </div>
+                                {c.address && (
+                                  <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    📍 {c.address}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Customer Address (THIRD FIELD) */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label style={{ fontSize: '0.75rem', fontWeight: 700, color: showValidationErrors && !customerAddress.trim() ? '#dc2626' : '#475569' }}>
+                        <i className="fa-solid fa-location-dot" style={{ color: '#16a34a', marginRight: '4px' }}></i>
                         {t.custAddrLabel} <span style={{ color: '#dc2626', fontWeight: 800 }}>*</span>
                       </label>
                       {showValidationErrors && !customerAddress.trim() && (
@@ -1317,6 +1567,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                         border: showValidationErrors && !customerAddress.trim() ? '2px solid #dc2626' : '1px solid #cbd5e1',
                         background: showValidationErrors && !customerAddress.trim() ? '#fef2f2' : '#ffffff',
                         marginTop: '0.2rem',
+                        fontWeight: 700,
+                        color: '#0f172a',
                         boxShadow: showValidationErrors && !customerAddress.trim() ? '0 0 0 4px rgba(220, 38, 38, 0.25)' : 'none',
                       }}
                       required
@@ -1327,6 +1579,8 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ lang = 'EN' }) => 
                       </div>
                     )}
                   </div>
+
+                  {/* 4. Bill Date (FOURTH FIELD) */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>

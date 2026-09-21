@@ -629,9 +629,9 @@ export const TransactionInputForm: React.FC<TransactionInputFormProps> = ({
                     required
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', outline: 'none', background: '#ffffff', color: '#0f172a', fontWeight: 700 }}
                   >
+                    <option value="GENERAL_CASH">General Cash</option>
                     <option value="FOR_GOLD">For Gold</option>
                     <option value="FOR_SILVER">For Silver</option>
-                    <option value="GENERAL_CASH">General Cash</option>
                   </select>
                 </div>
 

@@ -64,7 +64,7 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Click outside to close custom dropdown popovers
+  // Click & focus outside to close custom dropdown popovers
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (rateDropdownRef.current && !rateDropdownRef.current.contains(e.target as Node)) {
@@ -77,8 +77,23 @@ export const IssueNewLoanModal: React.FC<IssueNewLoanModalProps> = ({
         setOpenCalendar(false);
       }
     };
+    const handleFocusOutside = (e: FocusEvent) => {
+      if (rateDropdownRef.current && !rateDropdownRef.current.contains(e.target as Node)) {
+        setOpenRateSelect(false);
+      }
+      if (timelineDropdownRef.current && !timelineDropdownRef.current.contains(e.target as Node)) {
+        setOpenTimelineSelect(false);
+      }
+      if (calendarDropdownRef.current && !calendarDropdownRef.current.contains(e.target as Node)) {
+        setOpenCalendar(false);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('focusin', handleFocusOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('focusin', handleFocusOutside);
+    };
   }, []);
 
   // Sync form state when modal opens or editingRecord changes

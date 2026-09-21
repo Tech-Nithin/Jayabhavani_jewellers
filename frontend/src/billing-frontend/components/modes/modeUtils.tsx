@@ -125,14 +125,24 @@ export const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
     }
   }, [value, isOpen]);
 
+  // Close when clicking or focusing anywhere outside this component
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
+    const handleFocusOutside = (e: FocusEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('focusin', handleFocusOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('focusin', handleFocusOutside);
+    };
   }, []);
 
   const filteredOptions = options.filter((opt) =>
@@ -159,7 +169,16 @@ export const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
   };
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+    <div
+      ref={wrapperRef}
+      style={{ position: 'relative', width: '100%' }}
+      onBlur={(e) => {
+        // If focus leaves this wrapper entirely (e.g. tabbing away), close dropdown
+        if (!wrapperRef.current?.contains(e.relatedTarget as Node)) {
+          setIsOpen(false);
+        }
+      }}
+    >
       <input
         type="text"
         placeholder={placeholder}
@@ -173,6 +192,23 @@ export const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
           setQuery(val);
           onChange(val);
           if (!isOpen) setIsOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Tab' || e.key === 'Escape') {
+            setIsOpen(false);
+          } else if (e.key === 'Enter') {
+            if (isOpen) {
+              if (filteredOptions.length > 0) {
+                e.preventDefault();
+                handleSelectOption(filteredOptions[0]);
+              } else if (query.trim() && !exactMatchExists) {
+                e.preventDefault();
+                handleCreateNew(query);
+              }
+            }
+          } else if (e.key === 'ArrowDown') {
+            if (!isOpen) setIsOpen(true);
+          }
         }}
         style={{
           width: '100%',
@@ -218,6 +254,7 @@ export const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
         >
           {query.trim() !== '' && !exactMatchExists && (
             <div
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => handleCreateNew(query)}
               style={{
                 padding: '0.5rem 0.75rem',
@@ -240,6 +277,7 @@ export const CreatablePresetSelect: React.FC<CreatablePresetSelectProps> = ({
             filteredOptions.map((opt) => (
               <div
                 key={opt}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSelectOption(opt)}
                 style={{
                   padding: '0.45rem 0.75rem',
