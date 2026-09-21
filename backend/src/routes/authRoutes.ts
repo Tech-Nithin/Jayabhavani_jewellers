@@ -15,7 +15,7 @@ const TOKEN_EXPIRY_DAYS = 7; // Token valid for 7 days
 const MAX_ATTEMPTS = 3;
 const LOCKOUT_DURATION_MS = 60 * 1000; // 60 seconds lockout
 
-// Local fallback path for storing bcrypt credentials safely
+// Local fallback path for storing credentials safely
 const CREDENTIALS_FILE = path.join(__dirname, '..', '..', '.admin_credentials.json');
 
 // Memory stores
@@ -25,6 +25,40 @@ interface AttemptTracker {
 }
 const loginAttempts = new Map<string, AttemptTracker>();
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+
+/**
+ * 2-Way Encryption: Encrypt plaintext password using AES-256-GCM
+ */
+export function encryptPassword(plaintext: string, secretKey?: string): string {
+  const masterKey = (secretKey || process.env.ADMIN_ENCRYPTION_KEY || process.env.ADMIN_PASSWORD || 'JBJ_MASTER_SECRET_KEY_2026').trim();
+  const key = crypto.createHash('sha256').update(masterKey).digest();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
+}
+
+/**
+ * 2-Way Decryption: Decrypt ciphertext password using AES-256-GCM
+ */
+export function decryptPassword(encryptedPayload: string, secretKey?: string): string {
+  const masterKey = (secretKey || process.env.ADMIN_ENCRYPTION_KEY || process.env.ADMIN_PASSWORD || 'JBJ_MASTER_SECRET_KEY_2026').trim();
+  const key = crypto.createHash('sha256').update(masterKey).digest();
+  const parts = encryptedPayload.split(':');
+  if (parts.length !== 3) {
+    throw new Error('Invalid encrypted payload format. Expected iv:tag:ciphertext');
+  }
+  const [ivHex, tagHex, cipherHex] = parts;
+  const iv = Buffer.from(ivHex, 'hex');
+  const tag = Buffer.from(tagHex, 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  let decrypted = decipher.update(cipherHex, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
 
 // Helper: Get configured admin emails
 function isAuthorizedAdminEmail(inputEmail: string): boolean {
@@ -69,7 +103,7 @@ async function getStoredPasswordHash(email: string): Promise<string> {
   try {
     const { data, error } = await supabase
       .from('admin_auth')
-      .select('password_hash')
+      .select('password_hash, encrypted_password')
       .eq('email', normalizedEmail)
       .maybeSingle();
 
@@ -96,19 +130,28 @@ async function getStoredPasswordHash(email: string): Promise<string> {
   // 3. Fallback: Hash the env password and store it
   const defaultPlainPassword = process.env.ADMIN_PASSWORD || 'Jayabhavani@123';
   const defaultHash = await bcrypt.hash(defaultPlainPassword, 10);
-  await saveStoredPasswordHash(normalizedEmail, defaultHash);
+  await saveStoredPasswordHash(normalizedEmail, defaultHash, defaultPlainPassword);
   return defaultHash;
 }
 
-// Helper: Save password hash
-async function saveStoredPasswordHash(email: string, passwordHash: string): Promise<void> {
+// Helper: Save password hash and 2-way encrypted password
+async function saveStoredPasswordHash(email: string, passwordHash: string, plainPassword?: string): Promise<void> {
   const normalizedEmail = email.trim().toLowerCase();
+  const encryptedPassword = plainPassword ? encryptPassword(plainPassword) : undefined;
 
   // 1. Save to local fallback file
   try {
+    let existingPayload: any = {};
+    if (fs.existsSync(CREDENTIALS_FILE)) {
+      try {
+        existingPayload = JSON.parse(fs.readFileSync(CREDENTIALS_FILE, 'utf8'));
+      } catch (e) {}
+    }
     const payload = {
+      ...existingPayload,
       email: normalizedEmail,
       password_hash: passwordHash,
+      ...(encryptedPassword ? { encrypted_password: encryptedPassword } : {}),
       updated_at: new Date().toISOString(),
     };
     fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(payload, null, 2), 'utf8');
@@ -118,13 +161,18 @@ async function saveStoredPasswordHash(email: string, passwordHash: string): Prom
 
   // 2. Save to Supabase admin_auth table if available
   try {
+    const upsertObj: Record<string, any> = {
+      email: normalizedEmail,
+      password_hash: passwordHash,
+      updated_at: new Date().toISOString(),
+    };
+    if (encryptedPassword) {
+      upsertObj.encrypted_password = encryptedPassword;
+    }
+
     const { error } = await supabase
       .from('admin_auth')
-      .upsert({
-        email: normalizedEmail,
-        password_hash: passwordHash,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'email' });
+      .upsert(upsertObj, { onConflict: 'email' });
 
     if (error) {
       console.warn('⚠️ Supabase admin_auth upsert notice:', error.message);
@@ -354,9 +402,9 @@ router.post('/forgot-password/verify-and-reset', async (req: Request, res: Respo
     });
   }
 
-  // Hash new password using bcrypt
+  // Hash new password using bcrypt & encrypt for 2-way admin retrieval
   const newHash = await bcrypt.hash(String(newPassword), 10);
-  await saveStoredPasswordHash(normalizedEmail, newHash);
+  await saveStoredPasswordHash(normalizedEmail, newHash, String(newPassword));
 
   // Clear OTP
   otpStore.delete(normalizedEmail);
@@ -372,6 +420,71 @@ router.post('/forgot-password/verify-and-reset', async (req: Request, res: Respo
     success: true,
     message: 'Password reset successfully! You can now log in with your new password.',
   });
+});
+
+// POST /api/auth/decrypt-db-password
+// Endpoint for admin to decrypt and see the password from the database using their secret key
+router.post('/decrypt-db-password', async (req: Request, res: Response) => {
+  const { secretKey, encryptedPassword, email } = req.body;
+
+  if (!secretKey) {
+    return res.status(400).json({
+      success: false,
+      message: 'Secret key is required to decrypt password.',
+    });
+  }
+
+  const targetEmail = (email || getConfiguredAdminEmail()).trim().toLowerCase();
+  let cipherToDecrypt = encryptedPassword;
+
+  // If ciphertext was not passed directly, look up in Supabase or credentials file
+  if (!cipherToDecrypt) {
+    try {
+      const { data } = await supabase
+        .from('admin_auth')
+        .select('encrypted_password')
+        .eq('email', targetEmail)
+        .maybeSingle();
+
+      if (data?.encrypted_password) {
+        cipherToDecrypt = data.encrypted_password;
+      }
+    } catch (err) {}
+
+    if (!cipherToDecrypt && fs.existsSync(CREDENTIALS_FILE)) {
+      try {
+        const raw = fs.readFileSync(CREDENTIALS_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed.encrypted_password) {
+          cipherToDecrypt = parsed.encrypted_password;
+        }
+      } catch (err) {}
+    }
+  }
+
+  if (!cipherToDecrypt) {
+    return res.status(404).json({
+      success: false,
+      message: `No encrypted password found in database or local store for ${targetEmail}. Please reset password or re-save credentials.`,
+    });
+  }
+
+  try {
+    const decryptedPassword = decryptPassword(cipherToDecrypt, secretKey);
+    return res.status(200).json({
+      success: true,
+      email: targetEmail,
+      encryptedCiphertext: cipherToDecrypt,
+      decryptedPassword,
+      message: 'Password successfully decrypted from database!',
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: 'Decryption failed. The secret key provided is incorrect or the ciphertext is corrupted.',
+      error: err.message,
+    });
+  }
 });
 
 // POST /api/auth/verify-session

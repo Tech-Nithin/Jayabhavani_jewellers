@@ -229,7 +229,7 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
         userSelect: 'none',
       }}
     >
-      {/* ── EMBEDDED CSS FOR SOLAR GOLD/ORANGE ECLIPSE GLOWING ORB ── */}
+      {/* ── EMBEDDED CSS FOR REFINED SOLAR GOLD/ORANGE ECLIPSE ORB ── */}
       <style>{`
         @keyframes jbjCelestialSpin {
           0% { transform: rotate(0deg); }
@@ -237,10 +237,10 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
         }
         @keyframes jbjCelestialBreathe {
           0%, 100% {
-            filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.65)) drop-shadow(0 0 20px rgba(249, 115, 22, 0.75));
+            filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.35)) drop-shadow(0 0 8px rgba(249, 115, 22, 0.3));
           }
           50% {
-            filter: drop-shadow(0 0 16px rgba(254, 240, 138, 0.9)) drop-shadow(0 0 30px rgba(234, 88, 12, 0.95));
+            filter: drop-shadow(0 0 6px rgba(254, 240, 138, 0.45)) drop-shadow(0 0 12px rgba(234, 88, 12, 0.4));
           }
         }
       `}</style>
@@ -264,37 +264,37 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
             background: '#040208',
             animation: 'jbjCelestialBreathe 3s infinite ease-in-out',
             transition: 'transform 0.2s ease',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.9), inset 0 0 12px rgba(0, 0, 0, 0.95)',
+            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.7), inset 0 0 8px rgba(0, 0, 0, 0.9)',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
           onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
         >
-          {/* 1. Atmospheric Soft Glow Halo (Yellow to Orange) */}
+          {/* 1. Atmospheric Soft Glow Halo (Yellow to Orange - Gentle) */}
           <div
             style={{
               position: 'absolute',
               inset: '-2px',
               borderRadius: '50%',
               background:
-                'conic-gradient(from 0deg at 50% 50%, #ffffff 0deg, #fef08a 25deg, #facc15 75deg, rgba(250, 204, 21, 0.25) 140deg, rgba(249, 115, 22, 0.15) 190deg, #ea580c 255deg, #f97316 315deg, #fde047 345deg, #ffffff 360deg)',
-              animation: 'jbjCelestialSpin 5s linear infinite',
-              filter: 'blur(3.5px)',
-              opacity: 0.9,
+                'conic-gradient(from 0deg at 50% 50%, #ffffff 0deg, #fef08a 25deg, #facc15 75deg, rgba(250, 204, 21, 0.15) 140deg, rgba(249, 115, 22, 0.08) 190deg, #ea580c 255deg, #f97316 315deg, #fde047 345deg, #ffffff 360deg)',
+              animation: 'jbjCelestialSpin 6s linear infinite',
+              filter: 'blur(2px)',
+              opacity: 0.45,
               pointerEvents: 'none',
             }}
           />
 
-          {/* 2. Sharp Crisp Crescent Luminous Rim (Yellow to Orange) */}
+          {/* 2. Sharp Crisp Crescent Luminous Rim (Yellow to Orange - Gentle) */}
           <div
             style={{
               position: 'absolute',
               inset: '-1px',
               borderRadius: '50%',
               background:
-                'conic-gradient(from 0deg at 50% 50%, #ffffff 0deg, #fef08a 20deg, #facc15 70deg, rgba(251, 191, 36, 0.28) 135deg, rgba(249, 115, 22, 0.15) 190deg, #ea580c 250deg, #f97316 310deg, #fde047 345deg, #ffffff 360deg)',
-              animation: 'jbjCelestialSpin 5s linear infinite',
-              WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 2.8px), #fff calc(100% - 2px))',
-              mask: 'radial-gradient(farthest-side, transparent calc(100% - 2.8px), #fff calc(100% - 2px))',
+                'conic-gradient(from 0deg at 50% 50%, #ffffff 0deg, #fef08a 20deg, #facc15 70deg, rgba(251, 191, 36, 0.18) 135deg, rgba(249, 115, 22, 0.10) 190deg, #ea580c 250deg, #f97316 310deg, #fde047 345deg, #ffffff 360deg)',
+              animation: 'jbjCelestialSpin 6s linear infinite',
+              WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 2.2px), #fff calc(100% - 1.5px))',
+              mask: 'radial-gradient(farthest-side, transparent calc(100% - 2.2px), #fff calc(100% - 1.5px))',
               pointerEvents: 'none',
               zIndex: 2,
             }}
@@ -343,9 +343,9 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
             width: '330px',
             maxWidth: '92vw',
             background: 'linear-gradient(135deg, #120d22 0%, #0a0614 100%)',
-            border: '1px solid rgba(168, 85, 247, 0.4)',
+            border: '1px solid rgba(251, 191, 36, 0.25)',
             borderRadius: '18px',
-            boxShadow: '0 16px 45px rgba(0, 0, 0, 0.8), 0 0 30px rgba(139, 92, 246, 0.25)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.8), 0 0 12px rgba(251, 191, 36, 0.12)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -568,9 +568,9 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                     justifyContent: 'center',
                     gap: '5px',
                     transition: 'all 0.15s ease',
-                    background: direction === 'OUTGOING' ? '#ef4444' : 'transparent',
+                    background: direction === 'OUTGOING' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
                     color: direction === 'OUTGOING' ? '#ffffff' : '#94a3b8',
-                    boxShadow: direction === 'OUTGOING' ? '0 2px 8px rgba(239, 68, 68, 0.4)' : 'none',
+                    boxShadow: direction === 'OUTGOING' ? '0 2px 10px rgba(245, 158, 11, 0.45)' : 'none',
                   }}
                 >
                   <i className="fa-solid fa-arrow-up-right-from-square"></i> OUT (Given)
@@ -626,7 +626,7 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                     transform: 'translateY(-50%)',
                     fontSize: '0.95rem',
                     fontWeight: 800,
-                    color: '#a855f7',
+                    color: '#fbbf24',
                   }}
                 >
                   ₹
@@ -643,7 +643,7 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                     width: '100%',
                     padding: '0.55rem 0.65rem 0.55rem 1.9rem',
                     background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    border: '1px solid rgba(251, 191, 36, 0.4)',
                     borderRadius: '8px',
                     fontSize: '0.95rem',
                     fontWeight: 800,
@@ -663,12 +663,12 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                     onClick={() => handleQuickAddAmount(val)}
                     style={{
                       background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(251, 191, 36, 0.2)',
                       borderRadius: '5px',
                       padding: '2px 6px',
                       fontSize: '0.64rem',
                       fontWeight: 700,
-                      color: '#cbd5e1',
+                      color: '#fef08a',
                       cursor: 'pointer',
                     }}
                   >
@@ -697,12 +697,12 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Advance cash for order, Labor making charges..."
+                placeholder="e.g. Advance cash for order, Labor making charges, Store tea/snacks..."
                 style={{
                   width: '100%',
                   padding: '0.45rem 0.65rem',
                   background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(168, 85, 247, 0.25)',
+                  border: '1px solid rgba(251, 191, 36, 0.25)',
                   borderRadius: '8px',
                   fontSize: '0.78rem',
                   color: '#ffffff',
@@ -724,7 +724,7 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                   padding: '0.75rem',
                   background:
                     direction === 'OUTGOING'
-                      ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
                       : 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
                   border: 'none',
                   borderRadius: '8px',
@@ -738,7 +738,7 @@ export const GlobalAiWorkerAssistant: React.FC = () => {
                   gap: '6px',
                   boxShadow:
                     direction === 'OUTGOING'
-                      ? '0 4px 14px rgba(239, 68, 68, 0.4)'
+                      ? '0 4px 14px rgba(245, 158, 11, 0.45)'
                       : '0 4px 14px rgba(22, 163, 74, 0.4)',
                   opacity: isSubmitting ? 0.75 : 1,
                 }}
