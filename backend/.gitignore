@@ -11,3 +11,8 @@ dist/
 
 # Logs
 *.log
+
+# Secrets & Credentials
+.admin_credentials.json
+*.credentials.json
+
