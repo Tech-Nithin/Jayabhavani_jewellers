@@ -18,8 +18,10 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
   const [fetchedPayload, setFetchedPayload] = useState<any>(null);
 
   useEffect(() => {
-    if (inv?.id && !inv.receipt_json_data && !fetchedPayload) {
-      fetch(`${API_BASE}/billing/invoices/${inv.id}`)
+    const rawId = inv?.id;
+    const cleanId = rawId ? String(rawId).replace(/^log-inv-/, '') : null;
+    if (cleanId && !inv?.receipt_json_data && !fetchedPayload) {
+      fetch(`${API_BASE}/billing/invoices/${cleanId}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.invoice?.receipt_json_data) {
@@ -52,17 +54,17 @@ export const SeeBillModal: React.FC<SeeBillModalProps> = ({ customer, rates, onC
   const itemsList = storedPayload?.items && Array.isArray(storedPayload.items)
     ? storedPayload.items
     : [
-        {
-          id: 'modal-item-1',
-          metal_type: (inv?.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
-          product_name: inv?.product_name || customer.products.join(', ') || 'Gold Jewellery Item',
-          weight_grams: inv?.weight_grams || customer.totalWeight || 5,
-          purity_percentage: inv?.purity_percentage || 91.6,
-          making_charges_per_gram: inv?.making_charges_per_gram || 500,
-          gst_percent: inv?.gst_percent || 3,
-          item_type: (inv?.transaction_type === 'BUY' ? 'BUY' : 'SELL') as any,
-        },
-      ];
+      {
+        id: 'modal-item-1',
+        metal_type: (inv?.metal_type === 'SILVER' ? 'SILVER' : 'GOLD') as any,
+        product_name: inv?.product_name || customer.products.join(', ') || 'Gold Jewellery Item',
+        weight_grams: inv?.weight_grams || customer.totalWeight || 5,
+        purity_percentage: inv?.purity_percentage || 91.6,
+        making_charges_per_gram: inv?.making_charges_per_gram || 500,
+        gst_percent: inv?.gst_percent || 3,
+        item_type: (inv?.transaction_type === 'BUY' ? 'BUY' : 'SELL') as any,
+      },
+    ];
 
   const totalSellValue = storedPayload?.totalSellValue ?? (inv?.transaction_type === 'BUY' ? 0 : (inv?.final_amount || customer.totalSpent || 0));
   const totalBuyCredit = storedPayload?.totalBuyCredit ?? (inv?.transaction_type === 'BUY' ? (inv?.final_amount || customer.totalSpent || 0) : inv?.transaction_type === 'EXCHANGE' ? 5000 : 0);

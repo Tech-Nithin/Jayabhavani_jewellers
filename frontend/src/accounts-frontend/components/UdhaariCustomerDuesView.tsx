@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 interface UdhaariCustomerDuesViewProps {
   logBookTimeline: any[];
   onSelectBill: (item: any) => void;
+  onSettle?: (item: any) => void;
   selectedDate?: string;
   formatISTDateTime: (isoString?: string, fallbackTime?: string, billDateStr?: string) => string;
 }
@@ -10,6 +11,7 @@ interface UdhaariCustomerDuesViewProps {
 export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = ({
   logBookTimeline = [],
   onSelectBill,
+  onSettle,
   formatISTDateTime,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -278,23 +280,52 @@ export const UdhaariCustomerDuesView: React.FC<UdhaariCustomerDuesViewProps> = (
                         </span>
                       </td>
                       <td style={{ padding: '10px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => onSelectBill(item)}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #4f46e5',
-                            background: '#eeeffe',
-                            color: '#4f46e5',
-                            fontWeight: 800,
-                            fontSize: '0.68rem',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          View Bill & Settle ➔
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => onSelectBill(item)}
+                            title="View customer bill receipt"
+                            style={{
+                              padding: '4px 9px',
+                              borderRadius: '6px',
+                              border: '1px solid #4f46e5',
+                              background: '#eeeffe',
+                              color: '#4f46e5',
+                              fontWeight: 800,
+                              fontSize: '0.68rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <i className="fa-solid fa-file-invoice" /> View Bill
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onSettle && onSettle(item)}
+                            title="Settle customer due"
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #059669',
+                              background: '#ecfdf5',
+                              color: '#047857',
+                              fontWeight: 800,
+                              fontSize: '0.68rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <i className="fa-solid fa-hand-holding-dollar" /> Settle
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

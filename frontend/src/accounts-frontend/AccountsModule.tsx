@@ -16,6 +16,8 @@ import { ChronologicalLogBookTable } from './components/ChronologicalLogBookTabl
 
 // Modals
 import { SeeBillModal } from '../billing-frontend/components/SeeBillModal';
+import { InvoiceSettlementModal } from '../billing-frontend/components/InvoiceSettlementModal';
+import type { CustomerDirectoryRecord } from '../billing-frontend/types';
 
 export type AccountTab = 'logbook' | 'buy_conversion' | 'stock' | 'cash' | 'scrap' | 'udhaari' | 'udhaari_dues';
 export type DateFilterMode = 'TODAY' | 'YESTERDAY' | 'MONTH' | 'DATE' | 'CUSTOM' | 'ALL';
@@ -79,6 +81,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
 
   // Selected Bill item state for modal
   const [selectedBillModalItem, setSelectedBillModalItem] = useState<any | null>(null);
+  const [settlementModalItem, setSettlementModalItem] = useState<any | null>(null);
 
   // Loading State for Fetching Accounts Data
   const [loading, setLoading] = useState<boolean>(true);
@@ -704,6 +707,7 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
             <UdhaariCustomerDuesView
               logBookTimeline={logBookTimeline}
               onSelectBill={(item) => setSelectedBillModalItem(item)}
+              onSettle={(item) => setSettlementModalItem(item)}
               formatISTDateTime={formatISTDateTime}
             />
           )}
@@ -719,18 +723,69 @@ export const AccountsModule: React.FC<AccountsModuleProps> = () => {
       )}
 
       {/* Modals */}
-      {selectedBillModalItem && (
-        <SeeBillModal
-          customer={{
-            id: selectedBillModalItem.id || 'bill-modal',
-            customer_name: selectedBillModalItem.raw_invoice?.customer_name || selectedBillModalItem.title || 'Customer',
-            customer_phone: selectedBillModalItem.raw_invoice?.customer_phone || '',
-            latestInvoice: selectedBillModalItem.raw_invoice || selectedBillModalItem,
-          } as any}
-          rates={null}
-          onClose={() => setSelectedBillModalItem(null)}
-        />
-      )}
+      {selectedBillModalItem && (() => {
+        const inv = selectedBillModalItem.raw_invoice || selectedBillModalItem;
+        const customerRecord: CustomerDirectoryRecord = {
+          name: inv.customer_name || selectedBillModalItem.customer_name || selectedBillModalItem.title || '',
+          phone: inv.customer_phone || selectedBillModalItem.customer_phone || '',
+          address: inv.customer_address || selectedBillModalItem.customer_address || '',
+          products: inv.product_name ? [inv.product_name] : [],
+          totalWeight: Number(inv.weight_grams ?? selectedBillModalItem.weight_grams ?? 0),
+          totalSpent: Number(inv.final_amount ?? selectedBillModalItem.amount ?? 0),
+          ordersCount: 1,
+          lastDate: inv.bill_date || inv.created_at || selectedBillModalItem.created_at || '',
+          latestInvoice: inv,
+        };
+
+        return (
+          <SeeBillModal
+            customer={customerRecord}
+            rates={null}
+            onClose={() => setSelectedBillModalItem(null)}
+          />
+        );
+      })()}
+
+      {settlementModalItem && (() => {
+        const inv = settlementModalItem.raw_invoice || settlementModalItem;
+        const exactDue = Number(settlementModalItem.due_amount ?? inv.due_amount ?? 0);
+        const exactPaid = Number(settlementModalItem.paid_amount ?? inv.paid_amount ?? 0);
+        const exactTotal = Number(settlementModalItem.total_bill ?? inv.final_amount ?? (exactPaid + exactDue));
+
+        const exactInvoice = {
+          ...inv,
+          id: inv.billing_id || inv.id || settlementModalItem.id,
+          customer_name: inv.customer_name || settlementModalItem.customer_name || settlementModalItem.title || '',
+          customer_phone: inv.customer_phone || settlementModalItem.customer_phone || '',
+          customer_address: inv.customer_address || settlementModalItem.customer_address || '',
+          due_amount: exactDue,
+          paid_amount: exactPaid,
+          final_amount: exactTotal,
+        };
+
+        const customerRecord: CustomerDirectoryRecord = {
+          name: exactInvoice.customer_name,
+          phone: exactInvoice.customer_phone,
+          address: exactInvoice.customer_address,
+          products: inv.product_name ? [inv.product_name] : [],
+          totalWeight: Number(inv.weight_grams ?? settlementModalItem.weight_grams ?? 0),
+          totalSpent: exactTotal,
+          ordersCount: 1,
+          lastDate: inv.bill_date || inv.created_at || settlementModalItem.created_at || '',
+          latestInvoice: exactInvoice,
+        };
+
+        return (
+          <InvoiceSettlementModal
+            customer={customerRecord}
+            onClose={() => setSettlementModalItem(null)}
+            onSettlementSuccess={() => {
+              setSettlementModalItem(null);
+              fetchDayBookData(true);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };
